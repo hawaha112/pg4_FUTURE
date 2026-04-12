@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 早报 · 2026年04月12日</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═════ Design Tokens ═════ */
+:root {
+    --bg: #0b0b12;
+    --bg-card: rgba(255,255,255,0.03);
+    --bg-card-hover: rgba(255,255,255,0.055);
+    --text-100: #e4e4ec;
+    --text-70: rgba(228,228,236,0.70);
+    --text-50: rgba(228,228,236,0.50);
+    --text-35: rgba(228,228,236,0.35);
+    --border: rgba(255,255,255,0.06);
+    --border-hover: rgba(255,255,255,0.10);
+    --accent: #6b8afd;
+    --green: #5a9e6f;
+    --amber: #c9a227;
+    --red: #c05050;
+    --radius: 12px;
+    --sans: 'Inter','Noto Sans SC',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+    --serif: 'Noto Serif SC',Georgia,serif;
+}
+*{ margin:0; padding:0; box-sizing:border-box; }
+body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text-100);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ═════ Header — 极简 ═════ */
+.header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(11,11,18,0.92);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+}
+.header-inner {
+    max-width: 1120px; margin: 0 auto;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.h-title {
+    font-family: var(--serif); font-size: 17px; font-weight: 700;
+    color: var(--text-100); white-space: nowrap; letter-spacing: -0.3px;
+}
+.h-date { font-size: 11px; color: var(--text-35); white-space: nowrap; }
+.h-stats {
+    display: flex; gap: 10px; margin-left: auto;
+    font-size: 10px; color: var(--text-35); letter-spacing: 0.3px;
+}
+.h-stats b { color: var(--accent); font-weight: 600; }
+.search-wrap { position: relative; flex: 1; max-width: 260px; }
+.search-wrap::before {
+    content: '⌕'; position: absolute; left: 9px; top: 50%;
+    transform: translateY(-50%); font-size: 12px; color: var(--text-35);
+    pointer-events: none;
+}
+.search-box {
+    width: 100%; padding: 7px 10px 7px 28px;
+    background: rgba(255,255,255,0.035); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text-100); font-size: 12px; outline: none;
+    transition: border-color 0.2s;
+}
+.search-box:focus { border-color: var(--accent); }
+
+/* ═════ Filter ═════ */
+.filter-bar {
+    max-width: 1120px; margin: 14px auto 0; padding: 0 20px;
+    display: flex; gap: 5px; flex-wrap: wrap;
+}
+.f-btn {
+    padding: 4px 12px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-35);
+    border-radius: 14px; font-size: 11px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+.f-btn:hover { border-color: rgba(107,138,253,0.4); color: var(--text-50); }
+.f-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ═════ Briefing ═════ */
+.briefing {
+    max-width: 1120px; margin: 20px auto 0; padding: 0 20px;
+}
+.briefing > * {
+    max-width: 680px;
+}
+.br-title {
+    font-family: var(--serif); font-size: 14px; font-weight: 700;
+    color: var(--text-50); letter-spacing: 1px; text-transform: uppercase;
+    margin-bottom: 10px;
+}
+.br-editorial {
+    font-size: 14px; line-height: 1.75; color: var(--text-70);
+    margin-bottom: 14px;
+    border-left: 2px solid var(--accent); padding-left: 14px;
+}
+
+/* ═════ Grid — masonry columns ═════ */
+.grid {
+    max-width: 1120px; margin: 18px auto; padding: 0 14px;
+    columns: 3; column-gap: 10px;
+}
+@media (max-width:1024px) { .grid { columns: 2; } }
+@media (max-width:640px)  { .grid { columns: 1; padding: 0 10px; } }
+
+/* ═════ Card — 最小有效差异 ═════ */
+.card {
+    break-inside: avoid;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color 0.2s, box-shadow 0.25s, transform 0.25s;
+    opacity: 0; transform: translateY(8px);
+    animation: cardIn 0.35s ease forwards;
+    background: var(--bg-card);
+    -webkit-tap-highlight-color: rgba(255,255,255,0.05);
+    touch-action: manipulation;
+    -webkit-user-select: none; user-select: none;
+}
+.card:hover {
+    border-color: rgba(255,255,255,0.10);
+    background: var(--bg-card-hover);
+}
+.card.hidden { display: none !important; }
+@keyframes cardIn { to { opacity:1; transform:translateY(0); } }
+
+/* card image */
+.card-img {
+    width: 100%; height: 140px;
+    background-size: cover; background-position: center;
+}
+@media (max-width:640px) { .card-img { height: 120px; } }
+
+.card-body { padding: 14px 16px; }
+
+/* featured — subtle warm background, not a colored border */
+.card--featured {
+    background: rgba(107,138,253,0.03);
+    border-color: rgba(107,138,253,0.12);
+}
+
+/* Z1 — bare minimum: category + time */
+.z1 {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+}
+.z1-left {
+    font-size: 11px; color: var(--text-35); letter-spacing: 0.2px;
+}
+.z1-meta {
+    font-size: 11px; color: var(--text-35); white-space: nowrap;
+}
+
+/* Card title — 中文标题 */
+.card-title {
+    font-family: var(--serif);
+    font-size: 16px; font-weight: 700; line-height: 1.5;
+    color: var(--text-100); margin-bottom: 8px;
+}
+
+/* Z2 — 要点摘要 */
+.z2 {
+    margin-bottom: 10px;
+}
+.z2-point {
+    font-size: 13px; line-height: 1.55; color: var(--text-60);
+    padding-left: 6px; margin-bottom: 4px;
+}
+.z2-summary {
+    font-size: 13px; line-height: 1.55; color: var(--text-60);
+}
+
+/* Z3 — why it matters */
+.z3 { margin-bottom: 10px; }
+.z3-why {
+    font-size: 12px; line-height: 1.6; color: var(--text-50, rgba(228,228,236,0.50));
+    font-style: italic;
+}
+
+/* Z5 — source only, no button, no announcement */
+.z5 {
+    font-size: 10px; color: var(--text-35);
+    padding-top: 8px; border-top: 1px solid var(--border);
+}
+
+/* ═════ Modal — immersive article view ═════ */
+.modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    z-index: 1000; display: none;
+    align-items: flex-start; justify-content: center;
+    padding: 3vh 10px; overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+    background: #13131f;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    max-width: 560px; width: 100%;
+    margin: auto;
+    animation: mUp 0.25s ease;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    overflow: hidden;
+}
+@keyframes mUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+/* Hero image — full bleed at top */
+.m-hero {
+    position: relative; width: 100%;
+    max-height: 220px; overflow: hidden;
+}
+.m-hero img {
+    width: 100%; height: 220px; object-fit: cover; display: block;
+}
+.m-hero-gradient {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 80px;
+    background: linear-gradient(transparent, #13131f);
+}
+/* Close button — floating top-right */
+.m-close {
+    position: absolute; top: 12px; right: 12px; z-index: 10;
+    background: rgba(0,0,0,0.5); border: none;
+    color: #fff; width: 32px; height: 32px; border-radius: 50%;
+    cursor: pointer; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: rgba(255,255,255,0.1);
+    touch-action: manipulation;
+}
+.m-close:hover { background: rgba(0,0,0,0.7); }
+/* Body content — padded */
+.m-body {
+    padding: 20px 22px 22px;
+}
+/* Source + meta pills row */
+.m-pills {
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 14px; font-size: 11px; color: var(--text-35);
+}
+.m-pill-sep { opacity: 0.4; }
+/* Modal title */
+.m-title {
+    font-family: var(--serif);
+    font-size: 20px; font-weight: 700; line-height: 1.45;
+    color: var(--text-100); margin-bottom: 10px;
+}
+/* Source bar at top */
+.m-src-bar {
+    font-size: 12px; color: var(--text-50); margin-bottom: 14px;
+}
+/* Why-it-matters callout — short punchy line above the long read */
+.m-why {
+    background: linear-gradient(135deg, rgba(255,149,0,0.14), rgba(255,45,85,0.07));
+    border-left: 3px solid #ff9500;
+    padding: 12px 14px;
+    margin: 0 0 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-90, rgba(228,228,236,0.90));
+}
+/* Key points in modal */
+.m-keypoints {
+    background: rgba(255,255,255,0.04); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 16px;
+    border: 1px solid var(--border);
+}
+.m-keypoints-label {
+    font-size: 11px; color: var(--text-35); text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600;
+}
+.m-keypoints ul {
+    list-style: none; padding: 0; margin: 0;
+}
+.m-keypoints li {
+    font-size: 13px; line-height: 1.6; color: var(--text-70);
+    padding: 4px 0 4px 16px; position: relative;
+}
+.m-keypoints li::before {
+    content: '▸'; position: absolute; left: 0;
+    color: var(--accent, #6C8EEF); font-size: 12px;
+}
+/* Detailed content — the main reading area */
+.m-detailed {
+    font-size: 14px; line-height: 1.85; color: var(--text-80, rgba(228,228,236,0.80));
+    margin-bottom: 18px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+}
+.m-detailed p { margin: 0 0 12px; }
+.m-detailed p:last-child { margin-bottom: 0; }
+.md-h { color: var(--text-100); font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+.md-h:first-child { margin-top: 0; }
+.md-hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+.md-list { margin: 8px 0; padding-left: 20px; }
+.md-list li { margin: 4px 0; }
+.md-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+.md-table th, .md-table td { padding: 6px 10px; border: 1px solid var(--border); text-align: left; }
+.md-table th { background: rgba(255,255,255,0.04); font-weight: 600; color: var(--text-100); }
+.md-table tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+/* Article image gallery */
+.m-gallery {
+    display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    margin-bottom: 18px; padding-bottom: 8px;
+    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent;
+}
+.m-gallery::-webkit-scrollbar { height: 4px; }
+.m-gallery::-webkit-scrollbar-track { background: transparent; }
+.m-gallery::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+.m-gallery img {
+    height: 140px; min-width: 100px; border-radius: 10px;
+    object-fit: cover; flex-shrink: 0;
+    border: 1px solid var(--border);
+    transition: transform 0.15s;
+}
+.m-gallery img:hover { transform: scale(1.03); }
+@media (max-width:640px) { .m-gallery img { height: 120px; } }
+/* Bottom close button — easy to reach with thumb */
+.m-close-bottom {
+    display: flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; margin: 20px auto 8px;
+    background: rgba(255,255,255,0.08); border: 1px solid var(--border);
+    border-radius: 50%; cursor: pointer;
+    color: var(--text-50); font-size: 18px;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: rgba(255,255,255,0.1);
+    touch-action: manipulation;
+}
+.m-close-bottom:hover { background: rgba(255,255,255,0.15); color: #fff; }
+/* Deep sections — background & analysis */
+.m-deep {
+    display: flex; flex-direction: column; gap: 16px;
+    padding-top: 16px; border-top: 1px solid var(--border);
+}
+.m-deep-section { }
+.m-deep-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-50);
+    margin-bottom: 6px;
+}
+.m-deep-text {
+    font-size: 13px; color: var(--text-60); line-height: 1.7;
+}
+/* Footer — source + action */
+.m-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 18px; padding-top: 14px;
+    border-top: 1px solid var(--border);
+}
+.m-action {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 9px 18px;
+    background: rgba(107,138,253,0.12); color: var(--accent);
+    text-decoration: none; border-radius: 10px;
+    font-size: 13px; font-weight: 600; transition: background 0.15s;
+    -webkit-tap-highlight-color: rgba(107,138,253,0.2);
+    touch-action: manipulation;
+}
+.m-action:hover { background: rgba(107,138,253,0.22); }
+.m-footer-src {
+    font-size: 11px; color: var(--text-35);
+}
+
+/* ═════ Footer ═════ */
+.footer {
+    text-align: center; padding: 28px 20px;
+    color: var(--text-35); font-size: 11px;
+    border-top: 1px solid var(--border); margin-top: 20px;
+}
+.footer b { color: var(--accent); }
+
+/* ═════ Empty & Scrollbar ═════ */
+.empty { text-align: center; padding: 60px 20px; color: var(--text-50); font-size: 13px; }
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+<div class="header-inner">
+    <div class="h-title">📡 AI 早报</div>
+    <div class="h-date">2026年04月12日 周日 · 09:37</div>
+    <div class="search-wrap">
+        <input type="text" class="search-box" id="searchBox" placeholder="搜索…" aria-label="搜索">
+    </div>
+    <div class="h-stats">
+        <span><b>14</b> 篇</span>
+        <span><b>8</b> 源</span>
+    </div>
+</div>
+</header>
+
+<!-- Filters -->
+<div class="filter-bar" id="filterBar"><button class="f-btn active" data-filter="all">全部</button>
+<button class="f-btn" data-filter="大模型发布">大模型发布</button>
+<button class="f-btn" data-filter="产品与应用">产品与应用</button>
+<button class="f-btn" data-filter="安全与对齐">安全与对齐</button>
+<button class="f-btn" data-filter="具身智能">具身智能</button>
+<button class="f-btn" data-filter="行业观点">行业观点</button>
+<button class="f-btn" data-filter="其他">其他</button>
+</div>
+
+<!-- Briefing -->
+
+    <section class="briefing">
+        <h2 class="br-title">今日速览</h2>
+        <p class="br-editorial">今日AI行业呈现「能力跃迁与生态博弈」双主线：技术端，NVIDIA联合顶尖高校以CaP-X将LLM智能体延伸至实体机器人，Google Veo 3.1视频生成向全用户开放，Anthropic的Claude Mythos在安全红队测试中已超越顶级人类研究员——AI正从语言走向物理世界与专业纵深；生态端，OpenAI因定价透明度问题公开致歉，吴恩达则警示反AI阵营正借道安全、就业等议题收紧监管。能力边界在加速扩张，而围绕信任与规则的争夺同样在激烈展开。</p>
+    </section>
+
+<!-- Cards Grid -->
+<div class="grid" id="grid">
+        <div class="card card--featured" data-cat="产品与应用|大模型发布" data-idx="0"
+             style="animation-delay:0ms">
+            <div class="card-img" style="background-image:url('https://nitter.net/pic/amplify_video_thumb%2F2039735523569188864%2Fimg%2F4joYFVRpZuE3_iD5.jpg')"></div>
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">产品与应用 · 大模型发布</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">Google Vids集成Veo 3.1：高质量AI视频生成免费向所有用户开放</div>
+                <div class="z2"><div class="z2-point">• Veo 3.1高质量视频生成功能现已免费向所有Google Vids用户开放</div><div class="z2-point">• Google Vids定位为易用型视频编辑套件，此次更新新增多项AI能力</div><div class="z2-point">• 用户可通过vids.new直接访问并开始创作</div></div>
+                <div class="z3"><div class="z3-why">AI视频生成从付费专业工具走向免费大众产品，将大幅降低内容创作门槛，加速AI视频普及。</div></div>
+                <div class="z5">🐦 X-GoogleDeepMind</div>
+            </div>
+        </div>
+        <div class="card" data-cat="安全与对齐|AI工具" data-idx="1"
+             style="animation-delay:25ms">
+            <div class="card-img" style="background-image:url('https://nitter.net/pic/card_img%2F2042779290522259457%2F43xmSJPK%3Fformat%3Djpg%26name%3D800x419')"></div>
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">安全与对齐 · AI工具</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">OpenAI披露Axios开发者工具遭入侵事件，承诺透明处置</div>
+                <div class="z2"><div class="z2-point">• OpenAI官方确认Axios开发者工具遭到入侵，发布正式技术说明</div><div class="z2-point">• 官方声明强调用户信息安全与隐私保护为首要优先级</div><div class="z2-point">• 已发布详细技术FAQ，说明事件经过与应对措施</div></div>
+                <div class="z3"><div class="z3-why">开发者工具链安全是AI平台的命脉，此次事件暴露供应链攻击对AI生态的潜在威胁，OpenAI的应对速度和透明度将直接影响开发者信任。</div></div>
+                <div class="z5">🐦 X-OpenAI</div>
+            </div>
+        </div>
+        <div class="card" data-cat="AI政策监管|行业观点" data-idx="2"
+             style="animation-delay:50ms">
+            <div class="card-img" style="background-image:url('https://nitter.net/pic/media%2FHEwo55_W8AAqin-.jpg')"></div>
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">AI政策监管 · 行业观点</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">吴恩达：反AI联盟正寻找新论点阻碍AI发展</div>
+                <div class="z2"><div class="z2-point">• 英国研究发现&#x27;AI致人类灭绝&#x27;论点已失效，AI战争与环境议题更能引发公众共鸣</div><div class="z2-point">• AI&#x27;洗白&#x27;裁员现象严重：疫情期间过度扩招的企业将正常裁员归咎于AI，夸大就业威胁</div><div class="z2-point">• 白宫提议联邦级AI立法框架，通过联邦优先权防止各州碎片化监管阻碍AI发展</div></div>
+                <div class="z3"><div class="z3-why">这意味着AI支持者需警惕有组织的舆论战，避免情绪化监管重蹈核能发展被扼杀的覆辙。</div></div>
+                <div class="z5">🐦 X-Andrew Ng</div>
+            </div>
+        </div>
+        <div class="card card--featured" data-cat="具身智能|AI编程" data-idx="3"
+             style="animation-delay:75ms">
+            <div class="card-img" style="background-image:url('https://nitter.net/pic/amplify_video_thumb%2F2039342077528637440%2Fimg%2FeF-lkat0iP7ukdIF.jpg')"></div>
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">具身智能 · AI编程</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">NVIDIA联合斯坦福等高校推出CaP-X：机器人编程智能体开源基准框架</div>
+                <div class="z2"><div class="z2-point">• CaP-X是面向机器人感知与控制的编程智能体开源框架与基准测试集</div><div class="z2-point">• 智能体在仿真与真实机器人上执行代码，观察结果并迭代提升代码可靠性</div><div class="z2-point">• 由NVIDIA、UC Berkeley、CMU Robotics、Stanford AI Lab四家顶级机构联合开发</div></div>
+                <div class="z3"><div class="z3-why">编程智能体正在进入具身智能领域，CaP-X提供了标准化评测体系，将推动机器人控制从手工编程向AI自动生成代码演进，是机器人通用化的关键一步。</div></div>
+                <div class="z5">🐦 X-Jim Fan</div>
+            </div>
+        </div>
+        <div class="card" data-cat="其他" data-idx="4"
+             style="animation-delay:100ms">
+            <div class="card-img" style="background-image:url('https://nitter.net/pic/card_img%2F2041928747121852416%2Fm9eI15mL%3Fformat%3Djpg%26name%3D800x419')"></div>
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">其他</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">Anthropic发布托管智能体服务解决长时任务运行难题</div>
+                <div class="z2"><div class="z2-point">• Anthropic推出Managed Agents托管服务，专为长时运行的AI Agent设计</div><div class="z2-point">• 核心挑战是为&#x27;尚未被构想的程序&#x27;设计系统，类比计算机科学的经典难题</div><div class="z2-point">• 该服务属于Anthropic工程基础设施层面的重要进展</div></div>
+                <div class="z3"><div class="z3-why">托管智能体服务将AI Agent从实验性工具推向生产级基础设施，降低开发者部署长时任务Agent的门槛，加速AI自动化落地。</div></div>
+                <div class="z5">🐦 X-AnthropicAI</div>
+            </div>
+        </div>
+        <div class="card" data-cat="其他" data-idx="5"
+             style="animation-delay:125ms">
+            <div class="card-img" style="background-image:url('https://nitter.net/pic/card_img%2F2041577047198150656%2FZsuw2-wg%3Fformat%3Djpg%26name%3D800x419')"></div>
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">其他</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">Anthropic发布Project Glasswing：新模型Claude M</div>
+                <div class="z2"><div class="z2-point">• Project Glasswing定位为紧迫性倡议，专注保护世界最关键软件基础设施</div><div class="z2-point">• Claude Mythos Preview为Anthropic最新前沿模型，漏洞发现能力超越几乎所有顶级人类专家</div><div class="z2-point">• Anthropic将安全作为战略级优先方向，从对齐研究延伸至实战网络安全防御</div></div>
+                <div class="z3"><div class="z3-why">AI首次系统性介入关键软件安全防御，意味着漏洞挖掘从「稀缺人才」转向「可规模化部署」，将深刻改变网络安全格局。</div></div>
+                <div class="z5">🐦 X-AnthropicAI</div>
+            </div>
+        </div>
+        <div class="card" data-cat="其他" data-idx="6"
+             style="animation-delay:150ms">
+            
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">其他</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">Anthropic发布Claude Mythos Preview安全漏洞技术报告</div>
+                <div class="z2"><div class="z2-point">• Anthropic对Claude Mythos Preview进行系统性红队测试，发现多项软件漏洞</div><div class="z2-point">• 技术报告已公开发布，涵盖具体漏洞类型与利用路径</div><div class="z2-point">• 这是Anthropic在模型安全披露上的主动透明化举措</div></div>
+                <div class="z3"><div class="z3-why">顶级AI实验室主动公开模型安全缺陷，标志着AI安全透明度进入新阶段，对行业安全评估标准有示范意义。</div></div>
+                <div class="z5">🐦 X-AnthropicAI</div>
+            </div>
+        </div>
+        <div class="card" data-cat="其他" data-idx="7"
+             style="animation-delay:175ms">
+            
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">其他</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">OpenAI澄清Pro套餐用量限制：定价页面表述混乱引发误解</div>
+                <div class="z2"><div class="z2-point">• Pro $100套餐：5月31日前含2X促销共10x Plus用量</div><div class="z2-point">• Pro $200套餐：5月31日前含2X促销共20x Plus用量，非用户预期的40x</div><div class="z2-point">• OpenAI承认定价页面将&#x27;5x/20x&#x27;与促销倍数混用导致理解歧义</div></div>
+                <div class="z3"><div class="z3-why">用户以为2X促销叠加后能获得40x用量，实际只有20x，OpenAI公开承认是自己的沟通失误，将更新定价页面。</div></div>
+                <div class="z5">🐦 X-OpenAI</div>
+            </div>
+        </div>
+        <div class="card" data-cat="其他" data-idx="8"
+             style="animation-delay:200ms">
+            
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">其他</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">OpenAI发布Atlas：ChatGPT平台新功能上线</div>
+                <div class="z2"><div class="z2-point">• Atlas由OpenAI官方发布，入口为chatgpt.com/atlas</div><div class="z2-point">• 目前公开信息极少，仅有官方链接，具体功能尚不明确</div><div class="z2-point">• Atlas名称暗示可能是知识图谱、地图类或多模态导航类应用</div></div>
+                <div class="z3"><div class="z3-why">OpenAI官方账号直接推送链接，意味着Atlas是面向ChatGPT用户的正式产品，值得关注其具体定位与能力。</div></div>
+                <div class="z5">🐦 X-OpenAI</div>
+            </div>
+        </div>
+        <div class="card" data-cat="其他" data-idx="9"
+             style="animation-delay:225ms">
+            <div class="card-img" style="background-image:url('https://i.ytimg.com/vi/mFSFvKquXwI/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&amp;rs=AOn4CLB25ngLUlgDGivzF4W4BFS_XYDV_g')"></div>
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">其他</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">NVIDIA新AI突破直觉：梦境道场实现反常识泛化能力</div>
+                <div class="z2"><div class="z2-point">• NVIDIA发布名为DreamDojo的AI系统，项目主页托管于dreamdojo-world.github.io</div><div class="z2-point">• 系统采用某种反直觉的训练或架构设计，但最终效果出乎意料地有效</div><div class="z2-point">• 由Two Minute Papers频道介绍，说明该研究具备足够的学术影响力与传播价值</div></div>
+                <div class="z3"><div class="z3-why">这意味着AI训练范式可能存在被忽视的有效路径，NVIDIA在基础研究层面持续挑战现有认知边界。</div></div>
+                <div class="z5">🎬 Two Minute Papers · 04-11 16:37</div>
+            </div>
+        </div>
+        <div class="card" data-cat="其他" data-idx="10"
+             style="animation-delay:250ms">
+            <div class="card-img" style="background-image:url('https://nitter.net/pic/card_img%2F2041849727919259648%2FQCCnt3Yb%3Fformat%3Djpg%26name%3D800x419')"></div>
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">其他</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">OpenAI基金会投入逾1亿美元用AI攻克阿尔茨海默症</div>
+                <div class="z2"><div class="z2-point">• OpenAI基金会定向拨款逾1亿美元用于阿尔茨海默症研究</div><div class="z2-point">• 资金覆盖疾病机制图谱绘制、AI辅助药物设计等方向</div><div class="z2-point">• Sam Altman亲自撰文阐述OpenAI基金会对AI医疗的战略判断</div></div>
+                <div class="z3"><div class="z3-why">这标志着AI头部机构开始将资本和技术能力系统性地投向高难度医疗问题，AI制药赛道将获得顶级背书与资金注入。</div></div>
+                <div class="z5">🐦 X-Sam Altman</div>
+            </div>
+        </div>
+        <div class="card" data-cat="其他" data-idx="11"
+             style="animation-delay:275ms">
+            
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">其他</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">Karpathy：GitHub Gist评论质量远超X，呼吁其与X竞争</div>
+                <div class="z2"><div class="z2-point">• Karpathy指出GitHub Gist评论更有帮助、更具洞察力、更少AI生成内容</div><div class="z2-point">• 他将这归因于用户社区构成、Markdown格式或缺乏算法激励机制</div><div class="z2-point">• 他建议GitHub考虑将Gist发展为X的竞争对手</div></div>
+                <div class="z3"><div class="z3-why">这揭示了一个反直觉现象：技术社区的小众平台反而能产生更高质量的讨论，对AI时代的信息生态有重要启示。</div></div>
+                <div class="z5">🐦 X-Andrej Karpathy</div>
+            </div>
+        </div>
+        <div class="card" data-cat="其他" data-idx="12"
+             style="animation-delay:300ms">
+            <div class="card-img" style="background-image:url('https://nitter.net/pic/card_img%2F2041386973001310208%2FhG5NBSFb%3Fformat%3Djpg%26name%3D420x420_2')"></div>
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">其他</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">NVIDIA联合伯克利斯坦福CMU开源机器人基准CaP-X，MIT协议</div>
+                <div class="z2"><div class="z2-point">• 由NVIDIA、UC Berkeley、Stanford、CMU四大顶级机构联合研发</div><div class="z2-point">• 机器人学习基准环境CaP-X全套开源，MIT许可证，含代码与论文</div><div class="z2-point">• Ken Goldberg（伯克利机器人操控领域传奇学者）联合指导该项目</div></div>
+                <div class="z3"><div class="z3-why">顶级机构联手开源意味着机器人操控研究的基础设施门槛大幅降低，社区可直接在此基础上复现、对比和超越最新成果。</div></div>
+                <div class="z5">🐦 X-Jim Fan</div>
+            </div>
+        </div>
+        <div class="card" data-cat="其他" data-idx="13"
+             style="animation-delay:325ms">
+            <div class="card-img" style="background-image:url('https://nitter.net/pic/amplify_video_thumb%2F2039345467038081024%2Fimg%2F0d_LMqHb3PiFLReP.jpg')"></div>
+            <div class="card-body">
+                <div class="z1">
+            <span class="z1-left">其他</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">Jim Fan团队开源CaP-X：LLM驱动的具身智能Agent框架</div>
+                <div class="z2"><div class="z2-point">• CaP-X将感知(SAM3/Molmo/点云)、控制(IK求解/抓取规划/导航)封装为API，LLM通过调用API驱动机器人执行操作任务</div><div class="z2-point">• CaP-Bench基准测试了12个前沿LLM/VLM（含GPT、Gemini、Opus、DeepSeek、Qwen、Kimi），覆盖8个评估维度</div><div class="z2-point">• CaP-RL验证：7B开源模型经50次迭代训练后成功率从20%跃升至72%，仿真策略可迁移至真实机器人</div></div>
+                <div class="z3"><div class="z3-why">这意味着大语言模型不再只是聊天工具——它可以直接驱动机器人手臂干活，且无需针对每个任务单独训练策略模型，Agent范式正在向物理世界渗透。</div></div>
+                <div class="z5">🐦 X-Jim Fan</div>
+            </div>
+        </div></div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+<div class="modal" id="modalContent"></div>
+</div>
+
+<!-- Footer -->
+<footer class="footer">
+    AI 早报 · <b>8</b> 个信息源 · <b>14</b> 篇资讯 · 2026年04月12日
+</footer>
+
+<script src="modal_data.js"></script>
+<script>
+const typeLabels = {"paper":"学术论文","news":"新闻报道","official":"官方发布","opinion":"观点文章","community":"社区讨论","video":"视频"};
+
+// Lightweight Markdown → HTML renderer
+function renderMd(text) {
+    if (!text) return '';
+    // Escape HTML first (prevent XSS), but preserve intentional markdown
+    var s = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // Tables: | col1 | col2 | ... (detect table blocks)
+    s = s.replace(/((?:^|\n)\|.+\|(?:\n\|.+\|)+)/g, function(block) {
+        var rows = block.trim().split('\n');
+        var html = '<table class="md-table">';
+        rows.forEach(function(row, i) {
+            // Skip separator row (|---|---|)
+            if (/^[\|\s\-:]+$/.test(row)) return;
+            var cells = row.split('|').filter(function(c, j) { return j > 0 && j < row.split('|').length - 1; });
+            var tag = (i === 0) ? 'th' : 'td';
+            html += '<tr>' + cells.map(function(c) { return '<' + tag + '>' + c.trim() + '</' + tag + '>'; }).join('') + '</tr>';
+        });
+        return html + '</table>';
+    });
+
+    // Headers: ### text
+    s = s.replace(/^### (.+)$/gm, '<h4 class="md-h">$1</h4>');
+    s = s.replace(/^## (.+)$/gm, '<h3 class="md-h">$1</h3>');
+
+    // Bold: **text**
+    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+    // Horizontal rule: ---
+    s = s.replace(/^---$/gm, '<hr class="md-hr">');
+
+    // Unordered list blocks: consecutive lines starting with -
+    s = s.replace(/((?:^|\n)- .+(?:\n- .+)*)/g, function(block) {
+        var items = block.trim().split('\n').map(function(line) {
+            return '<li>' + line.replace(/^- /, '') + '</li>';
+        }).join('');
+        return '<ul class="md-list">' + items + '</ul>';
+    });
+
+    // Paragraphs: double newline
+    s = s.replace(/\n{2,}/g, '</p><p>');
+    // Single newlines within a paragraph → <br> (but not after block elements)
+    s = s.replace(/([^>])\n([^<])/g, '$1<br>$2');
+
+    // Wrap in paragraph tags
+    s = '<p>' + s + '</p>';
+    // Clean up empty paragraphs
+    s = s.replace(/<p>\s*<\/p>/g, '');
+    // Don't wrap block elements in <p>
+    s = s.replace(/<p>\s*(<(?:table|ul|h[34]|hr)[^>]*>)/g, '$1');
+    s = s.replace(/(<\/(?:table|ul|h[34])>)\s*<\/p>/g, '$1');
+
+    return s;
+}
+
+function openModal(idx) {
+    const a = __data[idx];
+    if (!a) return;
+
+    // Hero image (full-bleed top) —— 唯一保留的视觉锚点
+    let heroHtml = '';
+    if (a.image) {
+        heroHtml = '<div class="m-hero"><img src="' + a.image + '" onerror="this.parentElement.style.display=&#39;none&#39;" alt=""><div class="m-hero-gradient"></div></div>';
+    }
+
+    // ⚠️ 刻意不再渲染 title / src-bar / why_it_matters：
+    // 这些信息用户已经在卡片正面看过了，点开 modal 只应该看"新内容"。
+    // 参考 html_generator.py 卡片正面：z1(分类·阅读时间) / card-title /
+    // z2(key_details) / z3(why_it_matters) / z5(来源·时间) —— 上述全部不重复。
+
+    // Detailed content — main reading section with markdown rendering
+    let detailedHtml = '';
+    if (a.detailed_content) {
+        // 去掉 LLM 偶尔会生成的"### 问题背景/背景/前言/引言/简介"等背景类首节，
+        // 避免和下方独立的"背景脉络"模块产生视觉重复。
+        // 正则：匹配开头的 ### 小标题 + 本节内容，直到下一个 ### 或文末。
+        let cleaned = a.detailed_content.replace(
+            /^\s*###\s*(问题背景|背景|前言|引言|简介)[^\n]*\n[\s\S]*?(?=\n###\s|$)/,
+            ''
+        ).trim();
+        // 兜底：如果清洗后全空（整段 detailed_content 就是一节背景），保留原文
+        detailedHtml = '<div class="m-detailed">' + renderMd(cleaned || a.detailed_content) + '</div>';
+    } else if (a.summary) {
+        // 极端 fallback：没深度解读时才退到 summary
+        detailedHtml = '<div class="m-detailed"><p>' + a.summary + '</p></div>';
+    }
+
+    // Article image gallery — extra images from the article page
+    let galleryHtml = '';
+    if (a.extra_images && a.extra_images.length > 0) {
+        // Filter out the hero image to avoid duplicate
+        let imgs = a.extra_images.filter(function(u) { return u !== a.image; });
+        if (imgs.length > 0) {
+            let imgTags = imgs.map(function(u) {
+                return '<img src="' + u + '" onerror="this.style.display=&#39;none&#39;" alt="" loading="lazy">';
+            }).join('');
+            galleryHtml = '<div class="m-gallery">' + imgTags + '</div>';
+        }
+    }
+
+    // Deep sections (background + analysis)
+    let deepHtml = '';
+    if (a.background) {
+        deepHtml += '<div class="m-deep-section"><div class="m-deep-label">背景脉络</div><div class="m-deep-text">' + a.background + '</div></div>';
+    }
+    if (a.deep_analysis) {
+        deepHtml += '<div class="m-deep-section"><div class="m-deep-label">深度解读</div><div class="m-deep-text">' + a.deep_analysis + '</div></div>';
+    }
+    if (deepHtml) {
+        deepHtml = '<div class="m-deep">' + deepHtml + '</div>';
+    }
+
+    document.getElementById('modalContent').innerHTML =
+        heroHtml +
+        '<button class="m-close" onclick="closeModal()">✕</button>' +
+        '<div class="m-body">' +
+            detailedHtml +
+            galleryHtml +
+            deepHtml +
+            '<div class="m-close-bottom" onclick="closeModal()">✕</div>' +
+            '<div class="m-footer">' +
+                '<span class="m-footer-src">' + a.reading_minutes + ' min read</span>' +
+                '<a href="' + a.link + '" target="_blank" rel="noopener noreferrer" class="m-action" onclick="event.stopPropagation();">阅读原文 →</a>' +
+            '</div>' +
+        '</div>';
+
+    document.getElementById('modalOverlay').classList.add('show');
+    document.body.style.overflow = 'hidden';
+    document.getElementById('modalOverlay').scrollTop = 0;
+}
+
+function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('show');
+    document.body.style.overflow = '';
+}
+
+// Card click — event delegation with scroll vs tap detection
+(function() {
+    var grid = document.getElementById('grid');
+    if (!grid) return;
+    var touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+    var TAP_THRESHOLD = 10;  // px — finger movement within this = tap
+    var TAP_MAX_MS = 300;    // max duration for a tap
+
+    function openCard(card) {
+        var idx = card.dataset.idx;
+        if (idx !== undefined) openModal(parseInt(idx, 10));
+    }
+
+    // Desktop click — works fine, no scroll conflict
+    grid.addEventListener('click', function(e) {
+        // Ignore if touch device (handled by touch events below)
+        if ('ontouchstart' in window) return;
+        var card = e.target.closest('.card');
+        if (card) openCard(card);
+    });
+
+    // Touch: record start position
+    grid.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 1) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            touchStartTime = Date.now();
+        }
+    }, {passive: true});
+
+    // Touch: only open if finger barely moved (tap, not scroll)
+    grid.addEventListener('touchend', function(e) {
+        if (!e.changedTouches || e.changedTouches.length !== 1) return;
+        var dx = e.changedTouches[0].clientX - touchStartX;
+        var dy = e.changedTouches[0].clientY - touchStartY;
+        var dt = Date.now() - touchStartTime;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        // Only count as tap if finger moved less than threshold and was quick
+        if (dist < TAP_THRESHOLD && dt < TAP_MAX_MS) {
+            var card = e.target.closest('.card');
+            if (card) {
+                e.preventDefault();
+                openCard(card);
+            }
+        }
+    }, {passive: false});
+})();
+
+// Filters
+document.querySelectorAll('.f-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.f-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const f = btn.dataset.filter;
+        document.querySelectorAll('.card').forEach(c => {
+            c.classList.toggle('hidden', f !== 'all' && !(c.dataset.cat && c.dataset.cat.includes(f)));
+        });
+    });
+});
+
+// Search
+document.getElementById('searchBox').addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('.card').forEach(c => {
+        c.classList.toggle('hidden', q && !c.textContent.toLowerCase().includes(q));
+    });
+});
+
+// Keyboard
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        document.getElementById('searchBox').focus();
+    }
+});
+</script>
+</body>
+</html>

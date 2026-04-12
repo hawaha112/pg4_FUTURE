@@ -1,0 +1,236 @@
+{
+  "version": "1.0",
+  "description": "Asset taxonomy for causal analysis. Format: asset_class.sector_or_subtype",
+  "asset_classes": {
+    "equity": {
+      "label": "股票",
+      "label_en": "Equity",
+      "sectors": {
+        "tech_megacap": {
+          "label": "科技巨头",
+          "examples": ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA"],
+          "description": "市值超万亿的科技平台公司"
+        },
+        "ai_pure_play": {
+          "label": "AI概念股",
+          "examples": ["NVDA", "AMD", "SMCI", "PLTR", "AI", "SOUN"],
+          "description": "营收或估值与AI高度相关的公司"
+        },
+        "semiconductor": {
+          "label": "半导体",
+          "examples": ["NVDA", "AMD", "INTC", "TSM", "ASML", "AVGO", "QCOM", "MU"],
+          "description": "芯片设计、制造、设备全产业链",
+          "cn_examples": ["中芯国际", "海光信息", "寒武纪", "韦尔股份"]
+        },
+        "auto": {
+          "label": "汽车",
+          "examples": ["TSLA", "F", "GM", "TM", "RIVN", "LCID"],
+          "description": "传统车企与新能源车企",
+          "cn_examples": ["比亚迪", "蔚来", "理想", "小鹏"]
+        },
+        "pharma": {
+          "label": "医药",
+          "examples": ["PFE", "MRNA", "JNJ", "LLY", "NVO", "ABBV"],
+          "description": "制药、生物科技、医疗器械"
+        },
+        "travel_airline": {
+          "label": "旅游航空",
+          "examples": ["DAL", "UAL", "AAL", "MAR", "BKNG", "ABNB"],
+          "description": "航空公司、酒店、在线旅游"
+        },
+        "energy_fossil": {
+          "label": "传统能源",
+          "examples": ["XOM", "CVX", "BP", "SHEL", "COP", "SLB"],
+          "description": "石油、天然气勘探开发及服务",
+          "cn_examples": ["中国石油", "中国石化", "中国海油"]
+        },
+        "energy_renewable": {
+          "label": "新能源",
+          "examples": ["ENPH", "SEDG", "FSLR", "NEE", "RUN"],
+          "description": "光伏、风电、储能",
+          "cn_examples": ["隆基绿能", "阳光电源", "宁德时代"]
+        },
+        "banking": {
+          "label": "银行",
+          "examples": ["JPM", "BAC", "GS", "MS", "C", "WFC"],
+          "description": "商业银行、投资银行",
+          "cn_examples": ["工商银行", "招商银行", "中信银行"]
+        },
+        "food_agriculture": {
+          "label": "食品农业",
+          "examples": ["ADM", "BG", "CTVA", "DE", "MOS", "NTR"],
+          "description": "农产品贸易、化肥、农机"
+        },
+        "defense": {
+          "label": "国防军工",
+          "examples": ["LMT", "RTX", "NOC", "GD", "BA", "LHX"],
+          "description": "国防承包商、军工企业"
+        },
+        "cloud_saas": {
+          "label": "云计算/SaaS",
+          "examples": ["MSFT", "AMZN", "SNOW", "CRM", "NOW", "DDOG"],
+          "description": "云基础设施、企业软件"
+        },
+        "remote_work": {
+          "label": "远程办公",
+          "examples": ["ZM", "DOCU", "CRWD", "NET", "OKTA"],
+          "description": "视频会议、协作工具、安全"
+        },
+        "real_estate": {
+          "label": "房地产",
+          "examples": ["AMT", "PLD", "EQIX", "SPG"],
+          "description": "REITs、数据中心、商业地产"
+        }
+      }
+    },
+    "commodity": {
+      "label": "大宗商品",
+      "label_en": "Commodity",
+      "subtypes": {
+        "crude_oil": {
+          "label": "原油",
+          "benchmarks": ["WTI", "Brent"],
+          "description": "全球最大宗商品，地缘政治核心"
+        },
+        "natural_gas": {
+          "label": "天然气",
+          "benchmarks": ["Henry Hub", "TTF", "JKM"],
+          "description": "区域定价，欧洲受俄乌影响大"
+        },
+        "gold": {
+          "label": "黄金",
+          "benchmarks": ["XAU/USD", "COMEX Gold"],
+          "description": "避险资产，与美元负相关"
+        },
+        "silver": {
+          "label": "白银",
+          "benchmarks": ["XAG/USD", "COMEX Silver"],
+          "description": "兼具避险和工业属性"
+        },
+        "wheat": {
+          "label": "小麦",
+          "benchmarks": ["CBOT Wheat"],
+          "description": "受气候和地缘政治影响大（黑海产区）"
+        },
+        "corn": {
+          "label": "玉米",
+          "benchmarks": ["CBOT Corn"],
+          "description": "饲料和乙醇原料"
+        },
+        "soybean": {
+          "label": "大豆",
+          "benchmarks": ["CBOT Soybean"],
+          "description": "中美贸易战核心农产品"
+        },
+        "copper": {
+          "label": "铜",
+          "benchmarks": ["LME Copper", "COMEX Copper"],
+          "description": "经济晴雨表，新能源需求增长"
+        },
+        "lithium": {
+          "label": "锂",
+          "benchmarks": ["Lithium Carbonate"],
+          "description": "电池核心材料，价格波动剧烈"
+        },
+        "rare_earth": {
+          "label": "稀土",
+          "benchmarks": ["Neodymium", "Dysprosium"],
+          "description": "中国主导供应，地缘政治敏感"
+        }
+      }
+    },
+    "fixed_income": {
+      "label": "债券",
+      "label_en": "Fixed Income",
+      "subtypes": {
+        "us_treasury": {
+          "label": "美国国债",
+          "benchmarks": ["2Y UST", "10Y UST", "30Y UST"],
+          "description": "全球无风险利率基准"
+        },
+        "sovereign_em": {
+          "label": "新兴市场主权债",
+          "benchmarks": ["EMBI+", "GBI-EM"],
+          "description": "受美元强弱和本国风险影响"
+        },
+        "corporate_ig": {
+          "label": "投资级企业债",
+          "benchmarks": ["LQD", "IG CDX"],
+          "description": "信用利差反映企业违约风险"
+        },
+        "corporate_hy": {
+          "label": "高收益企业债",
+          "benchmarks": ["HYG", "HY CDX"],
+          "description": "对经济周期高度敏感"
+        },
+        "cn_government": {
+          "label": "中国国债",
+          "benchmarks": ["CGB 10Y"],
+          "description": "中国利率基准"
+        }
+      }
+    },
+    "currency": {
+      "label": "外汇",
+      "label_en": "Currency",
+      "subtypes": {
+        "usd": {
+          "label": "美元",
+          "benchmarks": ["DXY", "USD Index"],
+          "description": "全球储备货币，避险+利率双驱动"
+        },
+        "eur": {
+          "label": "欧元",
+          "benchmarks": ["EUR/USD"],
+          "description": "第二大储备货币"
+        },
+        "jpy": {
+          "label": "日元",
+          "benchmarks": ["USD/JPY"],
+          "description": "传统避险货币，carry trade核心"
+        },
+        "cny": {
+          "label": "人民币",
+          "benchmarks": ["USD/CNY", "USD/CNH"],
+          "description": "在岸/离岸双轨"
+        },
+        "em_currencies": {
+          "label": "新兴市场货币",
+          "benchmarks": ["MSCI EM Currency Index"],
+          "description": "对美元政策和风险偏好敏感"
+        }
+      }
+    },
+    "index": {
+      "label": "指数",
+      "label_en": "Index",
+      "subtypes": {
+        "vix": {
+          "label": "恐慌指数",
+          "benchmarks": ["CBOE VIX"],
+          "description": "标普500隐含波动率，恐慌度量"
+        },
+        "sp500": {
+          "label": "标普500",
+          "benchmarks": ["SPX", "SPY"],
+          "description": "美股大盘基准"
+        },
+        "nasdaq": {
+          "label": "纳斯达克",
+          "benchmarks": ["NDX", "QQQ"],
+          "description": "科技股为主，对利率敏感"
+        },
+        "csi300": {
+          "label": "沪深300",
+          "benchmarks": ["CSI 300", "沪深300"],
+          "description": "A股大盘基准"
+        },
+        "hang_seng": {
+          "label": "恒生指数",
+          "benchmarks": ["HSI"],
+          "description": "港股基准，连接中美"
+        }
+      }
+    }
+  }
+}

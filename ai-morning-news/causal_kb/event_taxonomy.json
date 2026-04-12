@@ -1,0 +1,280 @@
+{
+  "version": "1.0",
+  "description": "Event type taxonomy for causal analysis knowledge base. Format: category.subtype",
+  "taxonomy": {
+    "geopolitical": {
+      "label": "地缘政治",
+      "label_en": "Geopolitical",
+      "subtypes": {
+        "military_conflict": {
+          "label": "军事冲突",
+          "keywords_en": ["war", "military", "invasion", "troops", "attack", "strike", "missile", "airstrike", "combat", "battlefield", "armed forces", "deployment"],
+          "keywords_zh": ["战争", "军事", "冲突", "入侵", "袭击", "导弹", "空袭", "武装", "部署", "作战"]
+        },
+        "sanctions": {
+          "label": "经济制裁",
+          "keywords_en": ["sanctions", "embargo", "blacklist", "asset freeze", "trade restriction", "entity list", "export ban", "financial penalty"],
+          "keywords_zh": ["制裁", "禁令", "封锁", "黑名单", "资产冻结", "贸易限制", "实体清单"]
+        },
+        "territorial_dispute": {
+          "label": "领土争端",
+          "keywords_en": ["territorial", "sovereignty", "border", "disputed", "annexation", "strait", "sea dispute", "island dispute"],
+          "keywords_zh": ["领土", "主权", "边界", "争端", "海峡", "岛屿争议", "领海"]
+        },
+        "diplomatic_crisis": {
+          "label": "外交危机",
+          "keywords_en": ["diplomatic", "ambassador", "expel", "sever ties", "recall", "summit", "diplomatic row", "relations deteriorate"],
+          "keywords_zh": ["外交", "大使", "驱逐", "断交", "召回", "峰会", "外交关系恶化"]
+        },
+        "terrorism": {
+          "label": "恐怖主义",
+          "keywords_en": ["terrorism", "terrorist", "bombing", "extremist", "hostage", "insurgency", "counterterrorism"],
+          "keywords_zh": ["恐怖主义", "恐怖袭击", "爆炸", "极端分子", "人质", "叛乱", "反恐"]
+        }
+      }
+    },
+    "monetary_policy": {
+      "label": "货币政策",
+      "label_en": "Monetary Policy",
+      "subtypes": {
+        "rate_decision": {
+          "label": "利率决议",
+          "keywords_en": ["interest rate", "rate hike", "rate cut", "fed funds", "basis points", "FOMC", "ECB rate", "BOJ rate", "monetary tightening", "monetary easing", "central bank rate"],
+          "keywords_zh": ["利率", "加息", "降息", "基点", "联储", "央行利率", "货币紧缩", "货币宽松", "基准利率"]
+        },
+        "quantitative_easing": {
+          "label": "量化宽松",
+          "keywords_en": ["quantitative easing", "QE", "bond buying", "asset purchase", "balance sheet expansion", "money printing", "stimulus"],
+          "keywords_zh": ["量化宽松", "QE", "购债", "资产购买", "扩表", "放水", "刺激"]
+        },
+        "taper": {
+          "label": "缩减购债/缩表",
+          "keywords_en": ["taper", "tapering", "balance sheet reduction", "quantitative tightening", "QT", "wind down", "reduce purchases"],
+          "keywords_zh": ["缩减购债", "缩表", "量化紧缩", "QT", "减少购买"]
+        },
+        "forward_guidance": {
+          "label": "前瞻指引",
+          "keywords_en": ["forward guidance", "dot plot", "policy outlook", "rate path", "neutral rate", "terminal rate", "Fed projection", "policy signal"],
+          "keywords_zh": ["前瞻指引", "点阵图", "政策展望", "利率路径", "中性利率", "终端利率", "政策信号"]
+        }
+      }
+    },
+    "supply_chain": {
+      "label": "供应链",
+      "label_en": "Supply Chain",
+      "subtypes": {
+        "chip_shortage": {
+          "label": "芯片短缺",
+          "keywords_en": ["chip shortage", "semiconductor shortage", "wafer", "foundry capacity", "fab", "chip supply", "lead time", "TSMC", "Samsung foundry", "chip bottleneck"],
+          "keywords_zh": ["芯片短缺", "半导体短缺", "晶圆", "代工产能", "芯片供应", "交货周期", "台积电产能", "缺芯"]
+        },
+        "logistics_disruption": {
+          "label": "物流中断",
+          "keywords_en": ["shipping disruption", "port congestion", "freight rate", "Suez Canal", "Panama Canal", "container shortage", "supply chain bottleneck", "shipping delay", "Red Sea"],
+          "keywords_zh": ["航运中断", "港口拥堵", "运费", "苏伊士运河", "巴拿马运河", "集装箱短缺", "供应链瓶颈", "红海"]
+        },
+        "raw_material_shortage": {
+          "label": "原材料短缺",
+          "keywords_en": ["raw material", "rare earth", "lithium supply", "cobalt", "nickel", "gallium", "germanium", "antimony", "mineral supply", "critical mineral"],
+          "keywords_zh": ["原材料", "稀土", "锂供应", "钴", "镍", "镓", "锗", "锑", "矿产供应", "关键矿物"]
+        },
+        "factory_shutdown": {
+          "label": "工厂停产",
+          "keywords_en": ["factory shutdown", "plant closure", "production halt", "manufacturing disruption", "factory fire", "plant accident", "production suspension"],
+          "keywords_zh": ["工厂停产", "工厂关闭", "生产中断", "制造中断", "工厂火灾", "停工", "停产"]
+        }
+      }
+    },
+    "climate_weather": {
+      "label": "气候与天气",
+      "label_en": "Climate & Weather",
+      "subtypes": {
+        "el_nino": {
+          "label": "厄尔尼诺",
+          "keywords_en": ["El Nino", "ENSO", "Pacific warming", "ocean temperature anomaly"],
+          "keywords_zh": ["厄尔尼诺", "ENSO", "太平洋升温", "海温异常"]
+        },
+        "la_nina": {
+          "label": "拉尼娜",
+          "keywords_en": ["La Nina", "Pacific cooling", "ENSO negative"],
+          "keywords_zh": ["拉尼娜", "太平洋降温"]
+        },
+        "drought": {
+          "label": "干旱",
+          "keywords_en": ["drought", "water shortage", "crop failure", "arid", "desertification", "water crisis"],
+          "keywords_zh": ["干旱", "缺水", "作物歉收", "荒漠化", "水危机"]
+        },
+        "flood": {
+          "label": "洪涝",
+          "keywords_en": ["flood", "flooding", "heavy rain", "monsoon", "levee", "dam overflow"],
+          "keywords_zh": ["洪水", "洪涝", "暴雨", "季风", "溃坝", "内涝"]
+        },
+        "hurricane": {
+          "label": "飓风/台风",
+          "keywords_en": ["hurricane", "typhoon", "cyclone", "tropical storm", "storm surge", "category 5"],
+          "keywords_zh": ["飓风", "台风", "气旋", "热带风暴", "风暴潮"]
+        },
+        "extreme_heat": {
+          "label": "极端高温",
+          "keywords_en": ["heatwave", "extreme heat", "record temperature", "heat dome"],
+          "keywords_zh": ["热浪", "极端高温", "高温纪录", "热穹顶"]
+        }
+      }
+    },
+    "regulation": {
+      "label": "监管政策",
+      "label_en": "Regulation",
+      "subtypes": {
+        "antitrust": {
+          "label": "反垄断",
+          "keywords_en": ["antitrust", "monopoly", "anticompetitive", "market dominance", "breakup", "divestiture", "merger blocked"],
+          "keywords_zh": ["反垄断", "垄断", "不正当竞争", "市场支配", "拆分", "剥离", "并购否决"]
+        },
+        "data_privacy": {
+          "label": "数据隐私",
+          "keywords_en": ["data privacy", "GDPR", "data protection", "privacy regulation", "personal data", "consent", "data breach fine"],
+          "keywords_zh": ["数据隐私", "GDPR", "数据保护", "隐私监管", "个人信息", "数据泄露罚款"]
+        },
+        "ai_regulation": {
+          "label": "AI监管",
+          "keywords_en": ["AI regulation", "AI act", "AI safety law", "AI governance", "AI ethics", "algorithmic regulation", "AI compliance", "AI ban", "deepfake law"],
+          "keywords_zh": ["AI监管", "AI法案", "人工智能安全法", "AI治理", "AI伦理", "算法监管", "AI合规", "深度伪造法"]
+        },
+        "financial_regulation": {
+          "label": "金融监管",
+          "keywords_en": ["Basel", "capital requirement", "stress test", "Dodd-Frank", "financial regulation", "bank regulation", "systemic risk", "SIFI"],
+          "keywords_zh": ["巴塞尔", "资本要求", "压力测试", "金融监管", "银行监管", "系统性风险"]
+        },
+        "environmental_regulation": {
+          "label": "环境监管",
+          "keywords_en": ["emission standard", "carbon regulation", "pollution control", "environmental law", "EPA", "clean air", "waste regulation"],
+          "keywords_zh": ["排放标准", "碳排放监管", "污染控制", "环保法", "清洁空气", "废物监管"]
+        }
+      }
+    },
+    "pandemic_health": {
+      "label": "疫情与公共卫生",
+      "label_en": "Pandemic & Health",
+      "subtypes": {
+        "pandemic_declaration": {
+          "label": "疫情宣布",
+          "keywords_en": ["pandemic", "WHO declaration", "global health emergency", "PHEIC", "epidemic", "new variant"],
+          "keywords_zh": ["大流行", "WHO宣布", "全球卫生紧急", "疫情", "新变种"]
+        },
+        "vaccine_breakthrough": {
+          "label": "疫苗突破",
+          "keywords_en": ["vaccine", "vaccination", "mRNA", "clinical trial", "FDA approval", "vaccine efficacy", "booster"],
+          "keywords_zh": ["疫苗", "接种", "mRNA", "临床试验", "FDA批准", "疫苗有效性", "加强针"]
+        },
+        "outbreak": {
+          "label": "疫情爆发",
+          "keywords_en": ["outbreak", "infection surge", "case spike", "lockdown", "quarantine", "containment", "public health crisis"],
+          "keywords_zh": ["疫情爆发", "感染激增", "病例飙升", "封锁", "隔离", "防控", "公共卫生危机"]
+        }
+      }
+    },
+    "trade_policy": {
+      "label": "贸易政策",
+      "label_en": "Trade Policy",
+      "subtypes": {
+        "tariff_increase": {
+          "label": "加征关税",
+          "keywords_en": ["tariff increase", "tariff hike", "import duty", "customs duty", "tariff rate", "additional tariff", "punitive tariff"],
+          "keywords_zh": ["加征关税", "关税上调", "进口税", "惩罚性关税", "关税税率"]
+        },
+        "tariff_decrease": {
+          "label": "关税减免",
+          "keywords_en": ["tariff reduction", "tariff exemption", "duty free", "tariff relief", "tariff rollback"],
+          "keywords_zh": ["关税减免", "关税豁免", "免税", "关税降低", "关税回调"]
+        },
+        "trade_agreement": {
+          "label": "贸易协定",
+          "keywords_en": ["trade agreement", "trade deal", "FTA", "trade pact", "trade partnership", "RCEP", "CPTPP", "USMCA"],
+          "keywords_zh": ["贸易协定", "贸易协议", "自贸协定", "贸易伙伴关系", "RCEP", "CPTPP"]
+        },
+        "export_control": {
+          "label": "出口管制",
+          "keywords_en": ["export control", "export ban", "technology restriction", "chip export ban", "entity list", "deemed export", "technology transfer"],
+          "keywords_zh": ["出口管制", "出口禁令", "技术限制", "芯片出口禁令", "实体清单", "技术转让"]
+        },
+        "trade_war_escalation": {
+          "label": "贸易战升级",
+          "keywords_en": ["trade war", "retaliation", "tit-for-tat", "trade conflict", "decoupling", "de-risking", "trade tension"],
+          "keywords_zh": ["贸易战", "报复", "以牙还牙", "贸易冲突", "脱钩", "去风险", "贸易紧张"]
+        }
+      }
+    },
+    "energy_transition": {
+      "label": "能源转型",
+      "label_en": "Energy Transition",
+      "subtypes": {
+        "carbon_pricing": {
+          "label": "碳定价",
+          "keywords_en": ["carbon price", "carbon tax", "emission trading", "ETS", "carbon market", "carbon credit", "carbon border"],
+          "keywords_zh": ["碳价格", "碳税", "碳排放交易", "碳市场", "碳信用", "碳边境"]
+        },
+        "renewable_subsidy": {
+          "label": "新能源补贴",
+          "keywords_en": ["renewable subsidy", "solar subsidy", "wind subsidy", "IRA", "green subsidy", "clean energy incentive", "EV credit"],
+          "keywords_zh": ["新能源补贴", "光伏补贴", "风电补贴", "清洁能源激励", "电动车补贴"]
+        },
+        "fossil_fuel_policy": {
+          "label": "化石能源政策",
+          "keywords_en": ["fossil fuel", "drilling ban", "pipeline", "fracking", "oil lease", "coal phaseout", "natural gas policy"],
+          "keywords_zh": ["化石能源", "钻探禁令", "管道", "水力压裂", "石油开采权", "煤炭退出", "天然气政策"]
+        },
+        "ev_policy": {
+          "label": "电动车政策",
+          "keywords_en": ["EV mandate", "electric vehicle", "charging infrastructure", "ICE ban", "EV adoption", "battery policy", "zero emission vehicle"],
+          "keywords_zh": ["电动车政策", "新能源车", "充电基础设施", "燃油车禁令", "电动车普及", "电池政策", "零排放"]
+        }
+      }
+    },
+    "ai_industry": {
+      "label": "AI行业",
+      "label_en": "AI Industry",
+      "subtypes": {
+        "model_release": {
+          "label": "模型发布",
+          "keywords_en": ["model release", "model launch", "GPT", "Claude", "Gemini", "LLaMA", "foundation model", "language model", "new model", "benchmark", "state-of-the-art"],
+          "keywords_zh": ["模型发布", "模型推出", "大模型", "基础模型", "语言模型", "新模型", "基准测试", "SOTA"]
+        },
+        "compute_infrastructure": {
+          "label": "算力基础设施",
+          "keywords_en": ["data center", "GPU cluster", "AI infrastructure", "compute capacity", "cloud GPU", "AI chip", "H100", "B200", "TPU", "training cluster"],
+          "keywords_zh": ["数据中心", "GPU集群", "AI基础设施", "算力", "云GPU", "AI芯片", "训练集群"]
+        },
+        "ai_funding": {
+          "label": "AI融资",
+          "keywords_en": ["AI funding", "AI investment", "series", "valuation", "AI startup", "venture capital", "AI unicorn"],
+          "keywords_zh": ["AI融资", "AI投资", "估值", "AI创业", "风险投资", "AI独角兽"]
+        },
+        "ai_safety_incident": {
+          "label": "AI安全事件",
+          "keywords_en": ["AI safety", "AI incident", "hallucination", "AI harm", "bias", "misuse", "AI accident", "alignment failure"],
+          "keywords_zh": ["AI安全", "AI事故", "幻觉", "AI伤害", "偏见", "滥用", "对齐失败"]
+        },
+        "open_source_release": {
+          "label": "开源发布",
+          "keywords_en": ["open source", "open weight", "open model", "Apache license", "MIT license", "community release", "model weights"],
+          "keywords_zh": ["开源", "开放权重", "开源模型", "社区发布", "模型权重公开"]
+        },
+        "ai_acquisition": {
+          "label": "AI收购",
+          "keywords_en": ["acquisition", "acquire", "takeover", "buy", "merger", "acqui-hire", "AI deal"],
+          "keywords_zh": ["收购", "并购", "买入", "合并", "AI交易"]
+        },
+        "ai_partnership": {
+          "label": "AI合作",
+          "keywords_en": ["partnership", "collaboration", "alliance", "joint venture", "strategic partnership", "integration", "API partnership"],
+          "keywords_zh": ["合作", "联盟", "合资", "战略合作", "集成", "API合作"]
+        },
+        "ai_chip_development": {
+          "label": "AI芯片研发",
+          "keywords_en": ["AI chip", "AI accelerator", "neural processor", "custom silicon", "TPU", "NPU", "inference chip", "training chip", "chip design"],
+          "keywords_zh": ["AI芯片", "AI加速器", "神经处理器", "自研芯片", "推理芯片", "训练芯片", "芯片设计"]
+        }
+      }
+    }
+  }
+}

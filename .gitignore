@@ -1,0 +1,38 @@
+# macOS
+.DS_Store
+.fuse_hidden*
+~$*
+
+# Claude Code 本地配置（含本机路径，不适合跨机同步）
+.claude/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 数据库文件（运行时数据）
+*.db
+
+# 日志
+*.log
+
+# ai-morning-news 生成内容
+ai-morning-news/output/
+ai-morning-news/history.json
+ai-morning-news/source_health.json
+ai-morning-news/pipeline_checkpoint.json*
+ai-morning-news/*.bak
+
+# 运行时/备份文件
+ai-morning-news/*.db.*
+ai-morning-news/daily_run.log.*
+ai-morning-news/*.pid
+
+# Node.js（代理项目）
+node_modules/
+ai-morning-news/claude-max-api-proxy/
+
+# 环境变量
+.env
+twitter_cookies.json

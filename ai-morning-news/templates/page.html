@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 早报 · $date_str</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+$css_content
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+<div class="header-inner">
+    <div class="h-title">📡 AI 早报</div>
+    <div class="h-date">$date_str 周$weekday · $time_str</div>
+    <div class="search-wrap">
+        <input type="text" class="search-box" id="searchBox" placeholder="搜索…" aria-label="搜索">
+    </div>
+    <div class="h-stats">
+        <span><b>$total</b> 篇</span>
+        <span><b>$sources_count</b> 源</span>
+    </div>
+</div>
+</header>
+
+<!-- Filters -->
+<div class="filter-bar" id="filterBar">$filter_html</div>
+
+<!-- Briefing -->
+$briefing_html
+
+<!-- Cards Grid -->
+<div class="grid" id="grid">$cards_html</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+<div class="modal" id="modalContent"></div>
+</div>
+
+<!-- Footer -->
+<footer class="footer">
+    AI 早报 · <b>$sources_count</b> 个信息源 · <b>$total</b> 篇资讯 · $date_str
+</footer>
+
+<script src="modal_data.js"></script>
+<script>
+$js_content
+</script>
+</body>
+</html>

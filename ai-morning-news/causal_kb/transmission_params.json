@@ -1,0 +1,142 @@
+{
+  "version": "1.0",
+  "description": "Global empirical parameters for event-to-asset transmission dynamics.",
+  "speed_tiers": {
+    "algorithmic": {
+      "label": "算法交易级",
+      "label_en": "Algorithmic/HFT",
+      "lag_range_hours": [0.0001, 0.001],
+      "typical_assets": ["futures", "large_cap_equity", "treasury"],
+      "mechanism": "机器可读数据的算法/高频交易处理",
+      "examples": "FOMC利率决议、大盘股财报、宏观数据发布"
+    },
+    "fast_human": {
+      "label": "快速人工级",
+      "label_en": "Fast Human Response",
+      "lag_range_hours": [0.01, 4],
+      "typical_assets": ["broad_equity", "fx", "vix"],
+      "mechanism": "人工解读 + 级联算法响应",
+      "examples": "FOMC新闻发布会、公司公告、恐怖袭击"
+    },
+    "institutional": {
+      "label": "机构调仓级",
+      "label_en": "Institutional Rebalancing",
+      "lag_range_hours": [4, 168],
+      "typical_assets": ["global_equity", "commodity", "sovereign_bond", "fx"],
+      "mechanism": "机构再平衡、跨资产传染",
+      "examples": "疫情宣布、地缘冲突爆发、关税冲击"
+    },
+    "fundamental": {
+      "label": "基本面级",
+      "label_en": "Fundamental Repricing",
+      "lag_range_hours": [168, 1200],
+      "typical_assets": ["sector_equity", "credit", "treasury"],
+      "mechanism": "渐进式基本面重新定价、盈利修正",
+      "examples": "FOMC后续漂移、监管提案、贸易政策不确定性"
+    },
+    "slow_adjustment": {
+      "label": "缓慢调整级",
+      "label_en": "Slow Adjustment",
+      "lag_range_hours": [1200, 8760],
+      "typical_assets": ["sector_equity", "credit", "real_estate"],
+      "mechanism": "季度盈利影响、生产调整",
+      "examples": "供应链重组、疫情二次效应、财报漂移(PEAD)"
+    },
+    "structural": {
+      "label": "结构性级",
+      "label_en": "Structural Change",
+      "lag_range_hours": [8760, 87600],
+      "typical_assets": ["real_estate", "infrastructure", "sovereign_bond", "long_duration_equity"],
+      "mechanism": "长期增长率/贴现率缓慢重新定价",
+      "examples": "人口结构变化、能源转型、气候结构性风险"
+    }
+  },
+  "two_phase_model": {
+    "description": "多数事件表现出两阶段传导: 初始算法/快钱反应 + 二次调整",
+    "phase_1": {
+      "label": "初始反应",
+      "mechanism": "算法交易和快钱的即时反应",
+      "duration": "秒至小时",
+      "characteristic": "方向性强但幅度可能过度"
+    },
+    "phase_2": {
+      "label": "二次调整",
+      "mechanism": "慢钱参与者、基本面分析师、实体经济效应传导",
+      "duration": "天至月",
+      "characteristic": "两阶段比率决定了事件后的'漂移'或'回归'模式"
+    }
+  },
+  "decay_models": {
+    "exponential": {
+      "formula": "magnitude * exp(-t / halflife)",
+      "typical_halflife_days": [3, 30],
+      "use_case": "多数地缘政治事件、短期冲击"
+    },
+    "power_law": {
+      "formula": "magnitude * (1 + t)^(-alpha)",
+      "typical_alpha": [0.3, 1.5],
+      "use_case": "监管变化、贸易政策调整"
+    },
+    "structural": {
+      "formula": "无传统衰减, 影响持续累积",
+      "use_case": "能源转型、人口结构变化"
+    },
+    "phase_dependent": {
+      "formula": "分阶段不同衰减参数",
+      "use_case": "疫情(冲击→分化→轮动)"
+    }
+  },
+  "global_benchmarks": {
+    "geopolitical_avg_recovery_days": 39,
+    "geopolitical_avg_bottom_days": 18,
+    "geopolitical_6m_12m_returns": "与历史平均完全一致(如同事件未发生)",
+    "pead_q1_coefficient": 0.0674,
+    "pead_q2_coefficient": 0.0189,
+    "tariff_passthrough_rate": 1.0,
+    "trade_elasticity_1y": 1.0,
+    "trade_elasticity_4y": 4.0,
+    "carbon_price_renewable_elasticity": 0.18,
+    "el_nino_commodity_inflation_pct": 3.0,
+    "value_factor_halflife_months": 36,
+    "fomc_same_day_10y_response_bp": 1.7,
+    "fomc_50day_cumulative_10y_bp": 14
+  },
+  "hit_rate_hierarchy": {
+    "description": "事件类型命中率从高到低排列",
+    "tiers": [
+      {
+        "range": "80-95%",
+        "label": "最高可靠性",
+        "event_asset_pairs": [
+          {"event": "pandemic_health.pandemic_declaration", "asset": "equity.travel_airline", "direction": "down", "hit_rate": 0.95},
+          {"event": "trade_policy.tariff_increase", "asset": "目标国股票", "direction": "down", "hit_rate": 0.90},
+          {"event": "supply_chain.chip_shortage", "asset": "equity.auto", "direction": "down", "hit_rate": 0.85}
+        ]
+      },
+      {
+        "range": "60-75%",
+        "label": "中等可靠性",
+        "event_asset_pairs": [
+          {"event": "monetary_policy.rate_decision", "asset": "currency.usd", "direction": "variable", "hit_rate": 0.65},
+          {"event": "geopolitical.military_conflict", "asset": "commodity.crude_oil", "direction": "up", "hit_rate": 0.65},
+          {"event": "geopolitical.military_conflict", "asset": "commodity.gold", "direction": "up", "hit_rate": 0.78}
+        ]
+      },
+      {
+        "range": "55-65%",
+        "label": "较低可靠性",
+        "event_asset_pairs": [
+          {"event": "climate_weather.el_nino", "asset": "commodity.wheat", "direction": "up", "hit_rate": 0.60},
+          {"event": "regulation.antitrust", "asset": "equity.tech_megacap", "direction": "down", "hit_rate": 0.60},
+          {"event": "regulation.ai_regulation", "asset": "equity.ai_pure_play", "direction": "variable", "hit_rate": 0.55}
+        ]
+      }
+    ],
+    "paradox_note": "命中率悖论: 初始方向性预测较准, 但幅度、持续时间和可持续性预测困难得多。系统化事件驱动策略胜率集中在45-65%, 盈利来自风险管理和右偏收益分布"
+  },
+  "confidence_mapping": {
+    "high": {"min_hit_rate": 0.75, "description": "多数情况下方向和幅度可预测"},
+    "medium": {"min_hit_rate": 0.60, "description": "方向大概率正确, 幅度不确定"},
+    "low": {"min_hit_rate": 0.50, "description": "高度依赖具体情境, 需结合更多信息判断"}
+  }
+}

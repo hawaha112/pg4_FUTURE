@@ -1,0 +1,785 @@
+{
+  "version": "1.0",
+  "description": "Causal transmission chains mapping events to asset impacts, with empirical parameters from academic research.",
+  "chains": [
+    {
+      "id": "geo_commodity_equity",
+      "name": "地缘政治 → 大宗商品 → 行业股票",
+      "name_en": "Geopolitical → Commodities → Sector Equities",
+      "chain_number": 1,
+      "trigger_events": [
+        "geopolitical.military_conflict",
+        "geopolitical.sanctions",
+        "geopolitical.territorial_dispute",
+        "geopolitical.terrorism"
+      ],
+      "transmission_path": [
+        {
+          "from": "event",
+          "to": "commodity.crude_oil",
+          "mechanism": "supply_disruption_fear",
+          "mechanism_zh": "供应中断恐慌推升油价",
+          "lag_hours": [1, 72],
+          "direction": "up",
+          "conditional": "尤其在中东/俄罗斯相关冲突、OPEC备用产能低时触发"
+        },
+        {
+          "from": "event",
+          "to": "commodity.natural_gas",
+          "mechanism": "supply_route_risk",
+          "mechanism_zh": "天然气供应通道风险",
+          "lag_hours": [1, 168],
+          "direction": "up",
+          "conditional": "欧洲天然气对俄依赖度高时影响更大。俄乌战争导致欧洲气价+300%"
+        },
+        {
+          "from": "commodity.crude_oil",
+          "to": "equity.energy_fossil",
+          "mechanism": "revenue_boost",
+          "mechanism_zh": "油价上涨提升能源公司收入",
+          "lag_hours": [4, 168],
+          "direction": "up"
+        },
+        {
+          "from": "commodity.crude_oil",
+          "to": "equity.travel_airline",
+          "mechanism": "input_cost_increase",
+          "mechanism_zh": "燃油成本上升压缩航空利润",
+          "lag_hours": [24, 720],
+          "direction": "down"
+        },
+        {
+          "from": "event",
+          "to": "equity.defense",
+          "mechanism": "spending_expectation",
+          "mechanism_zh": "国防开支预期提升",
+          "lag_hours": [1, 48],
+          "direction": "up"
+        },
+        {
+          "from": "event",
+          "to": "index.vix",
+          "mechanism": "risk_premium",
+          "mechanism_zh": "风险溢价飙升",
+          "lag_hours": [0.1, 24],
+          "direction": "up"
+        },
+        {
+          "from": "event",
+          "to": "commodity.gold",
+          "mechanism": "safe_haven",
+          "mechanism_zh": "避险买盘推升金价",
+          "lag_hours": [0.5, 48],
+          "direction": "up"
+        },
+        {
+          "from": "event",
+          "to": "commodity.wheat",
+          "mechanism": "supply_disruption",
+          "mechanism_zh": "粮食产区受冲突影响",
+          "lag_hours": [1, 168],
+          "direction": "up",
+          "conditional": "涉及黑海粮食产区时。俄乌战争导致小麦期货+50%"
+        }
+      ],
+      "empirical": {
+        "hit_rate": 0.65,
+        "hit_rate_detail": {
+          "oil_spike_middle_east": 0.65,
+          "gold_safe_haven": 0.78,
+          "defense_stocks_up": 0.80,
+          "vix_spike": 0.85
+        },
+        "avg_bottom_days": 18,
+        "avg_recovery_days": 39,
+        "typical_magnitude_pct": [-5, 5],
+        "decay_model": "exponential",
+        "decay_halflife_days": 15,
+        "source": "J.P. Morgan Private Bank (Ned Davis Research), 36 major events over 80+ years; LPL Research",
+        "key_finding": "6- and 12-month equity returns after geopolitical events are identical to all-time averages",
+        "case_studies": [
+          "俄乌战争2022: Brent+60%至$130, 欧洲天然气+300%, 小麦+50%",
+          "2025关税战: 累计11.5%市场下跌, $4.1万亿市值蒸发"
+        ]
+      }
+    },
+    {
+      "id": "central_bank_fx_em",
+      "name": "央行政策 → 汇率 → 新兴市场",
+      "name_en": "Central Bank Policy → Currencies → Emerging Markets",
+      "chain_number": 2,
+      "trigger_events": [
+        "monetary_policy.rate_decision",
+        "monetary_policy.quantitative_easing",
+        "monetary_policy.taper",
+        "monetary_policy.forward_guidance"
+      ],
+      "transmission_path": [
+        {
+          "from": "event",
+          "to": "fixed_income.us_treasury",
+          "mechanism": "rate_repricing",
+          "mechanism_zh": "利率重新定价",
+          "lag_hours": [0.001, 1200],
+          "direction": "variable",
+          "conditional": "加息→收益率上行, 降息→收益率下行。FOMC漂移: 同日1.7bp→50天14bp(8倍放大)"
+        },
+        {
+          "from": "event",
+          "to": "currency.usd",
+          "mechanism": "interest_rate_differential",
+          "mechanism_zh": "利差驱动美元走势",
+          "lag_hours": [0.01, 168],
+          "direction": "variable",
+          "conditional": "鹰派→美元走强(60-70%命中率), 但2025关税日打破此规律"
+        },
+        {
+          "from": "currency.usd",
+          "to": "currency.em_currencies",
+          "mechanism": "carry_trade_unwind",
+          "mechanism_zh": "套息交易平仓冲击新兴市场货币",
+          "lag_hours": [1, 720],
+          "direction": "inverse"
+        },
+        {
+          "from": "currency.em_currencies",
+          "to": "fixed_income.sovereign_em",
+          "mechanism": "currency_debt_burden",
+          "mechanism_zh": "本币贬值加重美元债务负担",
+          "lag_hours": [24, 2160],
+          "direction": "down"
+        },
+        {
+          "from": "event",
+          "to": "equity.banking",
+          "mechanism": "net_interest_margin",
+          "mechanism_zh": "净息差变化影响银行盈利",
+          "lag_hours": [1, 2160],
+          "direction": "variable"
+        },
+        {
+          "from": "event",
+          "to": "index.nasdaq",
+          "mechanism": "discount_rate_repricing",
+          "mechanism_zh": "贴现率变化影响成长股估值",
+          "lag_hours": [0.1, 168],
+          "direction": "variable",
+          "conditional": "加息→成长股承压, 降息→成长股受益"
+        }
+      ],
+      "empirical": {
+        "hit_rate": 0.70,
+        "hit_rate_detail": {
+          "hawkish_usd_strength": 0.65,
+          "rate_hike_treasury_up": 0.80,
+          "em_currency_fragile_five": 0.75
+        },
+        "fomc_drift_10y_bp": 14,
+        "fomc_drift_days": 50,
+        "em_depreciation_low_reserves": 0.15,
+        "em_depreciation_high_reserves": 0.02,
+        "rate_100bp_gdp_inflow_pct": 0.2,
+        "decay_model": "power_law",
+        "decay_alpha": 0.5,
+        "source": "NBER WP 25127; 2013 Taper Tantrum data",
+        "key_finding": "非常规货币政策对新兴市场溢出效应强于常规利率变化",
+        "case_studies": [
+          "2013缩减恐慌: 脆弱五国货币贬值约15%",
+          "2025关税日: 美元反常贬值, 市场重新评估美国增长前景"
+        ]
+      }
+    },
+    {
+      "id": "supply_chain_semi_auto_pharma",
+      "name": "供应链中断 → 半导体/汽车/医药",
+      "name_en": "Supply Chain Disruptions → Semi/Auto/Pharma",
+      "chain_number": 3,
+      "trigger_events": [
+        "supply_chain.chip_shortage",
+        "supply_chain.logistics_disruption",
+        "supply_chain.raw_material_shortage",
+        "supply_chain.factory_shutdown"
+      ],
+      "transmission_path": [
+        {
+          "from": "event",
+          "to": "equity.semiconductor",
+          "mechanism": "supply_scarcity_pricing_power",
+          "mechanism_zh": "供应稀缺带来定价权(供应商受益, 需求方受损)",
+          "lag_hours": [24, 4320],
+          "direction": "variable",
+          "conditional": "半导体供应商(ASML,TSM)可能因定价权上涨; 下游需求方(auto OEM)受损"
+        },
+        {
+          "from": "event",
+          "to": "equity.auto",
+          "mechanism": "production_halt",
+          "mechanism_zh": "芯片短缺导致汽车减产",
+          "lag_hours": [168, 8760],
+          "direction": "down",
+          "conditional": "2020-2022芯片短缺导致车企损失$2100亿营收, 交货期从数周延长至6-12个月"
+        },
+        {
+          "from": "event",
+          "to": "equity.pharma",
+          "mechanism": "api_supply_disruption",
+          "mechanism_zh": "原料药供应中断",
+          "lag_hours": [168, 4320],
+          "direction": "down",
+          "conditional": "中国为主要原料药生产国, 印度为主要仿制药生产国"
+        },
+        {
+          "from": "event",
+          "to": "commodity.rare_earth",
+          "mechanism": "critical_mineral_squeeze",
+          "mechanism_zh": "关键矿物供应收紧",
+          "lag_hours": [24, 720],
+          "direction": "up"
+        },
+        {
+          "from": "event",
+          "to": "equity.ai_pure_play",
+          "mechanism": "gpu_supply_constraint",
+          "mechanism_zh": "GPU供应约束影响AI公司",
+          "lag_hours": [24, 2160],
+          "direction": "variable",
+          "conditional": "GPU短缺时NVDA受益(定价权), 但AI应用公司可能受训练算力约束"
+        }
+      ],
+      "empirical": {
+        "hit_rate": 0.70,
+        "hit_rate_detail": {
+          "auto_production_loss": 0.85,
+          "chip_supplier_gain": 0.65,
+          "pharma_shortage": 0.60
+        },
+        "typical_magnitude_pct": [-10, 15],
+        "decay_model": "power_law",
+        "decay_alpha": 0.3,
+        "source": "Deloitte 2026; NBER semiconductor analysis",
+        "key_finding": "半导体供应链有四个互联网络: 设计(美国主导)、原材料(日本50%)、设备(ASML 100% EUV)、制造(台湾60%全球产能, 92%先进制程)",
+        "case_studies": [
+          "2020-2022芯片短缺: 车企损失$2100亿, 交货期延长至6-12个月",
+          "COVID疫情: 100+药品短缺",
+          "2026新瓶颈: chiplets($1000-1100亿营收)、HBM共封装、GAA晶体管"
+        ]
+      }
+    },
+    {
+      "id": "climate_agriculture_food",
+      "name": "气候天气 → 农业 → 食品加工",
+      "name_en": "Weather/Climate → Agriculture → Food Processing",
+      "chain_number": 4,
+      "trigger_events": [
+        "climate_weather.el_nino",
+        "climate_weather.la_nina",
+        "climate_weather.drought",
+        "climate_weather.flood",
+        "climate_weather.hurricane",
+        "climate_weather.extreme_heat"
+      ],
+      "transmission_path": [
+        {
+          "from": "event",
+          "to": "commodity.wheat",
+          "mechanism": "crop_yield_impact",
+          "mechanism_zh": "作物产量受天气影响",
+          "lag_hours": [2160, 8760],
+          "direction": "up",
+          "conditional": "厄尔尼诺: 南非玉米减产10-15%(严重年份-50%); 拉尼娜: 全球四大作物减产-4.5%至0%"
+        },
+        {
+          "from": "event",
+          "to": "commodity.corn",
+          "mechanism": "crop_yield_impact",
+          "mechanism_zh": "玉米产量受天气影响",
+          "lag_hours": [2160, 8760],
+          "direction": "up"
+        },
+        {
+          "from": "event",
+          "to": "commodity.soybean",
+          "mechanism": "crop_yield_regional",
+          "mechanism_zh": "大豆产量区域性影响",
+          "lag_hours": [2160, 8760],
+          "direction": "variable",
+          "conditional": "厄尔尼诺时美国/南美大豆可能增产+2.1%至5.4%"
+        },
+        {
+          "from": "commodity.wheat",
+          "to": "equity.food_agriculture",
+          "mechanism": "margin_squeeze",
+          "mechanism_zh": "原材料涨价压缩食品加工利润",
+          "lag_hours": [4320, 12960],
+          "direction": "variable",
+          "conditional": "上游(农产品贸易商ADM,BG)可能受益; 下游(食品加工)利润承压"
+        }
+      ],
+      "empirical": {
+        "hit_rate": 0.57,
+        "hit_rate_detail": {
+          "el_nino_agri_price": 0.60,
+          "drought_crop_failure": 0.70,
+          "food_processor_margin": 0.50
+        },
+        "el_nino_commodity_inflation_pct": 3.0,
+        "el_nino_inflation_duration_months": [6, 12],
+        "el_nino_global_inflation_share": 0.20,
+        "typical_magnitude_pct": [-5, 15],
+        "decay_model": "exponential",
+        "decay_halflife_days": 90,
+        "source": "Brenner 2002; ECB; Concordia University (Henein 2023)",
+        "key_finding": "厄尔尼诺自1963年以来解释约20%全球大宗商品通胀波动, 但预测技术改善和供应链多元化正在削弱这一关系",
+        "case_studies": [
+          "厄尔尼诺: 实际大宗商品通胀+3%, 持续6-12个月",
+          "南非玉米: 严重干旱年份减产高达50%"
+        ],
+        "monitoring_indicators": ["Oceanic Nino Index", "USDA WASDE", "FAO Food Price Index", "卫星植被指数"]
+      }
+    },
+    {
+      "id": "regulation_tech_finance_energy",
+      "name": "监管变化 → 科技/金融/能源",
+      "name_en": "Regulatory Changes → Tech/Finance/Energy",
+      "chain_number": 5,
+      "trigger_events": [
+        "regulation.antitrust",
+        "regulation.data_privacy",
+        "regulation.ai_regulation",
+        "regulation.financial_regulation",
+        "regulation.environmental_regulation"
+      ],
+      "transmission_path": [
+        {
+          "from": "event",
+          "to": "equity.tech_megacap",
+          "mechanism": "regulatory_uncertainty",
+          "mechanism_zh": "监管不确定性压制估值",
+          "lag_hours": [1, 4320],
+          "direction": "down",
+          "conditional": "反垄断调查→股价短期下跌, 但历史上最终结果多为行为性处罚而非结构性拆分"
+        },
+        {
+          "from": "event",
+          "to": "index.vix",
+          "mechanism": "uncertainty_premium",
+          "mechanism_zh": "监管不确定性提升波动率",
+          "lag_hours": [1, 168],
+          "direction": "up",
+          "conditional": "科技行业特定监管压力期间VIX曾翻倍"
+        },
+        {
+          "from": "event",
+          "to": "equity.banking",
+          "mechanism": "capital_requirement_change",
+          "mechanism_zh": "资本要求变化影响银行ROE和放贷能力",
+          "lag_hours": [720, 8760],
+          "direction": "variable",
+          "conditional": "Basel III使2023年银行并购降至历史低点(101笔/$42亿), 2024年恢复至130笔/$163亿"
+        },
+        {
+          "from": "event",
+          "to": "equity.energy_fossil",
+          "mechanism": "compliance_cost",
+          "mechanism_zh": "环境合规成本影响传统能源",
+          "lag_hours": [720, 8760],
+          "direction": "down"
+        },
+        {
+          "from": "event",
+          "to": "equity.energy_renewable",
+          "mechanism": "regulatory_tailwind",
+          "mechanism_zh": "环境监管利好新能源",
+          "lag_hours": [168, 4320],
+          "direction": "up"
+        }
+      ],
+      "empirical": {
+        "hit_rate": 0.55,
+        "hit_rate_detail": {
+          "antitrust_temp_dip": 0.65,
+          "financial_reg_roe_impact": 0.75,
+          "environmental_reg_energy_shift": 0.60
+        },
+        "typical_magnitude_pct": [-8, 3],
+        "decay_model": "power_law",
+        "decay_alpha": 0.8,
+        "source": "2025 Google antitrust ruling analysis; Basel III implementation data",
+        "key_finding": "监管不确定性本身比最终监管结果对市场影响更大",
+        "case_studies": [
+          "2025谷歌反垄断: 行为性处罚(非Chrome剥离), 股价反涨8%",
+          "Basel III: 2023年银行并购历史低点"
+        ]
+      }
+    },
+    {
+      "id": "pandemic_pharma_travel_remote",
+      "name": "疫情 → 医药/旅游/远程办公",
+      "name_en": "Pandemic → Pharma/Travel/Remote-Work",
+      "chain_number": 6,
+      "trigger_events": [
+        "pandemic_health.pandemic_declaration",
+        "pandemic_health.vaccine_breakthrough",
+        "pandemic_health.outbreak"
+      ],
+      "transmission_path": [
+        {
+          "from": "event",
+          "to": "equity.travel_airline",
+          "mechanism": "demand_destruction",
+          "mechanism_zh": "旅行需求崩塌",
+          "lag_hours": [1, 720],
+          "direction": "down",
+          "conditional": "COVID时航空公司股价跌60-80%"
+        },
+        {
+          "from": "event",
+          "to": "equity.pharma",
+          "mechanism": "treatment_vaccine_demand",
+          "mechanism_zh": "治疗和疫苗需求激增",
+          "lag_hours": [24, 8760],
+          "direction": "up",
+          "conditional": "Moderna股价涨~2500%, 辉瑞疫苗收入~$370亿"
+        },
+        {
+          "from": "event",
+          "to": "equity.remote_work",
+          "mechanism": "work_pattern_shift",
+          "mechanism_zh": "工作模式转变",
+          "lag_hours": [24, 2160],
+          "direction": "up"
+        },
+        {
+          "from": "event",
+          "to": "index.sp500",
+          "mechanism": "broad_market_shock",
+          "mechanism_zh": "广泛市场冲击",
+          "lag_hours": [1, 168],
+          "direction": "down",
+          "conditional": "COVID: S&P500从峰到谷跌34%"
+        },
+        {
+          "from": "event",
+          "to": "commodity.crude_oil",
+          "mechanism": "demand_collapse",
+          "mechanism_zh": "能源需求崩塌",
+          "lag_hours": [1, 720],
+          "direction": "down",
+          "conditional": "COVID期间油价一度跌至负值"
+        },
+        {
+          "from": "pandemic_health.vaccine_breakthrough",
+          "to": "equity.travel_airline",
+          "mechanism": "recovery_rotation",
+          "mechanism_zh": "疫苗催化板块轮动",
+          "lag_hours": [1, 168],
+          "direction": "up",
+          "conditional": "首个疫苗公告(辉瑞-BioNTech)市场影响大于后续, 因叠加了创新竞赛和不确定性消除"
+        }
+      ],
+      "empirical": {
+        "hit_rate": 0.90,
+        "hit_rate_detail": {
+          "pandemic_travel_crash": 0.95,
+          "pandemic_pharma_surge": 0.85,
+          "pandemic_remote_surge": 0.80,
+          "vaccine_rotation": 0.75
+        },
+        "typical_magnitude_pct": [-70, 2500],
+        "decay_model": "phase_dependent",
+        "phases": {
+          "shock": {"duration_weeks": [4, 8], "description": "全面恐慌, 无差别抛售"},
+          "divergence": {"duration_months": [3, 9], "description": "科技/远程办公飙升, 旅游持续低迷"},
+          "vaccine_rotation": {"duration_months": [6, 12], "description": "疫苗催化实体经济板块反弹"}
+        },
+        "source": "COVID-19 market data; Maneenop & Kotcharin 2020 (52 airlines study)",
+        "key_finding": "疫情是命中率最高的事件类型, 行业影响方向最为确定",
+        "case_studies": [
+          "COVID Phase 1: S&P500跌34%, 航空股跌60-80%, 油价曾跌至负值",
+          "COVID Phase 2: 科技/远程办公飙升, 旅游持续低迷",
+          "COVID Phase 3: Moderna+2500%, 辉瑞疫苗收入$370亿"
+        ]
+      }
+    },
+    {
+      "id": "trade_war_import_sectors",
+      "name": "贸易战/关税 → 进口依赖行业",
+      "name_en": "Trade Wars/Tariffs → Import-Dependent Sectors",
+      "chain_number": 7,
+      "trigger_events": [
+        "trade_policy.tariff_increase",
+        "trade_policy.export_control",
+        "trade_policy.trade_war_escalation"
+      ],
+      "transmission_path": [
+        {
+          "from": "event",
+          "to": "equity.semiconductor",
+          "mechanism": "export_control_impact",
+          "mechanism_zh": "出口管制限制半导体供应链",
+          "lag_hours": [1, 8760],
+          "direction": "variable",
+          "conditional": "美国芯片企业失去中国市场, 但中国芯片自主替代概念受益"
+        },
+        {
+          "from": "event",
+          "to": "equity.auto",
+          "mechanism": "tariff_cost_passthrough",
+          "mechanism_zh": "关税成本几乎完全转嫁给进口商",
+          "lag_hours": [168, 4320],
+          "direction": "down",
+          "conditional": "关税传导率β=0.00(出口商不承担成本)"
+        },
+        {
+          "from": "event",
+          "to": "commodity.soybean",
+          "mechanism": "retaliation_target",
+          "mechanism_zh": "报复性关税打击农产品",
+          "lag_hours": [24, 720],
+          "direction": "down",
+          "conditional": "中国曾停止购买美国大豆作为报复"
+        },
+        {
+          "from": "event",
+          "to": "equity.energy_renewable",
+          "mechanism": "supply_chain_reconfiguration",
+          "mechanism_zh": "清洁能源/电池供应链重组",
+          "lag_hours": [2160, 43800],
+          "direction": "variable",
+          "conditional": "CSIS评估清洁能源最可能出现完全供应链重组"
+        },
+        {
+          "from": "event",
+          "to": "currency.cny",
+          "mechanism": "trade_flow_adjustment",
+          "mechanism_zh": "贸易流量调整影响汇率",
+          "lag_hours": [1, 720],
+          "direction": "down"
+        },
+        {
+          "from": "event",
+          "to": "index.sp500",
+          "mechanism": "broad_uncertainty",
+          "mechanism_zh": "贸易不确定性拖累大盘",
+          "lag_hours": [1, 168],
+          "direction": "down"
+        }
+      ],
+      "empirical": {
+        "hit_rate": 0.75,
+        "hit_rate_detail": {
+          "tariff_importer_cost": 0.90,
+          "retaliation_agri": 0.70,
+          "tech_export_control": 0.80,
+          "supply_chain_shift": 0.60
+        },
+        "tariff_passthrough_beta": 0.0,
+        "us_china_tariff_peak_2025": 127.2,
+        "china_retaliation_tariff_2025": 147.6,
+        "trade_elasticity_1y": 1.0,
+        "trade_elasticity_4y": 4.0,
+        "supply_chain_adjustment_years": [5, 15],
+        "typical_magnitude_pct": [-12, 5],
+        "decay_model": "power_law",
+        "decay_alpha": 0.3,
+        "source": "Fajgelbaum et al. 2020; PIIE 2025; Baier & Bergstrand; NBER Amiti et al.",
+        "key_finding": "关税几乎100%由进口商承担; 完全供应链调整需5-15年; 贸易弹性在4年内从1x增至4x",
+        "case_studies": [
+          "中美贸易战: 11个事件日累计市场下跌11.5%, 蒸发$4.1万亿市值",
+          "2025关税峰值: 美对华127.2%, 华对美147.6%",
+          "中国停购美国大豆"
+        ]
+      }
+    },
+    {
+      "id": "energy_transition_fossil_renewable",
+      "name": "能源转型政策 → 化石能源 vs 新能源",
+      "name_en": "Energy Transition Policy → Fossil Fuels vs Renewables",
+      "chain_number": 8,
+      "trigger_events": [
+        "energy_transition.carbon_pricing",
+        "energy_transition.renewable_subsidy",
+        "energy_transition.fossil_fuel_policy",
+        "energy_transition.ev_policy"
+      ],
+      "transmission_path": [
+        {
+          "from": "event",
+          "to": "equity.energy_renewable",
+          "mechanism": "policy_tailwind",
+          "mechanism_zh": "政策利好推升新能源估值",
+          "lag_hours": [24, 4320],
+          "direction": "up"
+        },
+        {
+          "from": "event",
+          "to": "equity.energy_fossil",
+          "mechanism": "stranded_asset_risk",
+          "mechanism_zh": "搁浅资产风险压制化石能源估值",
+          "lag_hours": [720, 43800],
+          "direction": "down",
+          "conditional": "化石能源股权价值面临高达70%的下行风险, 但2005-2019年市场定价仍按'一切照旧'"
+        },
+        {
+          "from": "event",
+          "to": "equity.auto",
+          "mechanism": "ev_transition_pressure",
+          "mechanism_zh": "电动车转型压力",
+          "lag_hours": [720, 8760],
+          "direction": "variable",
+          "conditional": "EV政策利好Tesla等纯电企业, 压制传统车企转型成本"
+        },
+        {
+          "from": "event",
+          "to": "commodity.lithium",
+          "mechanism": "battery_demand_signal",
+          "mechanism_zh": "电池需求信号推升锂价",
+          "lag_hours": [168, 4320],
+          "direction": "up"
+        },
+        {
+          "from": "event",
+          "to": "commodity.crude_oil",
+          "mechanism": "long_term_demand_erosion",
+          "mechanism_zh": "长期需求侵蚀",
+          "lag_hours": [8760, 43800],
+          "direction": "down"
+        }
+      ],
+      "empirical": {
+        "hit_rate": 0.60,
+        "hit_rate_detail": {
+          "carbon_price_renewable_boost": 0.65,
+          "fossil_fuel_value_at_risk": 0.55,
+          "ev_policy_auto_shift": 0.60
+        },
+        "carbon_programs_global": 73,
+        "ghg_emissions_covered_pct": 23,
+        "carbon_price_renewable_elasticity": 0.1801,
+        "carbon_tax_renewable_elasticity": 0.1845,
+        "fossil_equity_value_at_risk_pct": 70,
+        "typical_magnitude_pct": [-15, 20],
+        "decay_model": "structural",
+        "decay_note": "结构性转型无传统衰减, 影响持续累积",
+        "source": "Nature Communications 2025; carbon pricing data 2005-2019",
+        "key_finding": "碳价格存在临界点: 超过阈值后可再生能源投资严格优于新建化石产能, 触发快速、永久性排放下降",
+        "case_studies": [
+          "全球73个碳定价机制覆盖23%排放",
+          "2005-2019年化石能源市值跟踪'一切照旧'估值, 转型风险未被定价",
+          "近十年可再生能源回报率显著超越化石能源(油价$70+)"
+        ]
+      }
+    },
+    {
+      "id": "ai_model_release_tech",
+      "name": "AI模型发布 → AI概念股 → 算力需求",
+      "name_en": "AI Model Release → AI Stocks → Compute Demand",
+      "chain_number": 9,
+      "trigger_events": [
+        "ai_industry.model_release",
+        "ai_industry.open_source_release"
+      ],
+      "transmission_path": [
+        {
+          "from": "event",
+          "to": "equity.ai_pure_play",
+          "mechanism": "narrative_momentum",
+          "mechanism_zh": "AI叙事动能推升概念股",
+          "lag_hours": [0.5, 48],
+          "direction": "variable",
+          "conditional": "重大模型(GPT系列, Claude, Gemini)发布通常推升NVDA等; 开源模型可能压制API定价公司"
+        },
+        {
+          "from": "event",
+          "to": "equity.semiconductor",
+          "mechanism": "compute_demand_signal",
+          "mechanism_zh": "算力需求信号",
+          "lag_hours": [1, 168],
+          "direction": "up",
+          "conditional": "更大更强的模型→更多GPU需求→利好NVDA/AMD/AVGO"
+        },
+        {
+          "from": "event",
+          "to": "equity.cloud_saas",
+          "mechanism": "infrastructure_demand",
+          "mechanism_zh": "云基础设施需求增长",
+          "lag_hours": [24, 720],
+          "direction": "up"
+        },
+        {
+          "from": "event",
+          "to": "equity.tech_megacap",
+          "mechanism": "ai_leadership_signal",
+          "mechanism_zh": "AI领导力信号影响科技巨头估值",
+          "lag_hours": [1, 48],
+          "direction": "variable",
+          "conditional": "发布方(如Google发布Gemini)通常受益, 竞争对手可能短期承压"
+        }
+      ],
+      "empirical": {
+        "hit_rate": 0.60,
+        "hit_rate_detail": {
+          "model_release_nvda_up": 0.65,
+          "open_source_api_pressure": 0.55,
+          "cloud_demand_boost": 0.60
+        },
+        "typical_magnitude_pct": [-3, 8],
+        "decay_model": "exponential",
+        "decay_halflife_days": 7,
+        "source": "Market observation 2023-2026",
+        "key_finding": "AI模型发布对半导体/算力股影响最为直接和持续, 对应用层影响更依赖具体商业模式"
+      }
+    },
+    {
+      "id": "ai_regulation_tech",
+      "name": "AI监管 → 科技股 → 合规成本",
+      "name_en": "AI Regulation → Tech Stocks → Compliance Cost",
+      "chain_number": 10,
+      "trigger_events": [
+        "regulation.ai_regulation",
+        "regulation.data_privacy",
+        "regulation.antitrust"
+      ],
+      "transmission_path": [
+        {
+          "from": "event",
+          "to": "equity.tech_megacap",
+          "mechanism": "compliance_cost_fear",
+          "mechanism_zh": "合规成本恐慌",
+          "lag_hours": [1, 168],
+          "direction": "down"
+        },
+        {
+          "from": "event",
+          "to": "equity.ai_pure_play",
+          "mechanism": "barrier_to_entry",
+          "mechanism_zh": "监管形成进入壁垒",
+          "lag_hours": [24, 4320],
+          "direction": "variable",
+          "conditional": "严格监管可能利好已合规的大企业(护城河效应), 压制小型AI创业公司"
+        },
+        {
+          "from": "event",
+          "to": "index.vix",
+          "mechanism": "tech_regulatory_uncertainty",
+          "mechanism_zh": "科技行业监管不确定性",
+          "lag_hours": [1, 168],
+          "direction": "up"
+        }
+      ],
+      "empirical": {
+        "hit_rate": 0.55,
+        "hit_rate_detail": {
+          "tech_reg_dip": 0.60,
+          "ai_reg_moat_effect": 0.50,
+          "vix_tech_pressure": 0.70
+        },
+        "typical_magnitude_pct": [-5, 3],
+        "decay_model": "exponential",
+        "decay_halflife_days": 21,
+        "source": "EU AI Act analysis; antitrust case data",
+        "key_finding": "反垄断历史上多产生暂时性影响, 最终结果通常为行为性处罚; 监管不确定性本身比监管结果影响更大"
+      }
+    }
+  ]
+}
