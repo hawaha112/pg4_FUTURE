@@ -1,15 +1,20 @@
 #!/bin/bash
 # ============================================================
-# AI Morning Briefing - 每日定时任务运行脚本
+# AI Morning Briefing - 每日出报 + 部署脚本
 # 由 launchd 在每天早上 7:00 自动调用
+#
+# v4 架构：采集（collector.py / run_collect.sh）已独立为每 2 小时
+# 定时任务，本脚本只负责：
+#   1. 触发一次最终采集（确保出报前数据最新）
+#   2. 从事件库渲染 HTML
+#   3. 部署到 GitHub Pages
+#   4. 发送 Telegram 通知
 # ============================================================
 
 set -e
 
 # ────────────────────────────────────────────────
-# 互斥锁（PID 文件方案，macOS 无 flock）
-# 防止 launchd catch-up / 手动重复触发时多个实例
-# 并发运行互相污染 dedup.db 覆盖好结果。
+# 互斥锁
 # ────────────────────────────────────────────────
 _SCRIPT_DIR_EARLY="$(cd "$(dirname "$0")" && pwd)"
 _LOCK_LOG="$_SCRIPT_DIR_EARLY/daily_run.log"
@@ -23,25 +28,38 @@ if [ -f "$PIDFILE" ]; then
         } >> "$_LOCK_LOG"
         exit 0
     fi
-    # 旧 PID 文件是孤儿（上次进程被 kill 掉）
     rm -f "$PIDFILE"
 fi
 echo $$ > "$PIDFILE"
 trap 'rm -f "$PIDFILE"' EXIT
 
-# 项目路径：自动定位到脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR"
 LOG_FILE="$PROJECT_DIR/daily_run.log"
 
-# 从外部 .env 文件加载敏感配置（TG_BOT_TOKEN, TG_CHAT_ID, BRIEFING_URL）
+# ────────────────────────────────────────────────
+# 日志轮转（1MB, 保留 7 份）
+# ────────────────────────────────────────────────
+LOG_MAX_SIZE=1048576
+if [ -f "$LOG_FILE" ]; then
+    LOG_SIZE=$(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
+    if [ "$LOG_SIZE" -gt "$LOG_MAX_SIZE" ] 2>/dev/null; then
+        for i in 6 5 4 3 2 1; do
+            [ -f "${LOG_FILE}.$i" ] && mv "${LOG_FILE}.$i" "${LOG_FILE}.$((i+1))"
+        done
+        mv "$LOG_FILE" "${LOG_FILE}.1"
+    fi
+fi
+
+find "$PROJECT_DIR" -maxdepth 1 -name "daily_run.log.*-*" -mtime +7 -delete 2>/dev/null || true
+
+# 加载环境变量
 ENV_FILE="$HOME/.config/ai-briefing/.env"
 if [ -f "$ENV_FILE" ]; then
-    # shellcheck source=/dev/null
     source "$ENV_FILE"
 fi
 
-# Telegram 发送函数（token 未配置时静默跳过）
+# Telegram 发送函数
 send_tg() {
     if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
         return 0
@@ -53,131 +71,152 @@ send_tg() {
         > /dev/null 2>&1 || true
 }
 
-# 记录时间戳
 {
     echo ""
     echo "========================================"
-    echo "运行时间: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "出报时间: $(date '+%Y-%m-%d %H:%M:%S')"
     echo "========================================"
 } >> "$LOG_FILE"
 
 cd "$PROJECT_DIR"
 
-# 第一步：自动启动 Claude Max API 代理
-PROXY_DIR="$PROJECT_DIR/claude-max-api-proxy"
+# ────────────────────────────────────────────────
+# 第一步：出报前做一次最终采集（确保事件库最新）
+# ────────────────────────────────────────────────
 PROXY_PID=""
-PROXY_PORT=3456
 PROXY_STARTED_BY_US=false
 
 LLM_URL=$(python3 -c "import json; print(json.load(open('config.json'))['llm']['base_url'])" 2>/dev/null || echo "http://localhost:3456/v1")
 echo "检查 LLM 服务 ($LLM_URL)..." >> "$LOG_FILE"
 
-# 先检查 LLM 服务是否已经在运行（可能手动启动了代理或用的其他服务）
+NO_LLM=""
 if curl -s --connect-timeout 5 "${LLM_URL}/models" > /dev/null 2>&1; then
     echo "  LLM 服务已在运行" >> "$LOG_FILE"
 else
-    # 尝试自动启动 claude_proxy.py
     if [ -f "$PROJECT_DIR/claude_proxy.py" ]; then
         echo "  启动 claude_proxy.py..." >> "$LOG_FILE"
         python3 -u "$PROJECT_DIR/claude_proxy.py" >> "$LOG_FILE" 2>&1 &
         PROXY_PID=$!
         PROXY_STARTED_BY_US=true
 
-        # 等待代理就绪（最多 30 秒）
         for i in $(seq 1 30); do
-            if curl -s --connect-timeout 2 "http://localhost:${PROXY_PORT}/health" > /dev/null 2>&1; then
-                echo "  代理已就绪（等待 ${i}s）" >> "$LOG_FILE"
+            if curl -s --connect-timeout 2 "http://localhost:3456/health" > /dev/null 2>&1; then
+                echo "  代理就绪（${i}s）" >> "$LOG_FILE"
                 break
             fi
             sleep 1
         done
 
-        # 再次检查
-        if curl -s --connect-timeout 5 "${LLM_URL}/models" > /dev/null 2>&1; then
-            echo "  LLM 服务正常（via claude-max-api-proxy）" >> "$LOG_FILE"
-        else
-            echo "  代理启动超时，使用 --no-llm 模式" >> "$LOG_FILE"
+        if ! curl -s --connect-timeout 5 "${LLM_URL}/models" > /dev/null 2>&1; then
+            echo "  代理启动超时，使用 --no-llm" >> "$LOG_FILE"
             NO_LLM="--no-llm"
-            # 清理失败的进程
             if [ -n "$PROXY_PID" ]; then
                 kill "$PROXY_PID" 2>/dev/null || true
                 PROXY_PID=""
             fi
         fi
     else
-        echo "  未找到 claude_proxy.py" >> "$LOG_FILE"
-        echo "  使用 --no-llm 模式" >> "$LOG_FILE"
         NO_LLM="--no-llm"
     fi
 fi
 
-# 注册退出钩子：脚本结束时自动关闭我们启动的代理
 cleanup_proxy() {
     if [ "$PROXY_STARTED_BY_US" = true ] && [ -n "$PROXY_PID" ]; then
-        echo "关闭 claude-max-api-proxy (PID: $PROXY_PID)..." >> "$LOG_FILE"
+        echo "关闭代理 (PID: $PROXY_PID)..." >> "$LOG_FILE"
         kill "$PROXY_PID" 2>/dev/null || true
         wait "$PROXY_PID" 2>/dev/null || true
     fi
 }
 trap cleanup_proxy EXIT
 
-# 第二步：运行新闻抓取脚本（-u 禁用输出缓冲，确保日志实时写入）
-# 支持 checkpoint 断点续跑：首次运行失败后自动 --resume 重试一次
-echo "开始抓取新闻..." >> "$LOG_FILE"
-if ! python3 -u "$PROJECT_DIR/fetch_news.py" ${NO_LLM:-} >> "$LOG_FILE" 2>&1; then
-    FETCH_STATUS=$?
-    echo "  ⚠️ 首次运行失败（退出码: $FETCH_STATUS），尝试从 checkpoint 恢复..." >> "$LOG_FILE"
-    sleep 5
-    if ! python3 -u "$PROJECT_DIR/fetch_news.py" --resume ${NO_LLM:-} >> "$LOG_FILE" 2>&1; then
-        RETRY_STATUS=$?
-        echo "  ❌ 重试仍然失败（退出码: $RETRY_STATUS）" >> "$LOG_FILE"
-        send_tg "<b>AI 早报生成失败</b>
-首次退出码: $FETCH_STATUS，重试退出码: $RETRY_STATUS
-请检查 daily_run.log"
-        exit 1
-    fi
-    echo "  ✅ 从 checkpoint 恢复成功" >> "$LOG_FILE"
-fi
-echo "  新闻抓取完成" >> "$LOG_FILE"
+echo "运行出报前采集..." >> "$LOG_FILE"
+python3 -u "$PROJECT_DIR/collector.py" ${NO_LLM:-} >> "$LOG_FILE" 2>&1 || {
+    echo "  ⚠️ 出报前采集失败，使用事件库中现有数据继续出报" >> "$LOG_FILE"
+}
 
-# 归档当天日报到 archive/ 目录（保留历史，方便回顾和生成周报）
+# ────────────────────────────────────────────────
+# 第二步：从事件库渲染页面
+# ────────────────────────────────────────────────
+echo "开始渲染页面..." >> "$LOG_FILE"
+if ! python3 -u "$PROJECT_DIR/briefing_renderer.py" >> "$LOG_FILE" 2>&1; then
+    echo "  ❌ 渲染失败" >> "$LOG_FILE"
+    send_tg "<b>AI 早报渲染失败</b>
+请检查 daily_run.log"
+    exit 1
+fi
+echo "  页面渲染完成" >> "$LOG_FILE"
+
+# ────────────────────────────────────────────────
+# 第三步：归档
+# ────────────────────────────────────────────────
 ARCHIVE_DIR="$PROJECT_DIR/output/archive"
 TODAY_DATE=$(date '+%Y-%m-%d')
 mkdir -p "$ARCHIVE_DIR"
 if [ -f "$PROJECT_DIR/output/index.html" ]; then
     cp "$PROJECT_DIR/output/index.html" "$ARCHIVE_DIR/${TODAY_DATE}.html"
     cp "$PROJECT_DIR/output/modal_data.js" "$ARCHIVE_DIR/${TODAY_DATE}_modal.js" 2>/dev/null || true
-    echo "  已归档日报: archive/${TODAY_DATE}.html" >> "$LOG_FILE"
+    echo "  已归档: archive/${TODAY_DATE}.html" >> "$LOG_FILE"
 fi
 
-# 从 stats.json 读取文章数量
+# 事件库滚动备份（保留最近 7 份），在渲染成功后才备份，保证备份是"可用的快照"
+BACKUP_DATE=$(date '+%Y%m%d')
+for DB in events.db dedup.db llm_cache.db; do
+    SRC="$PROJECT_DIR/$DB"
+    if [ -f "$SRC" ]; then
+        cp "$SRC" "$PROJECT_DIR/${DB}.bak.${BACKUP_DATE}" 2>>"$LOG_FILE" || true
+    fi
+done
+# 清理 7 天前的备份
+find "$PROJECT_DIR" -maxdepth 1 -name "*.db.bak.*" -mtime +7 -delete 2>/dev/null || true
+
+# 从 stats.json 读取文章数量与 LLM 覆盖率
 STATS_FILE="$PROJECT_DIR/output/stats.json"
 if [ -f "$STATS_FILE" ]; then
     ARTICLE_COUNT=$(python3 -c "import json; print(json.load(open('$STATS_FILE'))['article_count'])" 2>/dev/null || echo "?")
+    LLM_COVERAGE=$(python3 -c "import json; print(json.load(open('$STATS_FILE')).get('llm_coverage', ''))" 2>/dev/null || echo "")
+    LLM_COUNT=$(python3 -c "import json; print(json.load(open('$STATS_FILE')).get('llm_count', ''))" 2>/dev/null || echo "")
+    MULTI_SRC_COUNT=$(python3 -c "import json; print(json.load(open('$STATS_FILE')).get('multi_source_count', ''))" 2>/dev/null || echo "")
 else
     ARTICLE_COUNT="?"
+    LLM_COVERAGE=""
+    LLM_COUNT=""
+    MULTI_SRC_COUNT=""
 fi
 
-# 健康检查：文章数过低时告警
 HEALTH_WARNING=""
 if [ "$ARTICLE_COUNT" != "?" ] && [ "$ARTICLE_COUNT" -lt 3 ] 2>/dev/null; then
-    echo "  文章数异常偏低: $ARTICLE_COUNT" >> "$LOG_FILE"
-    HEALTH_WARNING="文章数异常偏低（仅 ${ARTICLE_COUNT} 条），部分 RSS 源可能不可用"
+    HEALTH_WARNING="文章数异常偏低（仅 ${ARTICLE_COUNT} 条）"
 fi
 
-# 第三步：部署到 GitHub Pages（使用临时目录避免冲突）
+# LLM 覆盖率告警（< 50% 时）
+LLM_COVERAGE_LINE=""
+LLM_COVERAGE_WARNING=""
+if [ -n "$LLM_COVERAGE" ]; then
+    COVERAGE_PCT=$(python3 -c "print(int(round(float('$LLM_COVERAGE') * 100)))" 2>/dev/null || echo "")
+    if [ -n "$COVERAGE_PCT" ]; then
+        LLM_COVERAGE_LINE="LLM 深度分析覆盖率: ${COVERAGE_PCT}% (${LLM_COUNT} / ${ARTICLE_COUNT})"
+        # < 50% 触发告警
+        if [ "$COVERAGE_PCT" -lt 50 ] 2>/dev/null; then
+            LLM_COVERAGE_WARNING="⚠️ LLM 覆盖率偏低（${COVERAGE_PCT}%），其余为规则兜底"
+        fi
+    fi
+fi
+
+# ────────────────────────────────────────────────
+# 第四步：部署到 GitHub Pages
+# ────────────────────────────────────────────────
 DEPLOY_OK=false
 echo "开始部署..." >> "$LOG_FILE"
 
 DEPLOY_TMP="/tmp/ai_briefing_deploy_$$"
-# 尝试从 output/.git 获取远程 URL，如果失败则用硬编码备选
 REPO_URL=$(cd "$PROJECT_DIR/output" && git remote get-url origin 2>/dev/null || echo "")
 if [ -z "$REPO_URL" ]; then
     REPO_URL="${DEPLOY_REPO_URL:-}"
 fi
-# 自动修复 output/.git 的损坏状态（rebase 卡住等）
+
+# 自动修复 output/.git 的损坏状态
 if [ -d "$PROJECT_DIR/output/.git/rebase-merge" ] || [ -f "$PROJECT_DIR/output/.git/index.lock" ]; then
-    echo "  ⚠️ 检测到 output/.git 状态异常，尝试修复..." >> "$LOG_FILE"
+    echo "  ⚠️ 修复 output/.git 状态..." >> "$LOG_FILE"
     rm -f "$PROJECT_DIR/output/.git/index.lock" 2>/dev/null || true
     rm -rf "$PROJECT_DIR/output/.git/rebase-merge" 2>/dev/null || true
     cd "$PROJECT_DIR/output" && git rebase --abort 2>/dev/null || true
@@ -185,14 +224,11 @@ if [ -d "$PROJECT_DIR/output/.git/rebase-merge" ] || [ -f "$PROJECT_DIR/output/.
 fi
 
 if [ -n "$REPO_URL" ] && [ -f "$PROJECT_DIR/output/index.html" ]; then
-    # 克隆最新远程到临时目录，避免本地状态冲突
     rm -rf "$DEPLOY_TMP"
     if git clone --depth 1 "$REPO_URL" "$DEPLOY_TMP" >> "$LOG_FILE" 2>&1; then
-        # 复制生成的文件
         cp "$PROJECT_DIR/output/index.html" "$DEPLOY_TMP/"
         cp "$PROJECT_DIR/output/modal_data.js" "$DEPLOY_TMP/" 2>/dev/null || true
         cp "$PROJECT_DIR/output/stats.json" "$DEPLOY_TMP/" 2>/dev/null || true
-        # 复制归档文件
         if [ -d "$PROJECT_DIR/output/archive" ]; then
             mkdir -p "$DEPLOY_TMP/archive"
             cp -r "$PROJECT_DIR/output/archive/"* "$DEPLOY_TMP/archive/" 2>/dev/null || true
@@ -210,7 +246,7 @@ if [ -n "$REPO_URL" ] && [ -f "$PROJECT_DIR/output/index.html" ]; then
                 echo "  push 失败" >> "$LOG_FILE"
             fi
         else
-            echo "  没有新的变更需要部署" >> "$LOG_FILE"
+            echo "  无新变更" >> "$LOG_FILE"
             DEPLOY_OK=true
         fi
         cd "$PROJECT_DIR"
@@ -219,10 +255,12 @@ if [ -n "$REPO_URL" ] && [ -f "$PROJECT_DIR/output/index.html" ]; then
         echo "  克隆远程仓库失败" >> "$LOG_FILE"
     fi
 else
-    echo "  output 目录没有 git 配置或 index.html 不存在，跳过部署" >> "$LOG_FILE"
+    echo "  跳过部署（无 git 配置或 index.html 不存在）" >> "$LOG_FILE"
 fi
 
-# 第四步：Telegram 通知
+# ────────────────────────────────────────────────
+# 第五步：Telegram 通知
+# ────────────────────────────────────────────────
 TODAY=$(date '+%Y年%m月%d日')
 BRIEFING_URL="${BRIEFING_URL:-}"
 ARCHIVE_URL="${BRIEFING_URL%/}/archive/${TODAY_DATE}.html"
@@ -230,7 +268,10 @@ if [ "$DEPLOY_OK" = true ]; then
     send_tg "<b>AI 早报 · ${TODAY}</b>
 
 今日共收录 ${ARTICLE_COUNT} 条 AI 资讯
-${NO_LLM:+LLM 服务不可用，本次跳过了深度分析
+${LLM_COVERAGE_LINE:+${LLM_COVERAGE_LINE}
+}${MULTI_SRC_COUNT:+多源交叉确认: ${MULTI_SRC_COUNT} 个事件
+}${NO_LLM:+LLM 服务不可用，本次跳过了深度分析
+}${LLM_COVERAGE_WARNING:+${LLM_COVERAGE_WARNING}
 }${HEALTH_WARNING:+${HEALTH_WARNING}
 }
 <a href=\"${BRIEFING_URL}\">点击阅读今日早报</a>
@@ -238,8 +279,47 @@ ${NO_LLM:+LLM 服务不可用，本次跳过了深度分析
 else
     send_tg "<b>AI 早报 · ${TODAY}</b>
 
-已抓取 ${ARTICLE_COUNT} 条资讯，但部署失败
+已渲染 ${ARTICLE_COUNT} 条资讯，但部署失败
 页面未更新，请检查 git 配置"
 fi
 
-echo "每日任务完成" >> "$LOG_FILE"
+# ────────────────────────────────────────────────
+# 结构化质量摘要（machine-readable，可被监控脚本 tail -n1 | jq 消费）
+# ────────────────────────────────────────────────
+SUMMARY_JSON=$(python3 -c "
+import json, os
+from datetime import datetime, timezone
+stats_path = '$STATS_FILE'
+health_path = '$PROJECT_DIR/source_health.json'
+stats = {}
+if os.path.exists(stats_path):
+    try:
+        stats = json.load(open(stats_path, 'r', encoding='utf-8'))
+    except Exception:
+        pass
+health = {}
+if os.path.exists(health_path):
+    try:
+        health = json.load(open(health_path, 'r', encoding='utf-8'))
+    except Exception:
+        pass
+ok = sum(1 for _, v in health.items() if v.get('status') == 'ok')
+failing = sum(1 for _, v in health.items() if v.get('consecutive_failures', 0) >= 3)
+dead = [n for n, v in health.items() if v.get('consecutive_failures', 0) >= 10][:5]
+summary = {
+    'run_id': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+    'kept': stats.get('article_count', 0),
+    'llm_coverage': stats.get('llm_coverage'),
+    'llm_count': stats.get('llm_count'),
+    'multi_source_count': stats.get('multi_source_count'),
+    'sources_healthy': ok,
+    'sources_failing': failing,
+    'dead_sources': dead,
+    'deploy_ok': '$DEPLOY_OK' == 'true',
+    'llm_available': '$NO_LLM' == '',
+}
+print('RUN_SUMMARY ' + json.dumps(summary, ensure_ascii=False))
+" 2>/dev/null || echo "RUN_SUMMARY {}")
+echo "$SUMMARY_JSON" >> "$LOG_FILE"
+
+echo "每日出报任务完成" >> "$LOG_FILE"

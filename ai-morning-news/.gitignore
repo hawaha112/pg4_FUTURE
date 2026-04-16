@@ -12,9 +12,15 @@ output/
 # Runtime data
 history.json
 dedup.db
+events.db
+events.db-shm
+events.db-wal
 source_health.json
+pipeline_checkpoint.json*
 daily_run.log
+collect.log
 *.log
+*.pid
 
 # Backup / old version files
 *.bak

@@ -10,11 +10,14 @@ Claude Max API Proxy - 极简版
 """
 
 import json
+import os
+import re
 import subprocess
 import sys
 import time
 import uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from urllib.parse import urlparse
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 3456
@@ -97,26 +100,38 @@ class ProxyHandler(BaseHTTPRequestHandler):
         # 把 messages 拼成 prompt
         prompt = self._build_prompt(messages)
 
-        # 构建 CLI 命令
-        cmd = ["claude", "-p", prompt, "--model", cli_model]
-        print(f"  📤 调用 claude -p --model {cli_model}（prompt {len(prompt)} 字符）")
+        # 提取 JSON Schema → 注入 prompt 末尾（不用 --json-schema，该参数会导致 CLI 挂起）
+        schema = self._extract_json_schema(body)
 
-        # 调用 Claude CLI
+        if schema:
+            prompt += (
+                "\n\n[CRITICAL] 直接输出合法 JSON，第一个字符必须是 {，最后一个字符必须是 }。"
+                "禁止输出 ```json 代码块、解释文字或任何非 JSON 内容。"
+                "所有字段必须认真填写，不允许留空字符串。"
+            )
+
+        # 构建命令行参数列表（不用 shell=True，避免管道/stdin 挂起）
+        cmd = ["claude", "-p", prompt, "--model", cli_model]
+
+        print(f"  📤 调用 claude -p --model {cli_model}（prompt {len(prompt)} 字符{', +schema-in-prompt' if schema else ''}）")
+
+        # 调用 Claude CLI（直接传 prompt 作为位置参数，stdin=DEVNULL 防止挂起）
         request_id = uuid.uuid4().hex[:24]
         t0 = time.time()
 
         try:
             result = subprocess.run(
                 cmd,
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
-                timeout=300,
+                timeout=600,
             )
         except FileNotFoundError:
             self._send_json(500, {"error": {"message": "Claude CLI not found", "type": "server_error"}})
             return
         except subprocess.TimeoutExpired:
-            self._send_json(504, {"error": {"message": "Claude CLI timed out (300s)", "type": "timeout_error"}})
+            self._send_json(504, {"error": {"message": f"Claude CLI timed out ({600}s)", "type": "timeout_error"}})
             return
 
         elapsed = time.time() - t0
@@ -139,6 +154,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
         if not text:
             self._send_json(500, {"error": {"message": "Claude CLI returned empty response", "type": "server_error"}})
             return
+
+        # 如果请求了 JSON schema，尝试清理响应中的 markdown 围栏
+        if schema:
+            text = self._extract_json_text(text)
 
         print(f"  ✅ 响应 {len(text)} 字符，耗时 {elapsed:.1f}s")
 
@@ -183,6 +202,19 @@ class ProxyHandler(BaseHTTPRequestHandler):
             return rf["schema"]
 
         return None
+
+    @staticmethod
+    def _extract_json_text(text: str) -> str:
+        """从 LLM 响应中提取纯 JSON，去除 markdown 围栏等包装。"""
+        # 去除 ```json ... ``` 围栏
+        m = re.search(r"```(?:json)?\s*\n?(.*?)```", text, re.DOTALL)
+        if m:
+            return m.group(1).strip()
+        # 尝试找到第一个 { 或 [ 开头的 JSON
+        for i, ch in enumerate(text):
+            if ch in ('{', '['):
+                return text[i:].strip()
+        return text
 
     @staticmethod
     def _build_prompt(messages: list) -> str:
@@ -230,7 +262,10 @@ def main():
     print("按 Ctrl+C 停止。")
     print()
 
-    server = HTTPServer(("127.0.0.1", PORT), ProxyHandler)
+    class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+        daemon_threads = True
+
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), ProxyHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

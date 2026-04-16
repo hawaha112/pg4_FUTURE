@@ -29,6 +29,7 @@ from llm_analyzer import LLMAnalyzer, LLMCache, create_analyzer_from_config
 from dedup_engine import DedupEngine
 from source_ranker import SourceRanker
 from causal_engine import CausalKB
+from config_validator import validate_and_warn
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -136,6 +137,9 @@ def main():
     # 读取配置
     with open(config_path, 'r', encoding='utf-8') as f:
         config = json.load(f)
+
+    # 验证配置
+    validate_and_warn(config)
 
     sources = config['sources']
     settings = config['settings']

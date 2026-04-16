@@ -35,6 +35,7 @@ import concurrent.futures
 import time
 import sys
 import re
+import os
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 
@@ -43,10 +44,66 @@ log = get_logger('llm_analyzer')
 
 
 # ---------------------------------------------------------------------------
+# 截断工具
+# ---------------------------------------------------------------------------
+
+# 句末标点集合（优先级：段落 > 中文句末 > 英文句末 > 半角逗号）
+_SENTENCE_ENDS = ['\n\n', '\n', '。', '！', '？', '. ', '! ', '? ', '；', '; ']
+
+
+def _smart_truncate(text: str, limit: int, note: str = "") -> str:
+    """按句末截断（而非硬截），若确实被截则追加提示。
+
+    Args:
+        text: 待截断文本
+        limit: 最大允许字符数
+        note: 被截断时追加到末尾的提示（如 "[内容过长已截断，见原链接]"），空串则不追加
+
+    Returns:
+        长度 <= limit (+ note 长度) 的字符串。若原文不超限则原样返回。
+    """
+    if not text or len(text) <= limit:
+        return text or ""
+    # 为 note 预留空间（确保追加后总长仍不超过 limit 太多）
+    search_limit = max(limit - len(note), max(1, limit // 2))
+    head = text[:limit]
+    # 从 search_limit 位置向前找最近的句末
+    best = -1
+    for end in _SENTENCE_ENDS:
+        pos = head.rfind(end, search_limit)
+        if pos > best:
+            best = pos + len(end)
+    if best <= 0:
+        # 找不到合适句末，退化为硬截断
+        truncated = head.rstrip()
+    else:
+        truncated = head[:best].rstrip()
+    if note:
+        truncated = truncated + ("\n\n" if "\n" in text else "") + note
+    return truncated
+
+
+# ---------------------------------------------------------------------------
 # Prompt 模板
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """你是 AI 行业分析师。将新闻转化为结构化 JSON 摘要。
+def _load_prompt(name: str) -> str:
+    """加载 prompts/{name}.txt 文件，失败时返回空字符串（由常量的默认值兜底）。
+
+    相对于脚本所在目录查找 prompts/ 目录。
+    支持模式字符串如 {title}, {summary}, {count}, {summaries} 等。
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    prompt_path = os.path.join(script_dir, 'prompts', f'{name}.txt')
+    try:
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except (FileNotFoundError, IOError):
+        return ""
+
+# 尝试从外部文件加载，如果失败则使用内联默认值
+_loaded_system = _load_prompt('system')
+SYSTEM_PROMPT = _loaded_system if _loaded_system else """你是 AI 行业分析师。将新闻转化为结构化 JSON 摘要。
 
 规则：直接输出 JSON，第一个字符必须是{，最后必须是}。不要输出代码块、解释或其他文字。所有内容用中文。
 
@@ -70,23 +127,32 @@ SYSTEM_PROMPT = """你是 AI 行业分析师。将新闻转化为结构化 JSON 
   · 不要重复 summary 和 key_details 的原文
 - background：独立的行业背景字段，150字以内，讲此事件之前的行业脉络、历史沿革、相关玩家（与 detailed_content 分工明确：detailed_content 讲事件本身发生了什么，background 讲事件之外的时代背景）
 - deep_analysis：你的独立判断——这件事的深层意义、潜在风险、对行业格局的影响，150字以内
-- importance：1-5分（5=行业格局级，4=显著进展，3=值得关注，2=一般，1=低价值）
+- importance：1-5分（5=行业格局级，4=显著进展，3=值得关注，2=一般，1=仅限琐碎内容）。大多数AI新闻应在2-4分。
 - categories：1-2个标签，选自：大模型发布|开源生态|AI政策监管|芯片与算力|产品与应用|安全与对齐|融资与商业|学术研究|AI工具|具身智能|自动驾驶|AI编程|行业观点
 - source_type：paper|news|official|opinion|community|video
 
-重要：只要 ai_relevant=true，所有字段都必须认真填写，不允许留空字符串。即使文章较短，也要基于已有信息给出 background 和 deep_analysis。"""
+⚠️ 输出校验规则（违反任何一条 = 格式错误，需重新生成）：
+1. ai_relevant=true 时，以下字段必须有实质内容，绝不允许为空字符串""：
+   - chinese_title（15-25字）、summary（20-50字）、why_it_matters（20-50字）
+   - detailed_content（至少300字，这是最重要的字段）
+   - background（50-150字）、deep_analysis（50-150字）、key_details（至少2条）
+2. 即使原文信息较少、importance=1或2，也必须基于已有信息合理撰写所有字段。
+3. 输出前自检：逐个检查上述字段是否为空，若为空则补充后再输出。"""
 
-DIGEST_SYSTEM_PROMPT = """你是 AI 行业主编。从今天的新闻摘要中提炼编辑导语。
+_loaded_digest_system = _load_prompt('digest_system')
+DIGEST_SYSTEM_PROMPT = _loaded_digest_system if _loaded_digest_system else """你是 AI 行业主编。从今天的新闻摘要中提炼编辑导语。
 
 直接返回 JSON，不要代码块：{"editorial":"150字以内的编辑导语"}
 
 要求：点出今天主旋律，串联不同新闻的关联，语言简洁有力。"""
 
-DIGEST_USER_TEMPLATE = """以下是今天的 {count} 条 AI 新闻摘要，请提炼今日速览：
+_loaded_digest_user = _load_prompt('digest_user')
+DIGEST_USER_TEMPLATE = _loaded_digest_user if _loaded_digest_user else """以下是今天的 {count} 条 AI 新闻摘要，请提炼今日速览：
 
 {summaries}"""
 
-USER_PROMPT_TEMPLATE = """分析以下文章：
+_loaded_user = _load_prompt('user')
+USER_PROMPT_TEMPLATE = _loaded_user if _loaded_user else """分析以下文章：
 
 【标题】{title}
 
@@ -174,7 +240,14 @@ class LLMCache:
     def _hash(url: str) -> str:
         normalized = url.strip().rstrip('/').lower()
         normalized = re.sub(r'^https?://(www\.)?', '', normalized)
-        normalized = re.sub(r'[?#].*$', '', normalized)
+        # 仅去除 fragment (#) 和无关的追踪参数，保留关键查询参数
+        # 例如 YouTube 的 ?v=XXX 必须保留
+        normalized = re.sub(r'#.*$', '', normalized)
+        # 去除常见追踪参数但保留其他参数
+        normalized = re.sub(r'[?&](utm_\w+|ref|fbclid|gclid|source|mc_\w+)=[^&]*', '', normalized)
+        # 清理首个参数被删后遗留的 & 变 ?
+        normalized = re.sub(r'\?&', '?', normalized)
+        normalized = re.sub(r'\?$', '', normalized)
         return hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:32]
 
     def get(self, url: str) -> Optional[dict]:
@@ -212,6 +285,14 @@ class LLMCache:
             "INSERT OR REPLACE INTO llm_cache (url_hash, result_json, created_at) VALUES (?, ?, ?)",
             (h, json.dumps(result, ensure_ascii=False), datetime.now(timezone.utc).isoformat())
         )
+        self.db.commit()
+
+    def delete(self, url: str):
+        """删除指定 URL 的缓存条目。"""
+        if not url:
+            return
+        h = self._hash(url)
+        self.db.execute("DELETE FROM llm_cache WHERE url_hash = ?", (h,))
         self.db.commit()
 
     def cleanup(self):
@@ -294,13 +375,18 @@ class LLMAnalyzer:
                     headers[self.auth_header] = value
         return headers
 
-    def _call_api(self, messages: List[Dict[str, str]]) -> str:
-        """调用 LLM API，自动适配 OpenAI / Anthropic 格式，带重试。"""
+    def _call_api(self, messages: List[Dict[str, str]], json_schema: dict = None) -> str:
+        """调用 LLM API，自动适配 OpenAI / Anthropic 格式，带重试。
+
+        Args:
+            messages: OpenAI 格式的 messages 列表
+            json_schema: 可选 JSON Schema，透传给支持 response_format 的 API
+        """
 
         if self.provider == "anthropic":
             url, payload = self._build_anthropic_request(messages)
         else:
-            url, payload = self._build_openai_request(messages)
+            url, payload = self._build_openai_request(messages, json_schema=json_schema)
 
         headers = self._build_headers()
 
@@ -342,15 +428,24 @@ class LLMAnalyzer:
 
         raise RuntimeError(f"重试 {self.max_retries} 次后仍失败: {last_error}")
 
-    def _build_openai_request(self, messages: List[Dict[str, str]]) -> tuple:
+    def _build_openai_request(self, messages: List[Dict[str, str]], json_schema: dict = None) -> tuple:
         """构建 OpenAI 兼容 API 请求。"""
         url = f"{self.base_url}/chat/completions"
-        payload = json.dumps({
+        body = {
             "model": self.model,
             "messages": messages,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
-        }).encode("utf-8")
+        }
+        if json_schema:
+            body["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "result",
+                    "schema": json_schema,
+                },
+            }
+        payload = json.dumps(body).encode("utf-8")
         return url, payload
 
     def _build_anthropic_request(self, messages: List[Dict[str, str]]) -> tuple:
@@ -482,19 +577,27 @@ class LLMAnalyzer:
         if not data.get("ai_relevant", True):
             return {"ai_relevant": False}
 
+        # 长字段用句末截断，避免"话没说完一刀切"
+        _dc = str(data.get("detailed_content", ""))
+        _bg = str(data.get("background", ""))
+        _da = str(data.get("deep_analysis", ""))
+
         result = {
             "ai_relevant": True,
             "chinese_title": str(data.get("chinese_title") or "").strip()[:40],
             "summary": str(data.get("summary") or "")[:150],
             "why_it_matters": str(data.get("why_it_matters", ""))[:200],
             "key_details": [],
-            "detailed_content": str(data.get("detailed_content", ""))[:3000],
-            "background": str(data.get("background", ""))[:600],
-            "deep_analysis": str(data.get("deep_analysis", ""))[:600],
+            "detailed_content": _smart_truncate(
+                _dc, 3000, note="\n\n> *（内容过长已截断，完整版请见原文链接）*"
+            ),
+            "background": _smart_truncate(_bg, 600, note="…"),
+            "deep_analysis": _smart_truncate(_da, 600, note="…"),
             "importance": 1,
             "categories": [],
             "source_type": str(data.get("source_type", "news")),
             "reading_minutes": 1,
+            "audience": [],
         }
 
         # importance
@@ -556,6 +659,39 @@ class LLMAnalyzer:
         valid_confs = {"high", "medium", "low"}
         result["impact_confidence"] = raw_conf if raw_conf in valid_confs else "low"
 
+        # audience — 目标读者枚举（可多选，默认 general）
+        valid_audiences = {"researcher", "developer", "pm", "investor", "general"}
+        raw_aud = data.get("audience", [])
+        if isinstance(raw_aud, str):
+            raw_aud = [raw_aud]
+        if isinstance(raw_aud, list):
+            result["audience"] = [
+                a for a in (str(x).strip().lower() for x in raw_aud)
+                if a in valid_audiences
+            ][:3]
+        if not result["audience"]:
+            result["audience"] = ["general"]
+
+        # 中文率校验：chinese_title / summary / why_it_matters 中文占比应 >= 60%
+        # 占比过低说明 LLM 偷懒直接返回了英文/原文片段
+        def _chinese_ratio(s: str) -> float:
+            if not s:
+                return 1.0
+            chinese = sum(1 for c in s if '\u4e00' <= c <= '\u9fff')
+            alpha_nonspace = sum(1 for c in s if not c.isspace() and not c.isdigit())
+            if alpha_nonspace == 0:
+                return 1.0
+            return chinese / alpha_nonspace
+
+        # 记录低中文率字段（供调用方按需重试；这里不改字段值）
+        low_zh = []
+        for key in ("chinese_title", "summary", "why_it_matters"):
+            val = result.get(key, "")
+            if val and _chinese_ratio(val) < 0.6:
+                low_zh.append(key)
+        if low_zh:
+            result["_low_chinese_ratio"] = low_zh
+
         return result
 
     # ------------------------------------------------------------------
@@ -595,6 +731,7 @@ class LLMAnalyzer:
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_msg},
                 ],
+                json_schema=ARTICLE_SCHEMA,
             )
             data = self._extract_json(response)
             need_retry = False
@@ -612,6 +749,7 @@ class LLMAnalyzer:
                 retry_prompt = f'分析以下新闻并返回JSON。标题：{title}\n摘要：{summary_hint}\n\n直接返回JSON，第一个字符必须是{{。与AI相关返回{{"ai_relevant":true,"chinese_title":"中文标题15-25字","summary":"一句话概要50字","why_it_matters":"意义50字","key_details":["要点1","要点2","要点3"],"detailed_content":"按提纲展开详述400-800字","background":"背景80字","deep_analysis":"深度分析80字","importance":3,"categories":["分类"],"source_type":"news"}}，无关返回{{"ai_relevant":false}}'
                 response2 = self._call_api(
                     [{"role": "user", "content": retry_prompt}],
+                    json_schema=ARTICLE_SCHEMA,
                 )
                 data2 = self._extract_json(response2)
                 if data2 and (data2.get("summary") or not data2.get("ai_relevant", True)):
@@ -638,11 +776,130 @@ class LLMAnalyzer:
                 )
                 return {"ai_relevant": False}
 
-            return self._validate_result(data)
+            validated = self._validate_result(data)
+
+            # 兜底：如果 ai_relevant 但关键字段缺失，追加一次专注调用补充
+            if validated.get("ai_relevant"):
+                has_gaps = (
+                    not validated.get("detailed_content", "").strip()
+                    or not validated.get("chinese_title", "").strip()
+                )
+                if has_gaps:
+                    validated = self._supplement_missing_fields(
+                        validated, title, summary, full_text, source_name
+                    )
+
+            return validated
 
         except RuntimeError as e:
             log.error("❌ LLM 分析失败 [%s]: %s", title[:30], e)
             return self._fallback(title)
+
+    def _supplement_missing_fields(
+        self, base: dict, title: str, summary: str, full_text: str, source_name: str,
+    ) -> dict:
+        """当 LLM 第一次调用未填满关键字段时，追加一次专注调用补充缺失内容。
+
+        这是兜底机制，正常情况下第一次调用应该填满所有字段。
+        仅在 detailed_content 或 chinese_title 为空时触发。
+        """
+        missing = []
+        if not base.get("detailed_content", "").strip():
+            missing.append("detailed_content")
+        if not base.get("chinese_title", "").strip():
+            missing.append("chinese_title")
+        if not base.get("background", "").strip():
+            missing.append("background")
+        if not base.get("deep_analysis", "").strip():
+            missing.append("deep_analysis")
+        if not base.get("why_it_matters", "").strip():
+            missing.append("why_it_matters")
+
+        if not missing:
+            return base
+
+        log.info("📝 补充缺失字段 (%s): %s",
+                 ",".join(missing), (base.get("chinese_title") or title)[:30])
+
+        article_brief = (full_text or summary or title)[:2000]
+
+        # 构建只请求缺失字段的 prompt
+        field_specs = {
+            "chinese_title": '"chinese_title":"简洁有力的中文标题15-25字"',
+            "detailed_content": '"detailed_content":"600-1000字深度解读，用Markdown格式，### 小标题分段"',
+            "background": '"background":"150字以内行业背景脉络"',
+            "deep_analysis": '"deep_analysis":"150字以内深层分析与影响判断"',
+            "why_it_matters": '"why_it_matters":"这意味着什么，50字以内"',
+        }
+        fields_json = ",".join(field_specs[f] for f in missing if f in field_specs)
+
+        supplement_prompt = (
+            f"你是资深 AI 行业分析师。以下是一篇 AI 相关新闻，请为读者补充深度分析。\n\n"
+            f"标题：{title}\n"
+            f"来源：{source_name}\n"
+            f"摘要：{base.get('summary', '') or summary}\n"
+            f"原文片段：{article_brief}\n\n"
+            f"请直接返回 JSON（第一个字符必须是 {{），只包含以下字段：\n"
+            f"{{{fields_json}}}\n\n"
+            f"关键要求：\n"
+            f"- detailed_content 必须是 400-800 字的深度解读，用 Markdown 格式，包含 ### 小标题、分段论述、要点分析\n"
+            f"- 即使原文信息有限，也请结合你的行业知识进行延展分析和背景补充\n"
+            f"- background 应提供行业上下文和相关事件脉络\n"
+            f"- deep_analysis 应给出影响判断和趋势洞察\n"
+            f"- 所有字段必须有实质内容，不允许空字符串"
+        )
+
+        try:
+            response = self._call_api(
+                [{"role": "user", "content": supplement_prompt}],
+            )
+            data = self._extract_json(response)
+
+            # 如果第一次解析失败，尝试用更宽松的方式提取
+            if not data and response and len(response) > 50:
+                log.warning("  ⚠️ JSON 解析失败，尝试宽松提取 (响应长度=%d)", len(response))
+                # 某些 LLM 返回的 JSON 外层有注释或解释文字
+                # 尝试提取所有字段的内容（按字段名搜索）
+                data = {}
+                for field in missing:
+                    # 搜索 "field_name": "value" 或 "field_name":"value"
+                    pattern = rf'"{field}"\s*:\s*"((?:[^"\\]|\\.){{10,}})"'
+                    match = re.search(pattern, response, re.DOTALL)
+                    if match:
+                        val = match.group(1)
+                        # 反转义
+                        val = val.replace('\\"', '"').replace('\\n', '\n').replace('\\\\', '\\')
+                        data[field] = val
+
+            if data:
+                field_map = {
+                    "chinese_title": (40, "chinese_title"),
+                    "detailed_content": (3000, "detailed_content"),
+                    "background": (600, "background"),
+                    "deep_analysis": (600, "deep_analysis"),
+                    "why_it_matters": (200, "why_it_matters"),
+                }
+                filled = []
+                for field in missing:
+                    if field in field_map:
+                        max_len, key = field_map[field]
+                        val = str(data.get(key, "")).strip()
+                        if val:
+                            base[key] = val[:max_len]
+                            filled.append(f"{key}={len(val)}")
+                if filled:
+                    log.info("  ✅ 补充成功: %s", " ".join(filled))
+                else:
+                    log.warning("  ⚠️ 补充调用返回但未填充任何字段 (data keys=%s, response[:100]=%s)",
+                                list(data.keys()), response[:100])
+            else:
+                log.warning("  ⚠️ 补充调用JSON完全解析失败 (响应长度=%d, 前100字=%s)",
+                            len(response) if response else 0,
+                            (response or "")[:100])
+        except Exception as e:
+            log.warning("  ⚠️ 补充字段失败: %s", e)
+
+        return base
 
     @staticmethod
     def _fallback(title: str) -> dict:
@@ -701,6 +958,7 @@ class LLMAnalyzer:
                     {"role": "system", "content": DIGEST_SYSTEM_PROMPT},
                     {"role": "user", "content": user_msg},
                 ],
+                json_schema=DIGEST_SCHEMA,
             )
             data = self._extract_json(response)
             if not data:
@@ -761,8 +1019,9 @@ class LLMAnalyzer:
             if idx < total:
                 results[idx] = articles[idx].get('analysis', self._fallback(articles[idx].get("title", "")))
 
-        # 从缓存中恢复已有结果
+        # 从缓存中恢复已有结果（需验证缓存质量）
         cache_restored = 0
+        cache_invalidated = 0
         if cache:
             for i in range(total):
                 if i in skip_indices:
@@ -770,11 +1029,23 @@ class LLMAnalyzer:
                 url = articles[i].get('link', '')
                 cached = cache.get(url)
                 if cached:
-                    results[i] = cached
-                    skip_indices = skip_indices | {i}
-                    cache_restored += 1
+                    # 缓存质量验证：ai_relevant 的文章必须有 detailed_content
+                    is_relevant = cached.get('ai_relevant', False)
+                    has_substance = (
+                        cached.get('detailed_content', '').strip()
+                        or not is_relevant
+                    )
+                    if has_substance:
+                        results[i] = cached
+                        skip_indices = skip_indices | {i}
+                        cache_restored += 1
+                    else:
+                        cache.delete(url)
+                        cache_invalidated += 1
             if cache_restored:
                 log.info("💾 LLM 缓存命中 %d 篇（跳过重复分析）", cache_restored)
+            if cache_invalidated:
+                log.info("♻️ 缓存质量不合格 %d 篇（将重新分析）", cache_invalidated)
 
         todo_indices = [i for i in range(total) if i not in skip_indices]
         skipped = total - len(todo_indices)

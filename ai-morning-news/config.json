@@ -6,8 +6,8 @@
     "api_key": "not-needed",
     "model": "claude-sonnet-4",
     "max_retries": 3,
-    "timeout": 120,
-    "max_workers": 2,
+    "timeout": 600,
+    "max_workers": 1,
     "temperature": 0.3,
     "max_tokens": 8000,
     "_注释_当前方案": "通过 claude-max-api-proxy 使用 Max 订阅的 Sonnet 额度，无需 API Key",
@@ -16,45 +16,11 @@
     "_注释_方案C_OpenAI": "改 provider 为 openai, base_url 为 https://api.openai.com/v1, model 为 gpt-4o-mini, 填入 OpenAI api_key"
   },
   "sources": {
+    "_注释_tier分层": "tier 0 = 官方一手源（必须优先，跳过 LLM 相关性过滤）; tier 1 = 研究/开发者一手源（次优先）; tier 2 = 媒体/社区解读源（用于补充和交叉验证）",
     "english": [
       {
-        "name": "Hacker News AI",
-        "category": "community",
-        "url": "https://news.ycombinator.com/rss",
-        "icon": "🔥",
-        "color": "#FF6600",
-        "description": "Hacker News 热门讨论",
-        "ai_only": true
-      },
-      {
-        "name": "Ars Technica AI",
-        "category": "media",
-        "url": "https://feeds.arstechnica.com/arstechnica/features",
-        "icon": "📰",
-        "color": "#E74C3C",
-        "description": "Ars Technica 深度技术报道",
-        "ai_only": false
-      },
-      {
-        "name": "MIT Tech Review",
-        "category": "research",
-        "url": "https://www.technologyreview.com/feed/",
-        "icon": "🎓",
-        "color": "#2ECC71",
-        "description": "MIT技术评论，深度技术分析",
-        "ai_only": false
-      },
-      {
-        "name": "The Verge AI",
-        "category": "media",
-        "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
-        "icon": "⚡",
-        "color": "#FA6400",
-        "description": "The Verge AI频道",
-        "ai_only": true
-      },
-      {
         "name": "OpenAI Blog",
+        "tier": 0,
         "category": "official",
         "url": "https://openai.com/blog/rss.xml",
         "icon": "🤖",
@@ -64,6 +30,7 @@
       },
       {
         "name": "Anthropic News",
+        "tier": 0,
         "category": "official",
         "url": "https://raw.githubusercontent.com/taobojlen/anthropic-rss-feed/main/anthropic_news_rss.xml",
         "icon": "🧠",
@@ -73,6 +40,7 @@
       },
       {
         "name": "Google AI Blog",
+        "tier": 0,
         "category": "official",
         "url": "https://blog.google/technology/ai/rss/",
         "icon": "🔷",
@@ -82,6 +50,7 @@
       },
       {
         "name": "DeepMind Blog",
+        "tier": 0,
         "category": "official",
         "url": "https://deepmind.google/blog/rss.xml",
         "icon": "🔬",
@@ -90,25 +59,30 @@
         "ai_only": true
       },
       {
-        "name": "Hugging Face Blog",
-        "category": "community",
-        "url": "https://huggingface.co/blog/feed.xml",
-        "icon": "🤗",
-        "color": "#FFD21E",
-        "description": "Hugging Face官方博客",
+        "name": "Microsoft AI Blog",
+        "tier": 0,
+        "category": "official",
+        "url": "https://blogs.microsoft.com/ai/feed/",
+        "icon": "🪟",
+        "color": "#00A4EF",
+        "description": "Microsoft AI 官方博客",
         "ai_only": true
       },
       {
-        "name": "TechCrunch AI",
-        "category": "media",
-        "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
-        "icon": "💡",
-        "color": "#00A562",
-        "description": "TechCrunch AI报道",
+        "name": "Meta AI Blog",
+        "tier": 0,
+        "category": "official",
+        "url": "https://ai.meta.com/blog/rss/",
+        "enabled": false,
+        "_note_2026_04_10": "已禁用：/blog/rss/ 返回 404；Meta 目前没有公开 RSS，找到替代源后可重启",
+        "icon": "🔵",
+        "color": "#1877F2",
+        "description": "Meta AI 官方博客",
         "ai_only": true
       },
       {
         "name": "ArXiv AI",
+        "tier": 1,
         "category": "research",
         "url": "https://rss.arxiv.org/rss/cs.AI",
         "icon": "📄",
@@ -118,6 +92,7 @@
       },
       {
         "name": "ArXiv ML",
+        "tier": 1,
         "category": "research",
         "url": "https://rss.arxiv.org/rss/cs.LG",
         "icon": "📄",
@@ -126,7 +101,118 @@
         "ai_only": true
       },
       {
+        "name": "MIT Tech Review",
+        "tier": 1,
+        "category": "research",
+        "url": "https://www.technologyreview.com/feed/",
+        "icon": "🎓",
+        "color": "#2ECC71",
+        "description": "MIT技术评论，深度技术分析",
+        "ai_only": false
+      },
+      {
+        "name": "Hugging Face Blog",
+        "tier": 1,
+        "category": "community",
+        "url": "https://huggingface.co/blog/feed.xml",
+        "icon": "🤗",
+        "color": "#FFD21E",
+        "description": "Hugging Face官方博客",
+        "ai_only": true
+      },
+      {
+        "name": "X-Andrej Karpathy",
+        "tier": 1,
+        "category": "researcher",
+        "url": "twitter://karpathy",
+        "icon": "🐦",
+        "color": "#1DA1F2",
+        "description": "Andrej Karpathy 推文",
+        "ai_only": true
+      },
+      {
+        "name": "X-Jim Fan",
+        "tier": 1,
+        "category": "researcher",
+        "url": "twitter://DrJimFan",
+        "icon": "🐦",
+        "color": "#1DA1F2",
+        "description": "Jim Fan 推文",
+        "ai_only": true
+      },
+      {
+        "name": "Yannic Kilcher",
+        "tier": 1,
+        "category": "video",
+        "url": "youtube://UCZHmQk67mSJgfCCTn7xBfew",
+        "icon": "🎬",
+        "color": "#FF0000",
+        "description": "AI论文深度解读",
+        "ai_only": true
+      },
+      {
+        "name": "TechCrunch AI",
+        "tier": 2,
+        "category": "media",
+        "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
+        "icon": "💡",
+        "color": "#00A562",
+        "description": "TechCrunch AI报道",
+        "ai_only": true
+      },
+      {
+        "name": "The Verge AI",
+        "tier": 2,
+        "category": "media",
+        "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+        "icon": "⚡",
+        "color": "#FA6400",
+        "description": "The Verge AI频道",
+        "ai_only": true
+      },
+      {
+        "name": "Ars Technica AI",
+        "tier": 2,
+        "category": "media",
+        "url": "https://feeds.arstechnica.com/arstechnica/features",
+        "icon": "📰",
+        "color": "#E74C3C",
+        "description": "Ars Technica 深度技术报道",
+        "ai_only": false
+      },
+      {
+        "name": "VentureBeat AI",
+        "tier": 2,
+        "category": "media",
+        "url": "https://venturebeat.com/category/ai/feed",
+        "icon": "📊",
+        "color": "#E74C3C",
+        "description": "VentureBeat AI报道",
+        "ai_only": true
+      },
+      {
+        "name": "Wired AI",
+        "tier": 2,
+        "category": "media",
+        "url": "https://www.wired.com/feed/tag/ai/latest/rss",
+        "icon": "📡",
+        "color": "#000000",
+        "description": "Wired AI报道",
+        "ai_only": true
+      },
+      {
+        "name": "Hacker News AI",
+        "tier": 2,
+        "category": "community",
+        "url": "https://news.ycombinator.com/rss",
+        "icon": "🔥",
+        "color": "#FF6600",
+        "description": "Hacker News 热门讨论",
+        "ai_only": true
+      },
+      {
         "name": "AI Explained",
+        "tier": 2,
         "category": "video",
         "url": "youtube://UCNJ1Ymd5yFuUPtn21xtRbbw",
         "icon": "🎬",
@@ -136,6 +222,7 @@
       },
       {
         "name": "Two Minute Papers",
+        "tier": 2,
         "category": "video",
         "url": "youtube://UCbfYPyITQ-7l4upoX8nvctg",
         "icon": "🎬",
@@ -145,6 +232,7 @@
       },
       {
         "name": "Matthew Berman",
+        "tier": 2,
         "category": "video",
         "url": "youtube://UCawZsQWqfGSbCI5yjkdVkTA",
         "icon": "🎬",
@@ -153,176 +241,20 @@
         "ai_only": true
       },
       {
-        "name": "Yannic Kilcher",
-        "category": "video",
-        "url": "youtube://UCZHmQk67mSJgfCCTn7xBfew",
-        "icon": "🎬",
-        "color": "#FF0000",
-        "description": "AI论文深度解读",
-        "ai_only": true
-      },
-      {
-        "name": "VentureBeat AI",
-        "url": "https://venturebeat.com/category/ai/feed",
-        "_note_2026_04_10": "去掉尾部斜杠修复 308 永久重定向",
-        "icon": "📊",
-        "color": "#E74C3C",
-        "category": "AI Industry",
-        "ai_only": true,
-        "type": "rss"
-      },
-      {
-        "name": "Meta AI Blog",
-        "url": "https://ai.meta.com/blog/rss/",
-        "enabled": false,
-        "_note_2026_04_10": "已禁用：/blog/rss/ 返回 404；Meta 目前没有公开 RSS，找到替代源后可重启",
-        "icon": "🔵",
-        "color": "#1877F2",
-        "category": "AI Research",
-        "ai_only": true,
-        "type": "rss"
-      },
-      {
-        "name": "Microsoft AI Blog",
-        "url": "https://blogs.microsoft.com/ai/feed/",
-        "icon": "🪟",
-        "color": "#00A4EF",
-        "category": "AI Industry",
-        "ai_only": true,
-        "type": "rss"
-      },
-      {
-        "name": "X-Andrej Karpathy",
-        "url": "twitter://karpathy",
-        "icon": "🐦",
-        "color": "#1DA1F2",
-        "category": "AI Researcher",
-        "ai_only": true,
-        "type": "rss"
-      },
-      {
-        "name": "X-Jim Fan",
-        "url": "twitter://DrJimFan",
-        "icon": "🐦",
-        "color": "#1DA1F2",
-        "category": "AI Researcher",
-        "ai_only": true,
-        "type": "rss"
-      },
-      {
         "name": "X-Elon Musk (xAI)",
+        "tier": 2,
+        "category": "community",
         "url": "twitter://elonmusk",
         "icon": "🐦",
         "color": "#1DA1F2",
-        "category": "AI Industry",
-        "ai_only": false,
-        "type": "rss"
-      },
-      {
-        "name": "Wired AI",
-        "url": "https://www.wired.com/feed/tag/ai/latest/rss",
-        "icon": "📡",
-        "color": "#000000",
-        "category": "AI Industry",
-        "ai_only": true,
-        "type": "rss"
+        "description": "Elon Musk 推文（xAI 相关）",
+        "ai_only": false
       }
     ],
     "chinese": [
       {
-        "name": "36氪",
-        "category": "industry",
-        "url": "https://rsshub.rssforever.com/36kr/newsflashes",
-        "icon": "💼",
-        "color": "#0066FF",
-        "description": "科技产业与创投",
-        "ai_only": false
-      },
-      {
-        "name": "少数派",
-        "category": "tech",
-        "url": "https://rsshub.rssforever.com/sspai/index",
-        "icon": "📱",
-        "color": "#DA282A",
-        "description": "AI工具与效率提升",
-        "ai_only": false
-      },
-      {
-        "name": "虎嗅科技",
-        "category": "media",
-        "url": "https://rsshub.rssforever.com/huxiu/article",
-        "icon": "🐯",
-        "color": "#FF6600",
-        "description": "虎嗅网科技商业深度报道",
-        "ai_only": false
-      },
-      {
-        "name": "掘金 AI",
-        "category": "community",
-        "url": "https://rsshub.rssforever.com/juejin/trending/ai/weekly",
-        "icon": "💎",
-        "color": "#1E80FF",
-        "description": "掘金 AI 板块热门文章",
-        "ai_only": true
-      },
-      {
-        "name": "机器之心",
-        "category": "media",
-        "url": "https://www.jiqizhixin.com/rss",
-        "enabled": false,
-        "_note_2026_04_10": "已禁用：/rss 返回 HTML 而非 RSS（mismatched tag），官网取消了 RSS",
-        "icon": "🤖",
-        "color": "#09B83E",
-        "description": "AI 领域头部中文媒体（官网 RSS）",
-        "ai_only": true
-      },
-      {
-        "name": "AI前线",
-        "category": "media",
-        "url": "https://www.infoq.cn/feed",
-        "icon": "🚀",
-        "color": "#007BFF",
-        "description": "InfoQ AI 前线深度报道",
-        "ai_only": false
-      },
-      {
-        "name": "量子位",
-        "category": "media",
-        "url": "https://www.qbitai.com/feed",
-        "icon": "⚛️",
-        "color": "#6C5CE7",
-        "description": "AI 科技深度报道",
-        "ai_only": true
-      },
-      {
-        "name": "36氪 AI搜索",
-        "category": "media",
-        "url": "https://rsshub.rssforever.com/36kr/search/articles/AI",
-        "icon": "🔎",
-        "color": "#0066FF",
-        "description": "36氪 AI 相关文章搜索",
-        "ai_only": true
-      },
-      {
-        "name": "知乎热榜",
-        "category": "community",
-        "url": "zhihu://hot",
-        "icon": "💭",
-        "color": "#0066FF",
-        "description": "知乎热门 AI 话题",
-        "ai_only": false
-      },
-      {
-        "name": "知乎日报",
-        "category": "media",
-        "url": "https://rsshub.rssforever.com/zhihu/daily",
-        "icon": "📰",
-        "color": "#0084FF",
-        "description": "知乎日报精选",
-        "ai_only": false
-      },
-      {
         "name": "X-OpenAI",
+        "tier": 0,
         "category": "official",
         "url": "twitter://OpenAI",
         "icon": "🐦",
@@ -332,6 +264,7 @@
       },
       {
         "name": "X-AnthropicAI",
+        "tier": 0,
         "category": "official",
         "url": "twitter://AnthropicAI",
         "icon": "🐦",
@@ -341,6 +274,7 @@
       },
       {
         "name": "X-GoogleDeepMind",
+        "tier": 0,
         "category": "official",
         "url": "twitter://GoogleDeepMind",
         "icon": "🐦",
@@ -349,17 +283,9 @@
         "ai_only": true
       },
       {
-        "name": "X-Sam Altman",
-        "category": "community",
-        "url": "twitter://sama",
-        "icon": "🐦",
-        "color": "#1DA1F2",
-        "description": "Sam Altman 推文",
-        "ai_only": true
-      },
-      {
         "name": "X-Yann LeCun",
-        "category": "community",
+        "tier": 1,
+        "category": "researcher",
         "url": "twitter://ylecun",
         "icon": "🐦",
         "color": "#1DA1F2",
@@ -368,7 +294,8 @@
       },
       {
         "name": "X-Andrew Ng",
-        "category": "community",
+        "tier": 1,
+        "category": "researcher",
         "url": "twitter://AndrewYNg",
         "icon": "🐦",
         "color": "#1DA1F2",
@@ -376,26 +303,140 @@
         "ai_only": true
       },
       {
+        "name": "X-Sam Altman",
+        "tier": 1,
+        "category": "researcher",
+        "url": "twitter://sama",
+        "icon": "🐦",
+        "color": "#1DA1F2",
+        "description": "Sam Altman 推文",
+        "ai_only": true
+      },
+      {
+        "name": "量子位",
+        "tier": 2,
+        "category": "media",
+        "url": "https://www.qbitai.com/feed",
+        "icon": "⚛️",
+        "color": "#6C5CE7",
+        "description": "AI 科技深度报道",
+        "ai_only": true
+      },
+      {
+        "name": "36氪",
+        "tier": 2,
+        "category": "industry",
+        "url": "https://rsshub.rssforever.com/36kr/newsflashes",
+        "icon": "💼",
+        "color": "#0066FF",
+        "description": "科技产业与创投",
+        "ai_only": false
+      },
+      {
+        "name": "36氪 AI搜索",
+        "tier": 2,
+        "category": "media",
+        "url": "https://rsshub.rssforever.com/36kr/search/articles/AI",
+        "icon": "🔎",
+        "color": "#0066FF",
+        "description": "36氪 AI 相关文章搜索",
+        "ai_only": true
+      },
+      {
+        "name": "虎嗅科技",
+        "tier": 2,
+        "category": "media",
+        "url": "https://rsshub.rssforever.com/huxiu/article",
+        "icon": "🐯",
+        "color": "#FF6600",
+        "description": "虎嗅网科技商业深度报道",
+        "ai_only": false
+      },
+      {
+        "name": "少数派",
+        "tier": 2,
+        "category": "tech",
+        "url": "https://rsshub.rssforever.com/sspai/index",
+        "icon": "📱",
+        "color": "#DA282A",
+        "description": "AI工具与效率提升",
+        "ai_only": false
+      },
+      {
+        "name": "掘金 AI",
+        "tier": 2,
+        "category": "community",
+        "url": "https://rsshub.rssforever.com/juejin/trending/ai/weekly",
+        "icon": "💎",
+        "color": "#1E80FF",
+        "description": "掘金 AI 板块热门文章",
+        "ai_only": true
+      },
+      {
+        "name": "AI前线",
+        "tier": 2,
+        "category": "media",
+        "url": "https://www.infoq.cn/feed",
+        "icon": "🚀",
+        "color": "#007BFF",
+        "description": "InfoQ AI 前线深度报道",
+        "ai_only": false
+      },
+      {
+        "name": "知乎热榜",
+        "tier": 2,
+        "category": "community",
+        "url": "zhihu://hot",
+        "icon": "💭",
+        "color": "#0066FF",
+        "description": "知乎热门 AI 话题",
+        "ai_only": false
+      },
+      {
+        "name": "知乎日报",
+        "tier": 2,
+        "category": "media",
+        "url": "https://rsshub.rssforever.com/zhihu/daily",
+        "icon": "📰",
+        "color": "#0084FF",
+        "description": "知乎日报精选",
+        "ai_only": false
+      },
+      {
+        "name": "机器之心",
+        "tier": 2,
+        "category": "media",
+        "url": "https://www.jiqizhixin.com/rss",
+        "enabled": false,
+        "_note_2026_04_10": "已禁用：/rss 返回 HTML 而非 RSS（mismatched tag），官网取消了 RSS",
+        "icon": "🤖",
+        "color": "#09B83E",
+        "description": "AI 领域头部中文媒体",
+        "ai_only": true
+      },
+      {
         "name": "小红书热门",
+        "tier": 2,
         "category": "community",
         "url": "xhs://explore",
         "enabled": false,
-        "_note_2026_04_11": "已禁用：小红书已将 explore 页 feed 数据改为客户端渲染，SSR __INITIAL_STATE__.feed.feeds 为空数组，现有提取策略全部失效",
+        "_note_2026_04_11": "已禁用：小红书 SSR 失效",
         "icon": "📕",
         "color": "#FE2C55",
-        "description": "小红书推荐 feed（通过 AI 关键词过滤）",
+        "description": "小红书推荐 feed",
         "ai_only": false
       },
       {
         "name": "新智元",
+        "tier": 2,
+        "category": "media",
         "url": "https://rsshub.rssforever.com/aijishu/channel/explore",
         "enabled": false,
-        "_note_2026_04_10": "已禁用：rsshub.rssforever.com 持续 503（连续 11 次失败）；需要切换到稳定的 RSSHub 实例",
+        "_note_2026_04_10": "已禁用：rsshub.rssforever.com 持续 503",
         "icon": "🧪",
         "color": "#FF6B35",
-        "category": "AI 资讯",
-        "ai_only": true,
-        "type": "rss"
+        "description": "AI 资讯",
+        "ai_only": true
       }
     ]
   },
@@ -415,47 +456,64 @@
     "_注释": "we-mp-rss 实例地址。auth 留空或填 AK-SK 格式: WK_xxx:SK_xxx"
   },
   "source_authority": {
-    "_注释": "来源权威度权重 1-5，用于排序计算",
+    "_注释": "来源权威度权重 1-5。Tier 0 默认 5，Tier 1 默认 4，Tier 2 按类型 2-3。此处可覆盖默认值。",
     "OpenAI Blog": 5,
     "Anthropic News": 5,
     "Google AI Blog": 5,
     "DeepMind Blog": 5,
-    "ArXiv AI": 4,
-    "ArXiv ML": 4,
-    "MIT Tech Review": 4,
-    "TechCrunch AI": 3,
-    "The Verge AI": 3,
-    "Ars Technica AI": 3,
-    "Hugging Face Blog": 4,
-    "Hacker News AI": 2,
-    "AI Explained": 3,
-    "Two Minute Papers": 3,
-    "Matthew Berman": 2,
-    "Yannic Kilcher": 3,
-    "36氪": 2,
-    "少数派": 2,
-    "虎嗅科技": 2,
-    "掘金 AI": 2,
-    "机器之心": 4,
-    "量子位": 3,
-    "36氪 AI搜索": 2,
-    "知乎热榜": 2,
-    "知乎日报": 3,
+    "Microsoft AI Blog": 5,
     "X-OpenAI": 5,
     "X-AnthropicAI": 5,
     "X-GoogleDeepMind": 5,
-    "X-Sam Altman": 3,
+    "ArXiv AI": 4,
+    "ArXiv ML": 4,
+    "MIT Tech Review": 4,
+    "Hugging Face Blog": 4,
     "X-Yann LeCun": 4,
     "X-Andrew Ng": 4,
+    "X-Andrej Karpathy": 4,
+    "X-Jim Fan": 4,
+    "Yannic Kilcher": 3,
+    "TechCrunch AI": 3,
+    "The Verge AI": 3,
+    "Ars Technica AI": 3,
+    "VentureBeat AI": 3,
+    "Wired AI": 3,
+    "AI Explained": 3,
+    "Two Minute Papers": 3,
+    "X-Sam Altman": 3,
+    "量子位": 3,
     "AI前线": 3,
-    "小红书热门": 1
+    "知乎日报": 3,
+    "Matthew Berman": 2,
+    "Hacker News AI": 2,
+    "36氪": 2,
+    "36氪 AI搜索": 2,
+    "少数派": 2,
+    "虎嗅科技": 2,
+    "掘金 AI": 2,
+    "知乎热榜": 2,
+    "X-Elon Musk (xAI)": 2,
+    "小红书热门": 1,
+    "机器之心": 4
+  },
+  "dedup": {
+    "_comment": "语义去重阈值：英文 0.60 / 中文 0.50（中文同义改写多，阈值更低）。recent_hours 决定与多久内的历史标题做相似度比较。",
+    "threshold_en": 0.60,
+    "threshold_cjk": 0.50,
+    "recent_hours": 72
   },
   "settings": {
     "max_items_per_source": 10,
-    "max_age_hours": 48,
+    "max_age_hours": 24,
+    "collection_interval_hours": 2,
     "output_file": "output/index.html",
     "title": "AI Morning Briefing",
     "history_file": "history.json",
-    "history_days": 7
+    "history_days": 7,
+    "event_db": "events.db",
+    "auto_disable_sources": true,
+    "_comment_auto_disable": "连续失败 >= auto_disable_threshold 次的源在下次采集后自动 enabled=false，并写入 _auto_disabled_at/_auto_disabled_reason 供事后审查",
+    "auto_disable_threshold": 20
   }
 }

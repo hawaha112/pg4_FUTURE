@@ -30,8 +30,20 @@ $css_content
 <!-- Filters -->
 <div class="filter-bar" id="filterBar">$filter_html</div>
 
+<!-- Audience filters (researcher/developer/pm/investor/general) -->
+<div class="audience-bar" id="audienceBar">$audience_filter_html</div>
+
+<!-- LLM coverage banner (rendered only when coverage < 50%) -->
+$llm_banner_html
+
+<!-- Today's Top 3 (importance >= 4 AND multi-source) -->
+$top3_html
+
 <!-- Briefing -->
 $briefing_html
+
+<!-- Featured Articles (Importance >= 4) -->
+$featured_html
 
 <!-- Cards Grid -->
 <div class="grid" id="grid">$cards_html</div>
@@ -46,7 +58,7 @@ $briefing_html
     AI 早报 · <b>$sources_count</b> 个信息源 · <b>$total</b> 篇资讯 · $date_str
 </footer>
 
-<script src="modal_data.js"></script>
+<!-- modal_data.js 不在首屏加载；在 openModal() 首次被调用时由 script.js 动态注入 -->
 <script>
 $js_content
 </script>

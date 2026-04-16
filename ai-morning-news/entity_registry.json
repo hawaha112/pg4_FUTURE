@@ -1,0 +1,115 @@
+{
+  "_注释": "重要实体覆盖矩阵：确保关键主体不被遗漏。每个实体定义主源、备用源、关键词。entity_coverage.py 在采集后检查覆盖率。",
+  "entities": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "tier": 0,
+      "primary_sources": ["OpenAI Blog", "X-OpenAI"],
+      "backup_sources": ["X-Sam Altman", "TechCrunch AI", "The Verge AI"],
+      "keywords": ["openai", "gpt", "chatgpt", "o1", "o3", "o4", "sora", "dall-e", "sam altman"],
+      "alert_if_missing_hours": 72
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "tier": 0,
+      "primary_sources": ["Anthropic News", "X-AnthropicAI"],
+      "backup_sources": ["TechCrunch AI", "The Verge AI", "Ars Technica AI"],
+      "keywords": ["anthropic", "claude", "sonnet", "opus", "haiku", "dario amodei"],
+      "alert_if_missing_hours": 72
+    },
+    {
+      "id": "google_deepmind",
+      "name": "Google DeepMind",
+      "tier": 0,
+      "primary_sources": ["Google AI Blog", "DeepMind Blog", "X-GoogleDeepMind"],
+      "backup_sources": ["TechCrunch AI", "The Verge AI", "ArXiv AI"],
+      "keywords": ["google ai", "deepmind", "gemini", "gemma", "bard", "google brain"],
+      "alert_if_missing_hours": 72
+    },
+    {
+      "id": "meta_ai",
+      "name": "Meta AI",
+      "tier": 0,
+      "primary_sources": ["Meta AI Blog"],
+      "backup_sources": ["TechCrunch AI", "Hugging Face Blog", "ArXiv AI"],
+      "keywords": ["meta ai", "llama", "meta research", "fair", "yann lecun"],
+      "alert_if_missing_hours": 168,
+      "_注释": "Meta AI Blog RSS 当前 404，依赖备用源和关键词捕获"
+    },
+    {
+      "id": "microsoft",
+      "name": "Microsoft AI",
+      "tier": 0,
+      "primary_sources": ["Microsoft AI Blog"],
+      "backup_sources": ["TechCrunch AI", "The Verge AI", "Ars Technica AI"],
+      "keywords": ["microsoft ai", "copilot", "azure ai", "phi-", "orca", "satya nadella"],
+      "alert_if_missing_hours": 168
+    },
+    {
+      "id": "nvidia",
+      "name": "NVIDIA",
+      "tier": 1,
+      "primary_sources": [],
+      "backup_sources": ["TechCrunch AI", "The Verge AI", "VentureBeat AI", "Ars Technica AI"],
+      "keywords": ["nvidia", "cuda", "tensorrt", "h100", "h200", "b100", "b200", "gb200", "jensen huang", "blackwell", "hopper"],
+      "alert_if_missing_hours": 168,
+      "_注释": "NVIDIA 无直接 RSS，靠媒体源关键词捕获"
+    },
+    {
+      "id": "huggingface",
+      "name": "Hugging Face",
+      "tier": 1,
+      "primary_sources": ["Hugging Face Blog"],
+      "backup_sources": ["Hacker News AI", "TechCrunch AI"],
+      "keywords": ["hugging face", "huggingface", "transformers", "diffusers", "safetensors"],
+      "alert_if_missing_hours": 168
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral AI",
+      "tier": 1,
+      "primary_sources": [],
+      "backup_sources": ["TechCrunch AI", "The Verge AI", "Hacker News AI", "ArXiv AI"],
+      "keywords": ["mistral", "mixtral", "pixtral", "le chat"],
+      "alert_if_missing_hours": 336
+    },
+    {
+      "id": "xai",
+      "name": "xAI",
+      "tier": 1,
+      "primary_sources": ["X-Elon Musk (xAI)"],
+      "backup_sources": ["TechCrunch AI", "The Verge AI", "VentureBeat AI"],
+      "keywords": ["xai", "grok"],
+      "alert_if_missing_hours": 336
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "tier": 1,
+      "primary_sources": [],
+      "backup_sources": ["Hacker News AI", "ArXiv AI", "量子位", "36氪 AI搜索"],
+      "keywords": ["deepseek", "deep seek"],
+      "alert_if_missing_hours": 336
+    },
+    {
+      "id": "key_researchers",
+      "name": "核心研究者",
+      "tier": 1,
+      "primary_sources": ["X-Andrej Karpathy", "X-Jim Fan", "X-Yann LeCun", "X-Andrew Ng"],
+      "backup_sources": ["Yannic Kilcher", "ArXiv AI", "ArXiv ML"],
+      "keywords": ["karpathy", "yann lecun", "andrew ng", "jim fan", "ilya sutskever", "geoffrey hinton"],
+      "alert_if_missing_hours": 168
+    },
+    {
+      "id": "key_opensource",
+      "name": "主要开源项目",
+      "tier": 1,
+      "primary_sources": ["Hugging Face Blog", "Hacker News AI"],
+      "backup_sources": ["ArXiv AI", "掘金 AI"],
+      "keywords": ["pytorch", "tensorflow", "jax", "vllm", "ollama", "langchain", "llamaindex", "open-webui", "comfyui"],
+      "alert_if_missing_hours": 336
+    }
+  ]
+}

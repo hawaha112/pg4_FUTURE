@@ -47,6 +47,14 @@ def _is_cjk(ch: str) -> bool:
     return any(lo <= cp <= hi for lo, hi in _CJK_RANGES)
 
 
+def _is_mostly_cjk(text: str) -> bool:
+    """Check if text is predominantly CJK characters."""
+    if not text:
+        return False
+    cjk_count = sum(1 for ch in text if _is_cjk(ch))
+    return cjk_count > len(text) * 0.3
+
+
 def tokenize(text: str) -> List[str]:
     """中英文混合分词：中文按字+双字 n-gram，英文按词"""
     text = text.lower().strip()
@@ -398,9 +406,11 @@ class DedupEngine:
 
     def __init__(self, db_path: str = "dedup.db",
                  semantic_threshold: float = 0.60,
+                 semantic_threshold_cjk: float = 0.50,
                  recent_hours: int = 72):
         self.db = DedupDB(db_path)
         self.threshold = semantic_threshold
+        self.threshold_cjk = semantic_threshold_cjk
         self.recent_hours = recent_hours
 
         # 加载 IDF 缓存
@@ -430,7 +440,8 @@ class DedupEngine:
 
         self._db_count = len(recent)
         idf_info = f"，IDF 缓存 {len(idf_cache)} 词" if idf_cache else ""
-        log.info("📦 去重引擎已加载 %d 条历史记录%s", self._db_count, idf_info)
+        log.info("📦 去重引擎已加载 %d 条历史记录%s（语义阈值: EN=%.2f, CJK=%.2f）",
+                 self._db_count, idf_info, self.threshold, self.threshold_cjk)
 
     def deduplicate(self, items: List[dict],
                     source_authority: Optional[Dict[str, int]] = None
@@ -480,7 +491,9 @@ class DedupEngine:
 
             # LSH 快速候选查找（近似 O(1)，替代之前的 O(n) 全扫描）
             candidates = self.lsh.query_candidates(idx)
-            similar = self.matcher.find_similar_among(idx, candidates, self.threshold)
+            # 使用语言感知的阈值：CJK 文本使用更低的阈值
+            threshold = self.threshold_cjk if _is_mostly_cjk(title) else self.threshold
+            similar = self.matcher.find_similar_among(idx, candidates, threshold)
 
             if similar:
                 best_match_idx, best_sim = max(similar, key=lambda x: x[1])

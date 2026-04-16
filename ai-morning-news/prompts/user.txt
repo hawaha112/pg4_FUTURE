@@ -1,0 +1,9 @@
+分析以下文章：
+
+【标题】{title}
+
+【来源】{source_name}
+
+【摘要】{summary}
+
+【正文】{full_text}
