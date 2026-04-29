@@ -179,8 +179,12 @@ echo "运行出报前采集..." >> "$LOG_FILE"
 # 第二步：从事件库渲染页面
 # ────────────────────────────────────────────────
 # 早/晚班：按当前小时判断（06:00 触发 = 早班，覆盖前夜 18:00→今晨 06:00）
+# 调试时可通过外部环境变量 BRIEFING_SHIFT_OVERRIDE=am|pm 强制覆盖。
 CURRENT_HOUR=$(date '+%H' | sed 's/^0//')
-if [ "${CURRENT_HOUR:-0}" -lt 12 ] 2>/dev/null; then
+if [ -n "${BRIEFING_SHIFT_OVERRIDE:-}" ]; then
+    SHIFT="$BRIEFING_SHIFT_OVERRIDE"
+    SHIFT_LABEL="🔧 强制 $SHIFT 班"
+elif [ "${CURRENT_HOUR:-0}" -lt 12 ] 2>/dev/null; then
     SHIFT="am"
     SHIFT_LABEL="🌅 早班 (前夜→今晨)"
 else
@@ -217,7 +221,10 @@ ARCHIVE_DIR="$PROJECT_DIR/output/archive"
 TODAY_DATE=$(date '+%Y-%m-%d')
 mkdir -p "$ARCHIVE_DIR"
 if [ -f "$PROJECT_DIR/output/index.html" ]; then
-    cp "$PROJECT_DIR/output/index.html" "$ARCHIVE_DIR/${TODAY_DATE}-${SHIFT}.html"
+    # 归档时把 HTML 里硬编码的 'modal_data.js' 替换成本班次专属文件名，
+    # 否则 archive/ 下找不到 modal_data.js 导致点击卡片无反应（404）。
+    sed "s|s\.src = 'modal_data\.js'|s.src = '${TODAY_DATE}-${SHIFT}_modal.js'|" \
+        "$PROJECT_DIR/output/index.html" > "$ARCHIVE_DIR/${TODAY_DATE}-${SHIFT}.html"
     cp "$PROJECT_DIR/output/modal_data.js" "$ARCHIVE_DIR/${TODAY_DATE}-${SHIFT}_modal.js" 2>/dev/null || true
     echo "  已归档: archive/${TODAY_DATE}-${SHIFT}.html" >> "$LOG_FILE"
 fi
