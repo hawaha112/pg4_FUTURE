@@ -196,16 +196,18 @@ def main():
             return False
 
     def _event_in_window(event) -> bool:
-        """事件视角的窗口判断：
-        - 任一 evidence 在窗口内 → 放行（覆盖"旧事件今天有新源跟进"场景）
-        - 否则回退看 event.published_at（首次发布也算）
-        这样能正确捕获多源事件：A 源昨天首发，B 源今天跟进 → 进今天的班次
+        """事件视角的窗口判断：以 canonical event 的 published_at 为准（严格）。
+
+        曾试过放行任一 evidence 在窗口内的事件，意图是捕捉"昨天首发、今天跟进"
+        的多源场景；但用户实测看到 04-28 文章出现在 04-29 晚报里，体验崩了。
+        现在收窄回严格语义：只展示窗口内首次发布的事件。
+
+        副作用：跨日多源跟进的事件不会再次进入新班次的早报，
+        multi_source_count 因此可能偏低 —— 是有意识的取舍：用户对"今天的
+        早报必须真是当天发布的内容"的预期 > 多源指标完整度。
         """
         if window_start is None:
             return True
-        for ev in event.get('evidence_chain', []) or []:
-            if _in_window(ev.get('reported_at')):
-                return True
         return _in_window(event.get('published_at'))
 
     # ── 尝试使用 canonical events（新模式） ──

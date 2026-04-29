@@ -10,8 +10,35 @@ Uses string.Template for substitution (zero external dependencies).
 """
 
 import json
-from html import escape
-from datetime import datetime
+from html import escape, unescape
+
+
+def _safe_escape(text):
+    """先 unescape 已有 HTML 实体（如 RSS 里的 &#x27;），再 escape 一次防 XSS。
+    避免双重 escape 让 &#x27; 变成 &amp;#x27; 在浏览器里显示为字面量。"""
+    return escape(unescape(str(text or '')))
+from datetime import datetime, timezone
+
+
+def _format_local_time(pub_val) -> str:
+    """把 published 字段统一格式化为本地时区的 'MM-DD HH:MM'。
+
+    背景：源头的 published_at 通常是 UTC ISO 字符串（带 +00:00 或 Z），
+    早期版本直接 strftime 输出 UTC 时间，导致"04-28 22:02 UTC"在北京时区
+    应显示为"04-29 06:02"，但卡片上变成 04-28，让用户以为是昨天的内容。
+    """
+    if not pub_val:
+        return ""
+    try:
+        if isinstance(pub_val, str):
+            clean = pub_val.replace('Z', '+00:00')
+            pub_val = datetime.fromisoformat(clean)
+        # 若 naive，按 UTC 处理；统一 astimezone 到本地
+        if pub_val.tzinfo is None:
+            pub_val = pub_val.replace(tzinfo=timezone.utc)
+        return pub_val.astimezone().strftime("%m-%d %H:%M")
+    except (AttributeError, ValueError, TypeError):
+        return ""
 from pathlib import Path
 from string import Template
 
@@ -141,14 +168,49 @@ def generate_html(all_items, config, digest=None, meta=None):
     regular_items = []
     modal_data = []
 
+    # featured 门槛 ≥3（"重要"级别）— 避免 LLM 低估新版模型发布等条目（ChatGPT 5.4
+    # 被打 ★3 等）。门槛降低后用排序把真正重大的顶到前面。
+    today_str = now.strftime('%Y-%m-%d')
     for idx, item in enumerate(all_items):
         analysis = item.get('analysis', {})
         importance = analysis.get('importance', 1)
 
-        if importance >= 4:
+        if importance >= 3:
             featured_items.append((idx, item))
         else:
             regular_items.append((idx, item))
+
+    def _is_today(item):
+        """item.published 是否今天（按生成时的本地日期）"""
+        pub = item.get('published')
+        if not pub:
+            return False
+        try:
+            if hasattr(pub, 'strftime'):
+                return pub.strftime('%Y-%m-%d') == today_str
+            if isinstance(pub, str) and len(pub) >= 10:
+                return pub[:10] == today_str
+        except (ValueError, TypeError, AttributeError):
+            pass
+        return False
+
+    def _feat_key(pair):
+        _idx, item = pair
+        a = item.get('analysis', {}) or {}
+        imp = a.get('importance', 1)
+        # 多源 bonus（按 unique source 数）
+        evidence_chain = item.get('_evidence_chain', []) or []
+        unique_srcs = len({ev.get('source_name', '') for ev in evidence_chain if ev.get('source_name')})
+        if unique_srcs == 0:
+            unique_srcs = 1
+        multi_bonus = 0.0
+        if unique_srcs >= 4: multi_bonus = 1.0
+        elif unique_srcs == 3: multi_bonus = 0.8
+        elif unique_srcs == 2: multi_bonus = 0.5
+        # 今日 bonus：新鲜度加权
+        today_bonus = 0.7 if _is_today(item) else 0.0
+        return -(imp + multi_bonus + today_bonus)
+    featured_items.sort(key=_feat_key)
 
     # ── 今日三件大事：importance >= 4 且 cluster_size >= 2 的前 3 条 ──
     top3_items = []
@@ -213,28 +275,15 @@ def generate_html(all_items, config, digest=None, meta=None):
                     else:
                         chinese_title_raw = truncated.rstrip()
 
-            chinese_title = escape(chinese_title_raw)
-            why_it_matters = escape(analysis.get('why_it_matters', ''))
+            chinese_title = _safe_escape(chinese_title_raw)
+            why_it_matters = _safe_escape(analysis.get('why_it_matters', ''))
             categories = analysis.get('categories', ['其他'])
 
-            pub_str = ""
-            pub_val = item.get('published')
-            if pub_val:
-                try:
-                    if isinstance(pub_val, str):
-                        clean = pub_val.replace('Z', '+00:00')
-                        pub_val = datetime.fromisoformat(clean)
-                    pub_str = pub_val.strftime("%m-%d %H:%M")
-                except (AttributeError, ValueError, TypeError):
-                    if isinstance(pub_val, str) and len(pub_val) >= 10:
-                        try:
-                            pub_str = pub_val[5:10]
-                        except Exception:
-                            pass
+            pub_str = _format_local_time(item.get('published'))
 
             icon = item.get('source_icon', '📰')
-            source_name = escape(item.get('source_name', ''))
-            image_url = escape(item.get('image', ''))
+            source_name = _safe_escape(item.get("source_name", ""))
+            image_url = _safe_escape(item.get("image", ""))
             cat_data = '|'.join(categories)
 
             # 左侧边条颜色
@@ -258,15 +307,48 @@ def generate_html(all_items, config, digest=None, meta=None):
                 if tb else ''
             )
             time_part = f' · {pub_str}' if pub_str else ''
-            src_html = f'<div class="featured-source">{tier_badge_html} {icon} {source_name}{time_part}</div>'
 
-            # 多源报道 pill（featured 卡片右上角）
-            cluster_size = item.get('_cluster_size', 1) or 1
-            report_count = item.get('_report_count', cluster_size) or cluster_size
-            multi_pill = ''
-            if cluster_size >= 2 or report_count >= 2:
-                n = max(cluster_size, report_count)
-                multi_pill = f'<span class="src-pill src-pill-featured" title="共 {n} 个来源报道同一事件">📡 {n} 源</span>'
+            src_html = (
+                f'<div class="featured-source">'
+                f'{tier_badge_html} {icon} {source_name}{time_part}'
+                f'</div>'
+            )
+
+            # 多源详细列表：列出所有 evidence 的"其他媒体"报道（去重，同源多篇合并）
+            # 注意：cluster_size 数的是 evidence 条数，同一家媒体发多篇也会 >=2，
+            # 但"多源"业务语义应是 unique source > 1，所以这里按 source_name 去重。
+            other_sources_html = ''
+            evidence_chain = item.get('_evidence_chain', []) or []
+            canonical_source = item.get('source_name', '') or ''
+            others_map = {}  # source_name → earliest reported_at
+            for ev in evidence_chain:
+                sn = ev.get('source_name', '') or ''
+                if not sn or sn == canonical_source:
+                    continue
+                ra = ev.get('reported_at', '') or ''
+                # 同源保留最早时间
+                if sn not in others_map or (ra and ra < others_map[sn]):
+                    others_map[sn] = ra
+            if others_map:
+                def _fmt(ra):
+                    try:
+                        if ra:
+                            return datetime.fromisoformat(ra.replace('Z', '+00:00')).strftime('%m-%d %H:%M')
+                    except (ValueError, TypeError):
+                        pass
+                    return (ra[:16].replace('T', ' ')) if ra else ''
+                rows = ''.join(
+                    f'<div class="fos-item">· {_safe_escape(sn)}'
+                    f'{" · " + _safe_escape(_fmt(ra)) if _fmt(ra) else ""}</div>'
+                    for sn, ra in others_map.items()
+                )
+                other_sources_html = (
+                    f'<div class="featured-other-sources">'
+                    f'<div class="fos-label">📡 另有 {len(others_map)} 源报道</div>'
+                    f'{rows}'
+                    f'</div>'
+                )
+            multi_pill = ''  # 兼容下方模板字符串引用
 
             # importance=5 的 "行业级" 徽章（置于卡片顶部，左侧）
             hero_badge = ''
@@ -277,7 +359,8 @@ def generate_html(all_items, config, digest=None, meta=None):
             aud_list = analysis.get('audience', []) or ['general']
             aud_data = '|'.join(a for a in aud_list if a in AUDIENCE_LABELS) or 'general'
 
-            featured_html += f'''    <div class="featured-card" data-cat="{escape(cat_data)}" data-aud="{escape(aud_data)}" data-idx="{idx}" style="border-left-color: {border_color}">
+            _iid = item.get('_event_id') or item.get('link') or f'i{idx}'
+            featured_html += f'''    <div class="featured-card" data-cat="{_safe_escape(cat_data)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_iid)}" style="border-left-color: {border_color}">
         {img_html}
         <div class="featured-body">
             {hero_badge}
@@ -285,6 +368,7 @@ def generate_html(all_items, config, digest=None, meta=None):
             {title_html}
             {why_html}
             {src_html}
+            {other_sources_html}
         </div>
     </div>
 '''
@@ -321,34 +405,21 @@ def generate_html(all_items, config, digest=None, meta=None):
                 else:
                     chinese_title_raw = truncated.rstrip()
 
-        chinese_title = escape(chinese_title_raw)
-        why_it_matters = escape(analysis.get('why_it_matters', ''))
+        chinese_title = _safe_escape(chinese_title_raw)
+        why_it_matters = _safe_escape(analysis.get('why_it_matters', ''))
         categories = analysis.get('categories', ['其他'])
         source_type = analysis.get('source_type', 'news')
         reading_minutes = analysis.get('reading_minutes', 1)
 
-        pub_str = ""
-        pub_val = item.get('published')
-        if pub_val:
-            try:
-                if isinstance(pub_val, str):
-                    clean = pub_val.replace('Z', '+00:00')
-                    pub_val = datetime.fromisoformat(clean)
-                pub_str = pub_val.strftime("%m-%d %H:%M")
-            except (AttributeError, ValueError, TypeError):
-                if isinstance(pub_val, str) and len(pub_val) >= 10:
-                    try:
-                        pub_str = pub_val[5:10]
-                    except Exception:
-                        pass
+        pub_str = _format_local_time(item.get('published'))
 
         icon = item.get('source_icon', '📰')
-        source_name = escape(item.get('source_name', ''))
+        source_name = _safe_escape(item.get("source_name", ""))
         cat_data = '|'.join(categories)
-        image_url = escape(item.get('image', ''))
+        image_url = _safe_escape(item.get("image", ""))
 
         # Z1: 分类 + 阅读时间
-        cat_text = ' · '.join(escape(c) for c in categories[:2])
+        cat_text = ' · '.join(_safe_escape(c) for c in categories[:2])
         z1_html = f'''<div class="z1">
             <span class="z1-left">{cat_text}</span>
             <span class="z1-meta">{reading_minutes} min</span>
@@ -393,7 +464,7 @@ def generate_html(all_items, config, digest=None, meta=None):
         aud_data = '|'.join(a for a in aud_list if a in AUDIENCE_LABELS) or 'general'
 
         cards_html += f'''
-        <div class="card" data-cat="{escape(cat_data)}" data-aud="{escape(aud_data)}" data-idx="{idx}"
+        <div class="card" data-cat="{_safe_escape(cat_data)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}"
              style="animation-delay:{min(idx * 25, 500)}ms">
             {img_html}
             <div class="card-body">
@@ -406,7 +477,9 @@ def generate_html(all_items, config, digest=None, meta=None):
         </div>'''
 
     # ── 为所有卡片构建 modal_data ──
-    for idx, item in featured_items + regular_items:
+    # 必须按 all_items 原顺序遍历，因为卡片的 data-idx 用的是 enumerate(all_items) 的 idx。
+    # 如果按 featured+regular 顺序 append 会导致 modal_data[idx] 与 data-idx 错位（featured 卡点开显示错条目）。
+    for idx, item in enumerate(all_items):
         analysis = item.get('analysis', {})
 
         chinese_title_raw = analysis.get('chinese_title', '') or ''
@@ -437,23 +510,10 @@ def generate_html(all_items, config, digest=None, meta=None):
         source_type = analysis.get('source_type', 'news')
         reading_minutes = analysis.get('reading_minutes', 1)
 
-        pub_str = ""
-        pub_val = item.get('published')
-        if pub_val:
-            try:
-                if isinstance(pub_val, str):
-                    clean = pub_val.replace('Z', '+00:00')
-                    pub_val = datetime.fromisoformat(clean)
-                pub_str = pub_val.strftime("%m-%d %H:%M")
-            except (AttributeError, ValueError, TypeError):
-                if isinstance(pub_val, str) and len(pub_val) >= 10:
-                    try:
-                        pub_str = pub_val[5:10]
-                    except Exception:
-                        pass
+        pub_str = _format_local_time(item.get('published'))
 
         icon = item.get('source_icon', '📰')
-        source_name = escape(item.get('source_name', ''))
+        source_name = _safe_escape(item.get("source_name", ""))
 
         orig_title = item.get('title', '')
         if not analysis.get('detailed_content') and orig_title and len(orig_title) > 60:
@@ -509,7 +569,7 @@ def generate_html(all_items, config, digest=None, meta=None):
                     '自动驾驶', 'AI 医疗', 'AI 编程', '行业观点', '其他']
     for cat in ordered_cats:
         if cat in all_categories:
-            filter_html += f'<button class="f-btn" data-filter="{escape(cat)}">{escape(cat)}</button>\n'
+            filter_html += f'<button class="f-btn" data-filter="{_safe_escape(cat)}">{_safe_escape(cat)}</button>\n'
 
     # 筛选按钮（读者画像）
     audience_filter_html = ''
@@ -530,9 +590,9 @@ def generate_html(all_items, config, digest=None, meta=None):
         top3_cards = ''
         for idx, item in top3_items:
             analysis = item.get('analysis', {})
-            ct = escape(analysis.get('chinese_title', '') or item.get('title', '')[:40])
-            why = escape(analysis.get('why_it_matters', '') or analysis.get('summary', '')[:100])
-            src = escape(item.get('source_name', ''))
+            ct = _safe_escape(analysis.get('chinese_title', '') or item.get('title', '')[:40])
+            why = _safe_escape(analysis.get('why_it_matters', '') or analysis.get('summary', '')[:100])
+            src = _safe_escape(item.get("source_name", ""))
             icon = item.get('source_icon', '📰')
             cluster = item.get('_cluster_size', 1) or 1
             multi = (f' · <b>📡 {cluster} 源确认</b>' if cluster >= 2 else '')
@@ -558,7 +618,7 @@ def generate_html(all_items, config, digest=None, meta=None):
     # 今日速览
     briefing_html = ""
     if digest and digest.get('editorial'):
-        editorial = escape(digest.get('editorial', ''))
+        editorial = _safe_escape(digest.get('editorial', ''))
         briefing_html = f'''
     <section class="briefing">
         <h2 class="br-title">今日速览</h2>
@@ -580,6 +640,75 @@ def generate_html(all_items, config, digest=None, meta=None):
                 '</div>'
             )
 
+    # ── 大V 动态区块：X-*/YouTube 等社交媒体大V，importance 通常<4 达不到 featured
+    # 但仍值得独立展示（观点/访谈/短视频解读）。排除已进 featured 的，避免重复 ──
+    # VIP 名单 = config.json 里 "vip": true 的源 + 所有 X-* 推特源 + source_type==video
+    _vip_names = set()
+    for _lang in ('english', 'chinese'):
+        for _s in (config or {}).get('sources', {}).get(_lang, []) or []:
+            if _s.get('vip'):
+                _vip_names.add(_s.get('name', ''))
+    def _is_vip(item):
+        name = item.get('source_name', '') or ''
+        if name.startswith('X-') or name in _vip_names:
+            return True
+        return item.get('analysis', {}).get('source_type') == 'video'
+
+    featured_idx_set = {idx for idx, _ in featured_items}
+    vip_candidates = []
+    for idx, item in enumerate(all_items):
+        if idx in featured_idx_set or not _is_vip(item):
+            continue
+        a = item.get('analysis', {}) or {}
+        if a.get('ai_relevant') is False:
+            continue
+        imp = a.get('importance', 0)
+        if imp < 2:
+            continue
+        vip_candidates.append((idx, item, imp))
+    vip_candidates.sort(key=lambda x: -x[2])
+    vip_candidates = vip_candidates[:8]
+
+    vip_html = ''
+    if vip_candidates:
+        rows = []
+        for idx, item, _imp in vip_candidates:
+            a = item.get('analysis', {}) or {}
+            ct = _safe_escape(a.get('chinese_title', '') or item.get('title', '')[:70])
+            why = _safe_escape(a.get('why_it_matters', '') or (a.get('summary', '') or '')[:110])
+            src = _safe_escape(item.get("source_name", ""))
+            icon = item.get('source_icon', '🎙️')
+            why_html = f'<div class="vip-why">{why}</div>' if why else ''
+            _viid = item.get('_event_id') or item.get('link') or f'vip{idx}'
+            rows.append(
+                f'<div class="vip-item" data-idx="{idx}" data-iid="{_safe_escape(_viid)}">'
+                f'<div class="vip-meta">{icon} {src}</div>'
+                f'<div class="vip-title-txt">{ct}</div>'
+                f'{why_html}'
+                f'</div>'
+            )
+        vip_html = (
+            '<section class="vip-section" aria-label="大V 动态">'
+            '<h2 class="vip-heading">🎙️ 大V 动态</h2>'
+            '<div class="vip-list">' + ''.join(rows) + '</div>'
+            '</section>'
+        )
+
+    # ── SEO / 分享：description 优先取 digest.editorial，其次拼 top3 标题 ──
+    meta_description = ''
+    if digest and digest.get('editorial'):
+        meta_description = digest['editorial'].strip().replace('\n', ' ')
+    elif top3_items:
+        titles = [
+            (i.get('analysis', {}).get('chinese_title') or i.get('title', ''))[:40]
+            for _, i in top3_items
+        ]
+        meta_description = f"今日共 {total} 条 AI 资讯 · 重点：" + '；'.join(t for t in titles if t)
+    else:
+        meta_description = f"每日 AI 行业早报 · 共 {total} 条资讯，覆盖 {sources_count} 个信息源"
+    # 裁剪到 160 字符（search engine / og 常规上限）+ 双重 escape（meta content 属性）
+    meta_description = _safe_escape(meta_description[:157] + ('…' if len(meta_description) > 160 else ''))
+
     # ══════════════════════════════════════════════════════════
     # 从模板文件组装 HTML
     # ══════════════════════════════════════════════════════════
@@ -588,6 +717,7 @@ def generate_html(all_items, config, digest=None, meta=None):
     page_template = Template(_load_template('page.html'))
 
     html = page_template.safe_substitute(
+        vip_html=vip_html,
         date_str=date_str,
         weekday=weekday,
         time_str=time_str,
@@ -602,6 +732,7 @@ def generate_html(all_items, config, digest=None, meta=None):
         cards_html=cards_html,
         css_content=css_content,
         js_content=js_content,
+        meta_description=meta_description,
     )
 
     return html, modal_js_content
