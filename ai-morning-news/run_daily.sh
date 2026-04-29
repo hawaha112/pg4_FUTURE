@@ -438,6 +438,10 @@ summary = {
     'llm_coverage': stats.get('llm_coverage'),
     'llm_count': stats.get('llm_count'),
     'multi_source_count': stats.get('multi_source_count'),
+    'important_count': stats.get('important_count'),
+    'official_count': stats.get('official_count'),
+    'depth_count': stats.get('depth_count'),
+    'entity_count': stats.get('entity_count'),
     'sources_healthy': ok,
     'sources_failing': failing,
     'dead_sources': dead,
@@ -467,7 +471,11 @@ if [ "$DEPLOY_OK" = true ] && [ -d "$PROJECT_DIR/output/.git" ]; then
     (cd "$PROJECT_DIR/output" && \
      git fetch origin main 2>>"$LOG_FILE" && \
      git reset --hard origin/main 2>>"$LOG_FILE" && \
-     git clean -fd 2>>"$LOG_FILE") || \
+     git clean -fd \
+         -e 'run_health.jsonl' \
+         -e '.digest_cache.json' \
+         -e 'stats.json.before-*' \
+         2>>"$LOG_FILE") || \
         echo "  ⚠️ dashboard 同步 origin 失败" >> "$LOG_FILE"
 
     "$PYTHON" -u "$PROJECT_DIR/dashboard_generator.py" >> "$LOG_FILE" 2>&1 || true

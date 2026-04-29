@@ -106,6 +106,7 @@ def _enrich_item_with_event_info(item: dict, event: dict) -> dict:
     item['_event_type'] = event.get('event_type', 'news')
     item['_cluster_size'] = event.get('cluster_size', 1)
     item['_canonical_event_id'] = event.get('event_id', '')
+    item['_entities'] = event.get('entity_tags', []) or []
 
     # 证据链
     evidence_chain = event.get('evidence_chain', [])
@@ -534,10 +535,38 @@ def main():
         1 for item in all_items if item.get('_cluster_size', 1) >= 2
     )
 
+    # ── Tier 1：当期内容价值指标（用于 dashboard）──
+    # 重要事件：importance >= 4
+    important_count = sum(
+        1 for item in all_items
+        if (item.get('analysis', {}) or {}).get('importance', 0) >= 4
+    )
+    # 官方/原厂事件：event_status == 'official'
+    official_count = sum(
+        1 for item in all_items if item.get('_event_status', '') == 'official'
+    )
+    # 深度分析：detailed_content 和 background 都有内容
+    def _has_depth(item) -> bool:
+        a = item.get('analysis', {}) or {}
+        return bool((a.get('detailed_content') or '').strip()
+                    and (a.get('background') or '').strip())
+    depth_count = sum(1 for item in all_items if _has_depth(item))
+    # 覆盖实体：所有 item 的 _entities 去重
+    entity_set = set()
+    for item in all_items:
+        for eid in item.get('_entities', []) or []:
+            if eid:
+                entity_set.add(eid)
+    entity_count = len(entity_set)
+
     meta = {
         'llm_coverage': llm_coverage,
         'llm_count': llm_count,
         'multi_source_count': multi_source_count,
+        'important_count': important_count,
+        'official_count': official_count,
+        'depth_count': depth_count,
+        'entity_count': entity_count,
     }
 
     # ── 生成 HTML ──
@@ -596,6 +625,10 @@ def main():
             "llm_coverage": round(llm_coverage, 3),
             "llm_count": llm_count,
             "multi_source_count": multi_source_count,
+            "important_count": important_count,
+            "official_count": official_count,
+            "depth_count": depth_count,
+            "entity_count": entity_count,
         }
         with open(stats_path, 'w', encoding='utf-8') as f:
             json.dump(stats, f, ensure_ascii=False, indent=2)
