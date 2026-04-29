@@ -222,6 +222,36 @@ def main():
         log.info("🕘 按发布时间过滤：%d → %d 条（窗口外 %d 条被排除）",
                  before, len(canonical_events), before - len(canonical_events))
 
+        # 已在本班次窗口开始之后渲染过的事件，跳过 — 防止早班/晚班重复展示同一事件
+        # 当事件 rendered 之后又有新 evidence（last_updated_at > rendered_at）时，
+        # 说明它"重新激活"，仍然可以再次出现。
+        def _already_rendered(event) -> bool:
+            rendered = event.get('rendered_at')
+            if not rendered:
+                return False
+            try:
+                r_dt = datetime.fromisoformat(rendered.replace('Z', '+00:00'))
+            except (ValueError, TypeError, AttributeError):
+                return False
+            if r_dt.astimezone() < window_start:
+                return False  # 早于本班次窗口起点，可以重渲
+            # rendered_at 在窗口内或之后；查是否有更新的跟进
+            last_upd = event.get('last_updated_at') or ''
+            try:
+                u_dt = datetime.fromisoformat(last_upd.replace('Z', '+00:00'))
+                if u_dt > r_dt:
+                    return False  # 渲染后又被更新过，重新激活
+            except (ValueError, TypeError, AttributeError):
+                pass
+            return True
+
+        before_dedup = len(canonical_events)
+        canonical_events = [e for e in canonical_events if not _already_rendered(e)]
+        dedup_dropped = before_dedup - len(canonical_events)
+        if dedup_dropped > 0:
+            log.info("🔁 跳过本班次窗口内已渲染过的 %d 个事件（去重，避免早晚报重复）",
+                     dedup_dropped)
+
     use_canonical = len(canonical_events) > 0
     if use_canonical:
         log.info("📦 从事件库读取 %d 个 canonical events（最近 %d 小时）",
