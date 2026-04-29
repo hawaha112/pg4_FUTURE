@@ -1,6 +1,24 @@
 const typeLabels = {"paper":"学术论文","news":"新闻报道","official":"官方发布","opinion":"观点文章","community":"社区讨论","video":"视频"};
 const statusColors = {"official":"#8b5cf6","confirmed":"#10b981","reported":"#3b82f6","rumor":"#f59e0b"};
 
+// ═══ Security helpers ═══
+// Escape HTML special chars before injecting untrusted strings into innerHTML.
+// renderMd() has its own &/</> escape; these helpers cover plain-string fields.
+function escHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, function(c) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+}
+// Returns url only if scheme is http/https/mailto; otherwise null (blocks javascript:, data:, etc).
+function safeLink(url) {
+    if (!url || url === '#') return null;
+    try {
+        var u = new URL(url, location.href);
+        return /^(https?:|mailto:)$/.test(u.protocol) ? url : null;
+    } catch (e) { return null; }
+}
+
 // ═══ Markdown → HTML renderer（带 heading id 注入）═══
 var _headingCounter = 0;
 function renderMd(text) {
@@ -100,6 +118,68 @@ function ensureModalData(cb) {
 }
 
 // ═══ Feedback helpers (localStorage) ═══
+// ═══ Read tracker — 阅后即焚（点开即标记，下次访问该卡片消散 + 隐藏）═══
+var _READ_KEY = 'ai_briefing_read_v1';
+function getReadSet() {
+    try { return new Set(JSON.parse(localStorage.getItem(_READ_KEY) || '[]')); }
+    catch(e) { return new Set(); }
+}
+function markRead(iid) {
+    if (!iid) return;
+    var s = getReadSet();
+    if (s.has(iid)) return;
+    s.add(iid);
+    try { localStorage.setItem(_READ_KEY, JSON.stringify(Array.from(s))); }
+    catch(e) {}
+}
+
+// 页面加载后立即按已读集合隐藏对应卡片，并显示"今日 X 条 / 已读 Y 条 · 显示已读"toggle
+function _applyReadState() {
+    var read = getReadSet();
+    var totalCards = 0, readCards = 0;
+    document.querySelectorAll('[data-iid]').forEach(function(card) {
+        totalCards++;
+        if (read.has(card.dataset.iid)) {
+            card.classList.add('is-read');
+            readCards++;
+        }
+    });
+    var toggle = document.getElementById('readToggle');
+    if (!toggle) return;
+    if (readCards === 0) {
+        toggle.style.display = 'none';
+        return;
+    }
+    toggle.style.display = '';
+    toggle.querySelector('.rt-count').textContent = readCards;
+}
+
+// "显示已读"toggle 控制
+function _toggleShowRead() {
+    document.body.classList.toggle('show-read');
+    var btn = document.getElementById('readToggle');
+    if (btn) {
+        var on = document.body.classList.contains('show-read');
+        btn.querySelector('.rt-label').textContent = on ? '隐藏已读' : '显示已读';
+    }
+}
+
+// 标记为已读 + 触发"消散"动画后隐藏卡片
+function _fadeReadCards(iid) {
+    document.querySelectorAll('[data-iid="' + (window.CSS && CSS.escape ? CSS.escape(iid) : iid) + '"]').forEach(function(card) {
+        if (card.classList.contains('is-read')) return;
+        card.classList.add('is-fading');
+        // 等动画结束再加 is-read（让 CSS 过渡顺滑）
+        setTimeout(function() {
+            card.classList.add('is-read');
+            card.classList.remove('is-fading');
+            _applyReadState();  // 刷新计数
+        }, 600);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', _applyReadState);
+
 var _FB_KEY = 'ai_briefing_feedback_v1';
 function getFeedback() {
     try { return JSON.parse(localStorage.getItem(_FB_KEY) || '{}'); } catch(e) { return {}; }
@@ -138,6 +218,7 @@ function attachTocSpy() {
 
 // ═══ Modal ═══
 function openModal(idx) {
+    _currentModalIdx = idx;
     ensureModalData(function() { _openModalReal(idx); });
 }
 function _openModalReal(idx) {
@@ -147,35 +228,35 @@ function _openModalReal(idx) {
     // Hero image
     let heroHtml = '';
     if (a.image) {
-        heroHtml = '<div class="m-hero"><img src="' + a.image + '" onerror="this.parentElement.style.display=\'none\'" alt=""><div class="m-hero-gradient"></div></div>';
+        heroHtml = '<div class="m-hero"><img src="' + escHtml(a.image) + '" onerror="this.parentElement.style.display=\'none\'" alt=""><div class="m-hero-gradient"></div></div>';
     }
 
     // Title
-    let titleHtml = '<h2 class="m-title">' + (a.chinese_title || a.title || '') + '</h2>';
+    let titleHtml = '<h2 class="m-title">' + escHtml(a.chinese_title || a.title || '') + '</h2>';
 
     // Source bar: tier badge + icon + name + pub_date + source_type
     let srcPrefix = '';
     if (a.source_badge_icon && a.source_badge_label) {
-        srcPrefix = '<span class="tier-badge tier-' + a.source_badge_label + '">' +
-                    a.source_badge_icon + ' ' + a.source_badge_label + '</span> ';
+        srcPrefix = '<span class="tier-badge tier-' + escHtml(a.source_badge_label) + '">' +
+                    escHtml(a.source_badge_icon) + ' ' + escHtml(a.source_badge_label) + '</span> ';
     }
-    let srcParts = [srcPrefix + (a.source_icon || '') + ' ' + (a.source_name || '')];
-    if (a.pub_date) srcParts.push(a.pub_date);
+    let srcParts = [srcPrefix + escHtml(a.source_icon || '') + ' ' + escHtml(a.source_name || '')];
+    if (a.pub_date) srcParts.push(escHtml(a.pub_date));
     var tl = typeLabels[a.source_type];
-    if (tl) srcParts.push(tl);
+    if (tl) srcParts.push(escHtml(tl));
     let srcBarHtml = '<div class="m-src-bar">' + srcParts.join(' · ');
     if (a.event_status_icon && a.event_status_label) {
         var sc = statusColors[a.event_status] || '#888';
-        srcBarHtml += ' · <span class="m-status-badge" style="color:' + sc + '">' + a.event_status_icon + ' ' + a.event_status_label + '</span>';
+        srcBarHtml += ' · <span class="m-status-badge" style="color:' + sc + '">' + escHtml(a.event_status_icon) + ' ' + escHtml(a.event_status_label) + '</span>';
     }
     srcBarHtml += '</div>';
 
     // Multi-source indicator (moved here, right after source bar)
     let multiSrcHtml = '';
     if (a.also_reported_by && a.also_reported_by.length > 0) {
-        multiSrcHtml = '<div class="m-multi-src"><span class="m-multi-src-label">' + a.report_count + ' 源报道</span>';
+        multiSrcHtml = '<div class="m-multi-src"><span class="m-multi-src-label">' + escHtml(a.report_count) + ' 源报道</span>';
         a.also_reported_by.forEach(function(src) {
-            multiSrcHtml += '<span class="m-multi-src-tag">' + src + '</span>';
+            multiSrcHtml += '<span class="m-multi-src-tag">' + escHtml(src) + '</span>';
         });
         multiSrcHtml += '</div>';
     }
@@ -185,7 +266,7 @@ function _openModalReal(idx) {
     if (a.why_it_matters) {
         ledeHtml += '<div class="m-lede">' +
                     '<span class="m-lede-label">📌 为什么重要</span>' +
-                    '<div class="m-lede-text"><strong>' + a.why_it_matters + '</strong></div>' +
+                    '<div class="m-lede-text"><strong>' + escHtml(a.why_it_matters) + '</strong></div>' +
                     '</div>';
     }
     if (a.deep_analysis) {
@@ -227,13 +308,13 @@ function _openModalReal(idx) {
         // Fallback
         var parts = [];
         var mainText = (a.title && a.title.length > (a.summary || '').length + 20) ? a.title : (a.summary || '');
-        if (mainText) parts.push('<p>' + mainText + '</p>');
-        if (a.why_it_matters) parts.push('<div class="m-why">' + a.why_it_matters + '</div>');
+        if (mainText) parts.push('<p>' + escHtml(mainText) + '</p>');
+        if (a.why_it_matters) parts.push('<div class="m-why">' + escHtml(a.why_it_matters) + '</div>');
         if (a.key_details && a.key_details.length > 0) {
             var kd = a.key_details.filter(function(k) { return k && k.length > 5; });
             if (kd.length > 0) {
                 parts.push('<div class="m-keypoints"><div class="m-keypoints-label">要点</div><ul>' +
-                    kd.map(function(k) { return '<li>' + k + '</li>'; }).join('') + '</ul></div>');
+                    kd.map(function(k) { return '<li>' + escHtml(k) + '</li>'; }).join('') + '</ul></div>');
             }
         }
         if (parts.length > 0) detailedHtml = '<div class="m-detailed">' + parts.join('') + '</div>';
@@ -245,7 +326,7 @@ function _openModalReal(idx) {
         let imgs = a.extra_images.filter(function(u) { return u !== a.image; });
         if (imgs.length > 0) {
             galleryHtml = '<div class="m-gallery">' + imgs.map(function(u) {
-                return '<img src="' + u + '" onerror="this.style.display=\'none\'" alt="" loading="lazy">';
+                return '<img src="' + escHtml(u) + '" onerror="this.style.display=\'none\'" alt="" loading="lazy">';
             }).join('') + '</div>';
         }
     }
@@ -255,10 +336,11 @@ function _openModalReal(idx) {
     if (a.background) deepHtml += '<div class="m-deep-section"><div class="m-deep-label">背景脉络</div><div class="m-deep-text">' + renderMd(a.background) + '</div></div>';
     if (deepHtml) deepHtml = '<div class="m-deep">' + deepHtml + '</div>';
 
-    // Footer
+    // Footer — safeLink 限制协议为 http/https/mailto，阻止 javascript: 注入
     let footerAction = '';
-    if (a.link && a.link !== '#') {
-        footerAction = '<a href="' + a.link + '" target="_blank" rel="noopener noreferrer" class="m-action" onclick="event.stopPropagation();">阅读原文 →</a>';
+    var _safeUrl = safeLink(a.link);
+    if (_safeUrl) {
+        footerAction = '<a href="' + escHtml(_safeUrl) + '" target="_blank" rel="noopener noreferrer" class="m-action" onclick="event.stopPropagation();">阅读原文 →</a>';
     }
 
     // Feedback buttons — 👍/👎，localStorage 持久化
@@ -267,11 +349,12 @@ function _openModalReal(idx) {
     var _fbCur = _fbMap[itemId] ? _fbMap[itemId].v : null;
     var upCls = _fbCur === 1 ? ' picked' : '';
     var downCls = _fbCur === -1 ? ' picked-bad' : '';
+    var _itemIdSafe = escHtml(itemId);
     var feedbackHtml =
         '<div class="m-feedback">' +
             '<div class="m-feedback-q">这条早报对你有用吗？</div>' +
-            '<button class="m-feedback-btn' + upCls + '" data-fb="up" data-item="' + itemId + '" title="有用">👍</button>' +
-            '<button class="m-feedback-btn' + downCls + '" data-fb="down" data-item="' + itemId + '" title="没用">👎</button>' +
+            '<button class="m-feedback-btn' + upCls + '" data-fb="up" data-item="' + _itemIdSafe + '" title="有用" aria-label="有用">👍</button>' +
+            '<button class="m-feedback-btn' + downCls + '" data-fb="down" data-item="' + _itemIdSafe + '" title="没用" aria-label="没用">👎</button>' +
         '</div>';
 
     // 先移除旧的 TOC sidebar（避免叠加）
@@ -280,7 +363,7 @@ function _openModalReal(idx) {
 
     document.getElementById('modalContent').innerHTML =
         heroHtml +
-        '<button class="m-close" onclick="closeModal()">✕</button>' +
+        '<button class="m-close" onclick="closeModal()" aria-label="关闭详情">✕</button>' +
         '<div class="m-body">' +
             srcBarHtml +
             multiSrcHtml +
@@ -291,9 +374,9 @@ function _openModalReal(idx) {
             galleryHtml +
             deepHtml +
             feedbackHtml +   // ← 👍/👎 反馈
-            '<div class="m-close-bottom" onclick="closeModal()">✕</div>' +
+            '<button type="button" class="m-close-bottom" onclick="closeModal()" aria-label="关闭详情">✕</button>' +
             '<div class="m-footer">' +
-                '<span class="m-footer-src">' + a.reading_minutes + ' min read</span>' +
+                '<span class="m-footer-src">' + escHtml(a.reading_minutes) + ' min read</span>' +
                 footerAction +
             '</div>' +
         '</div>';
@@ -317,7 +400,21 @@ function closeModal() {
     var tocSb = document.querySelector('.m-toc-sidebar');
     if (tocSb) tocSb.remove();
     if (_tocSpyObserver) { try { _tocSpyObserver.disconnect(); } catch(e) {} _tocSpyObserver = null; }
+    // 阅后即焚：标记当前条目已读 + 触发卡片消散
+    if (typeof _currentModalIdx === 'number') {
+        var d = (typeof __data !== 'undefined' && __data) ? __data[_currentModalIdx] : null;
+        var iid = d && (d.item_id || ('idx-' + _currentModalIdx));
+        // 同时尝试从卡片 DOM 取（modal 数据可能不准）
+        var card = document.querySelector('[data-idx="' + _currentModalIdx + '"]');
+        if (card && card.dataset.iid) iid = card.dataset.iid;
+        if (iid) {
+            markRead(iid);
+            _fadeReadCards(iid);
+        }
+    }
 }
+
+var _currentModalIdx = null;
 
 // ═══ Feedback button click (event delegation in modal) ═══
 document.addEventListener('click', function(e) {
@@ -368,6 +465,7 @@ document.addEventListener('click', function(e) {
     bindCardClick(document.getElementById('grid'));
     bindCardClick(document.querySelector('.featured-grid'));
     bindCardClick(document.querySelector('.top3-grid'));
+    bindCardClick(document.querySelector('.vip-list'));
 })();
 
 // ═══ Filters (category AND audience AND search) ═══
@@ -406,10 +504,18 @@ document.querySelectorAll('.a-btn').forEach(function(btn) {
 });
 
 // ═══ Search ═══
-document.getElementById('searchBox').addEventListener('input', function() {
+function _debounce(fn, ms) {
+    var t;
+    return function() {
+        var args = arguments, ctx = this;
+        clearTimeout(t);
+        t = setTimeout(function() { fn.apply(ctx, args); }, ms);
+    };
+}
+document.getElementById('searchBox').addEventListener('input', _debounce(function() {
     _activeQuery = this.value.toLowerCase();
     _applyFilters();
-});
+}, 150));
 
 // ═══ Keyboard ═══
 document.addEventListener('keydown', function(e) {
