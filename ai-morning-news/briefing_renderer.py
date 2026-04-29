@@ -18,6 +18,7 @@ v2 改进：
     python3 briefing_renderer.py --hours 12   # 只取最近 12 小时的事件
 """
 
+import concurrent.futures
 import json
 import sys
 from datetime import datetime, timezone
@@ -151,10 +152,74 @@ def main():
     event_db_path = str(script_dir / settings.get('event_db', 'events.db'))
     store = EventStore(event_db_path)
 
+    # ── 班次固定日历窗口（按发布时间过滤，而非被采集时间） ──
+    # 早班 am：昨天 18:00 → 今天 06:00（12h 夜间）
+    # 晚班 pm：今天 06:00 → 今天 18:00（12h 白天）
+    # 没 shift 时走"滚动 N 小时"兼容手动跑
+    import os as _os
+    from datetime import time as _dtime, timedelta as _td, timezone as _tz
+    _shift = _os.environ.get('BRIEFING_SHIFT', '').lower()
+    window_start = window_end = None
+    if _shift in ('am', 'pm'):
+        _now = datetime.now().astimezone()
+        _today = _now.date()
+        if _shift == 'am':
+            window_start = datetime.combine(_today - _td(days=1), _dtime(18, 0)).astimezone()
+            window_end = datetime.combine(_today, _dtime(6, 0)).astimezone()
+        else:
+            window_start = datetime.combine(_today, _dtime(6, 0)).astimezone()
+            window_end = datetime.combine(_today, _dtime(18, 0)).astimezone()
+        log.info("🕘 发布时间窗口 [%s]: %s ~ %s",
+                 _shift, window_start.strftime('%Y-%m-%d %H:%M'),
+                 window_end.strftime('%Y-%m-%d %H:%M'))
+        # 用一个宽松点的 first_seen_at 窗口（24h）把近期建库事件都捞进来，
+        # 再在下面按 published_at 精筛
+        hours = max(hours, 24)
+
+    def _in_window(pub_raw) -> bool:
+        """pub_raw 可以是 datetime、str（ISO） 或 None"""
+        if window_start is None:
+            return True  # 无 shift 时放行所有（hours 滚动窗模式）
+        if not pub_raw:
+            return False  # 无发布时间的文章排除（保守）
+        try:
+            if isinstance(pub_raw, str):
+                pub_dt = datetime.fromisoformat(pub_raw.replace('Z', '+00:00'))
+            else:
+                pub_dt = pub_raw
+            if pub_dt.tzinfo is None:
+                pub_dt = pub_dt.replace(tzinfo=_tz.utc)
+            pub_local = pub_dt.astimezone()
+            return window_start <= pub_local < window_end
+        except (ValueError, TypeError, AttributeError):
+            return False
+
+    def _event_in_window(event) -> bool:
+        """事件视角的窗口判断：
+        - 任一 evidence 在窗口内 → 放行（覆盖"旧事件今天有新源跟进"场景）
+        - 否则回退看 event.published_at（首次发布也算）
+        这样能正确捕获多源事件：A 源昨天首发，B 源今天跟进 → 进今天的班次
+        """
+        if window_start is None:
+            return True
+        for ev in event.get('evidence_chain', []) or []:
+            if _in_window(ev.get('reported_at')):
+                return True
+        return _in_window(event.get('published_at'))
+
     # ── 尝试使用 canonical events（新模式） ──
     canonical_events = store.get_canonical_events_for_briefing(
         hours=hours, min_importance=0
     )
+
+    # 按发布时间精筛到班次日历窗口（有 shift 时）
+    # 用 _event_in_window：事件 evidence_chain 里有任一条目在班次窗口内即放行，
+    # 这样旧事件的新源跟进也能进入对应班次（多源事件统计才会非零）
+    if window_start is not None:
+        before = len(canonical_events)
+        canonical_events = [e for e in canonical_events if _event_in_window(e)]
+        log.info("🕘 按发布时间过滤：%d → %d 条（窗口外 %d 条被排除）",
+                 before, len(canonical_events), before - len(canonical_events))
 
     use_canonical = len(canonical_events) > 0
     if use_canonical:
@@ -287,9 +352,18 @@ def main():
         try:
             analyzer = create_analyzer_from_config(config)
             if analyzer:
-                log.info("🔄 尝试升级 %d 条 Level 0 高价值条目...", len(level0_upgrade_candidates))
-                upgraded = 0
-                for item in level0_upgrade_candidates:
+                max_workers = max(1, int(config.get('llm', {}).get('max_workers', 4)))
+                log.info("🔄 尝试升级 %d 条 Level 0 高价值条目（并发 %d）...",
+                         len(level0_upgrade_candidates), max_workers)
+
+                def _is_rate_limit_err(msg: str) -> bool:
+                    em = (msg or '').lower()
+                    return any(k in em for k in (
+                        '429', 'rate_limit', 'rate limit', 'overloaded',
+                        'quota', 'too many requests', 'usage limit',
+                    ))
+
+                def _upgrade_one(item):
                     try:
                         result = analyzer.analyze_article(
                             title=item.get('title', ''),
@@ -299,15 +373,41 @@ def main():
                         )
                         if result and result.get('ai_relevant') and result.get('summary'):
                             result['_analysis_level'] = 1
-                            item['analysis'] = result
-                            # 同步更新到事件库
-                            url = item.get('url') or item.get('link', '')
-                            if url:
-                                store.save_analysis(url, result)
-                            upgraded += 1
+                            return item, result, None
                     except Exception as e:
-                        log.warning("  ⚠️ 升级失败 (%s): %s",
-                                    item.get('title', '')[:30], e)
+                        return item, None, str(e)
+                    return item, None, None
+
+                upgraded = 0
+                rate_limit_hit = False
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+                    futures = [pool.submit(_upgrade_one, it) for it in level0_upgrade_candidates]
+                    for fut in concurrent.futures.as_completed(futures):
+                        try:
+                            item, result, err = fut.result()
+                        except concurrent.futures.CancelledError:
+                            continue
+                        if err and _is_rate_limit_err(err):
+                            if not rate_limit_hit:
+                                rate_limit_hit = True
+                                log.warning("🚨 Level 0 升级命中限流（%s），剩余条目跳过，"
+                                            "直接用规则分析结果", err[:80])
+                                for f in futures:
+                                    if not f.done():
+                                        f.cancel()
+                            continue
+                        if err:
+                            log.warning("  ⚠️ 升级失败 (%s): %s",
+                                        item.get('title', '')[:30], err)
+                            continue
+                        if result is None:
+                            continue
+                        item['analysis'] = result
+                        url = item.get('url') or item.get('link', '')
+                        if url:
+                            store.save_analysis(url, result)
+                        upgraded += 1
+
                 if upgraded:
                     store.commit()
                     log.info("  ✅ 成功升级 %d / %d 条", upgraded, len(level0_upgrade_candidates))
@@ -502,6 +602,102 @@ def main():
         log.info("📊 stats.json: %d 条", stats["article_count"])
     except Exception as e:
         log.warning("⚠️ stats.json 写入失败: %s", e)
+
+    # ══════════════════════════════════════════════════════════
+    # 每日重要事项归档（JSON + MD，供未来周报项目消费）
+    # 位置：ai-morning-news/archive/daily_digest/YYYY-MM-DD.{json,md}
+    # 不在 output/ 下 → 不会被 run_daily.sh 推到公开部署仓库
+    # ══════════════════════════════════════════════════════════
+    try:
+        import os as _os
+        today = datetime.now().strftime('%Y-%m-%d')
+        shift = _os.environ.get('BRIEFING_SHIFT', '')
+        suffix = f'-{shift}' if shift in ('am', 'pm') else ''
+        digest_dir = script_dir / 'archive' / 'daily_digest'
+        digest_dir.mkdir(parents=True, exist_ok=True)
+
+        archive_items = []
+        for item in all_items:
+            a = item.get('analysis', {}) or {}
+            if a.get('ai_relevant') is False:
+                continue
+            pub = item.get('published')
+            pub_iso = pub.isoformat() if hasattr(pub, 'isoformat') else (str(pub) if pub else '')
+            archive_items.append({
+                'importance':     a.get('importance', 0),
+                'chinese_title':  a.get('chinese_title') or item.get('title', '')[:80],
+                'title':          item.get('title', ''),
+                'summary':        a.get('summary', ''),
+                'why_it_matters': a.get('why_it_matters', ''),
+                'detailed_content': a.get('detailed_content', ''),
+                'deep_analysis':  a.get('deep_analysis', ''),
+                'background':     a.get('background', ''),
+                'categories':     a.get('categories', []),
+                'audience':       a.get('audience', []),
+                'source_name':    item.get('source_name', ''),
+                'source_tier':    item.get('source_tier', 2),
+                'source_type':    a.get('source_type', ''),
+                'link':           item.get('link', ''),
+                'published':      pub_iso,
+                'cluster_size':   item.get('_cluster_size', 1),
+                'event_status':   item.get('_event_status', 'unknown'),
+                'event_id':       item.get('_event_id', ''),
+                '_analysis_level': a.get('_analysis_level', 0),
+            })
+        archive_items.sort(key=lambda x: (-x['importance'], -x['cluster_size']))
+
+        archive_json = {
+            'date': today,
+            'generated_at': datetime.now(timezone.utc).isoformat(),
+            'total_items': len(archive_items),
+            'digest_editorial': digest.get('editorial', '') if digest else '',
+            'big_event_count': sum(1 for x in archive_items if x['importance'] >= 4),
+            'items': archive_items,
+        }
+        with open(digest_dir / f'{today}{suffix}.json', 'w', encoding='utf-8') as f:
+            json.dump(archive_json, f, ensure_ascii=False, indent=2)
+
+        # Markdown 人读版
+        md = [f'# AI 早报 · {today}', '']
+        if archive_json['digest_editorial']:
+            md.extend(['## 今日速览', '', archive_json['digest_editorial'], ''])
+        big_ones = [x for x in archive_items if x['importance'] >= 4]
+        if big_ones:
+            md.append(f'## 重大事件（{len(big_ones)} 条）')
+            md.append('')
+            for i, it in enumerate(big_ones, 1):
+                md.append(f"### {i}. {it['chinese_title']}")
+                md.append('')
+                md.append(
+                    f"**重要性**: {'⭐' * it['importance']} · "
+                    f"**来源**: {it['source_name']} (tier {it['source_tier']}) · "
+                    f"**多源**: {it['cluster_size']}"
+                )
+                md.append('')
+                if it['why_it_matters']:
+                    md.extend([f"**为什么重要**: {it['why_it_matters']}", ''])
+                if it['deep_analysis']:
+                    md.extend(['**深度解读**:', '', it['deep_analysis'][:1500], ''])
+                if it['link']:
+                    md.extend([f"[阅读原文]({it['link']})", ''])
+                md.extend(['---', ''])
+        minor = [x for x in archive_items if x['importance'] < 4]
+        if minor:
+            md.extend([f'## 次要条目（{len(minor)} 条，供周报检索）', ''])
+            for i, it in enumerate(minor, 1):
+                title = it['chinese_title'] or it['title'][:80]
+                why = it['why_it_matters'] or it['summary'][:100]
+                md.append(f"- **[{i}]** {title} · *{it['source_name']}* (importance={it['importance']})")
+                if why:
+                    md.append(f"  - {why}")
+            md.append('')
+        with open(digest_dir / f'{today}{suffix}.md', 'w', encoding='utf-8') as f:
+            f.write('\n'.join(md))
+
+        log.info("📦 每日归档: %s%s（总 %d 条，重大 %d 条）",
+                 today, suffix, len(archive_items), len(big_ones))
+    except Exception as e:
+        log.warning("⚠️ 每日归档写入失败: %s", e)
 
     # 标记已渲染
     if use_canonical:

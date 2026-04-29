@@ -648,11 +648,14 @@ class EventStore:
         """
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
 
+        # 用 last_updated_at 表示"事件近期是否仍在活跃/被跟进"：
+        # 一个事件可能 04-27 首次建库 (first_seen_at)，04-29 仍有新源跟进
+        # → last_updated_at 会被刷到 04-29，应进入今天的候选池供窗口筛选
         rows = self.db.execute("""
             SELECT * FROM canonical_events
-            WHERE first_seen_at >= ?
+            WHERE last_updated_at >= ?
               AND importance >= ?
-            ORDER BY importance DESC, first_seen_at DESC
+            ORDER BY importance DESC, last_updated_at DESC
         """, (cutoff, min_importance)).fetchall()
 
         events = []
