@@ -40,6 +40,8 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 
 from logger import get_logger
+# LLMCache 抽离到独立模块；此处 re-export 保持 `from llm_analyzer import LLMCache` 向后兼容
+from llm_cache import LLMCache  # noqa: F401
 log = get_logger('llm_analyzer')
 
 
@@ -110,10 +112,12 @@ SYSTEM_PROMPT = _loaded_system if _loaded_system else """你是 AI 行业分析�
 如果文章与 AI/ML/大模型/深度学习无关，返回：{"ai_relevant":false}
 
 如果相关，返回以下格式（所有字段必填，不得留空）：
-{"ai_relevant":true,"chinese_title":"中文标题，15-25字","summary":"一句话概要，50字以内","why_it_matters":"这意味着什么，50字以内","key_details":["要点1(40字内)","要点2(40字内)","要点3(40字内)"],"detailed_content":"深度解读，支持Markdown，见下方说明","background":"背景脉络，150字以内","deep_analysis":"深层分析与影响判断，150字以内","importance":3,"categories":["分类"],"source_type":"news"}
+{"ai_relevant":true,"chinese_title":"中文标题，完整成句，20-40字","summary":"一句话概要，50字以内","why_it_matters":"这意味着什么，50字以内","key_details":["要点1(40字内)","要点2(40字内)","要点3(40字内)"],"detailed_content":"深度解读，支持Markdown，见下方说明","background":"背景脉络，150字以内","deep_analysis":"深层分析与影响判断，150字以内","importance":3,"categories":["分类"],"source_type":"news"}
 
 字段说明：
-- chinese_title：中文新闻标题，简洁有力，15-25字。例如"OpenAI发布GPT-5：数学推理大幅提升"
+- chinese_title：中文新闻标题，简洁有力，20-40字，**必须是完整句子，不要在半截词处停下**。
+  · 好例：「OpenAI发布GPT-5：数学推理能力提升18%」、「Anthropic 推出 Claude Opus 4.7，编程能力达 SOTA」
+  · 反例：「英伟达发布Nemotron 3 Nano Omni：30B混合MoE多模态开源模」（"模"是"模型"被切了）
 - summary：客观陈述事实，如"OpenAI发布GPT-5，数学推理提升18%"
 - why_it_matters：像给朋友讲新闻，说清楚"所以呢"
 - key_details：3个核心要点，每条40字以内
@@ -186,7 +190,12 @@ ARTICLE_SCHEMA = {
             "type": "array",
             "items": {"type": "string"}
         },
-        "source_type": {"type": "string"}
+        "source_type": {"type": "string"},
+        "event_signature": {"type": "string"},
+        "audience": {
+            "type": "array",
+            "items": {"type": "string"}
+        }
     },
     "required": ["ai_relevant"],
     "additionalProperties": False
@@ -200,116 +209,6 @@ DIGEST_SCHEMA = {
     "required": ["editorial"],
     "additionalProperties": False
 }
-
-
-# ---------------------------------------------------------------------------
-# LLM 结果缓存（SQLite，跨运行持久化）
-# ---------------------------------------------------------------------------
-
-class LLMCache:
-    """LLM 分析结果的跨运行缓存。
-
-    以 URL hash 为 key，缓存完整的 LLM 分析结果 JSON。
-    TTL 默认 7 天，过期自动清理。
-
-    用法:
-        cache = LLMCache("llm_cache.db")
-        result = cache.get(url)
-        if result is None:
-            result = analyzer.analyze_article(...)
-            cache.set(url, result)
-        cache.close()
-    """
-
-    def __init__(self, db_path: str, ttl_days: int = 7):
-        self.ttl_days = ttl_days
-        self.db = sqlite3.connect(db_path, check_same_thread=False)
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.execute("""
-            CREATE TABLE IF NOT EXISTS llm_cache (
-                url_hash TEXT PRIMARY KEY,
-                result_json TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            )
-        """)
-        self.db.commit()
-        self._hits = 0
-        self._misses = 0
-
-    @staticmethod
-    def _hash(url: str) -> str:
-        normalized = url.strip().rstrip('/').lower()
-        normalized = re.sub(r'^https?://(www\.)?', '', normalized)
-        # 仅去除 fragment (#) 和无关的追踪参数，保留关键查询参数
-        # 例如 YouTube 的 ?v=XXX 必须保留
-        normalized = re.sub(r'#.*$', '', normalized)
-        # 去除常见追踪参数但保留其他参数
-        normalized = re.sub(r'[?&](utm_\w+|ref|fbclid|gclid|source|mc_\w+)=[^&]*', '', normalized)
-        # 清理首个参数被删后遗留的 & 变 ?
-        normalized = re.sub(r'\?&', '?', normalized)
-        normalized = re.sub(r'\?$', '', normalized)
-        return hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:32]
-
-    def get(self, url: str) -> Optional[dict]:
-        """查找缓存。返回 None 表示 miss。"""
-        if not url:
-            self._misses += 1
-            return None
-        h = self._hash(url)
-        row = self.db.execute(
-            "SELECT result_json, created_at FROM llm_cache WHERE url_hash = ?", (h,)
-        ).fetchone()
-        if row is None:
-            self._misses += 1
-            return None
-        # 检查 TTL
-        try:
-            created = datetime.fromisoformat(row[1])
-            age_days = (datetime.now(timezone.utc) - created).total_seconds() / 86400
-            if age_days > self.ttl_days:
-                self.db.execute("DELETE FROM llm_cache WHERE url_hash = ?", (h,))
-                self.db.commit()
-                self._misses += 1
-                return None
-        except (ValueError, TypeError):
-            pass
-        self._hits += 1
-        return json.loads(row[0])
-
-    def set(self, url: str, result: dict):
-        """写入缓存。"""
-        if not url or not result:
-            return
-        h = self._hash(url)
-        self.db.execute(
-            "INSERT OR REPLACE INTO llm_cache (url_hash, result_json, created_at) VALUES (?, ?, ?)",
-            (h, json.dumps(result, ensure_ascii=False), datetime.now(timezone.utc).isoformat())
-        )
-        self.db.commit()
-
-    def delete(self, url: str):
-        """删除指定 URL 的缓存条目。"""
-        if not url:
-            return
-        h = self._hash(url)
-        self.db.execute("DELETE FROM llm_cache WHERE url_hash = ?", (h,))
-        self.db.commit()
-
-    def cleanup(self):
-        """清理过期条目。"""
-        cutoff = datetime.now(timezone.utc).isoformat()
-        self.db.execute(
-            "DELETE FROM llm_cache WHERE created_at < datetime(?, ?)",
-            (cutoff, f'-{self.ttl_days} days')
-        )
-        self.db.commit()
-
-    @property
-    def stats(self) -> str:
-        return f"hits={self._hits}, misses={self._misses}"
-
-    def close(self):
-        self.db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -584,7 +483,7 @@ class LLMAnalyzer:
 
         result = {
             "ai_relevant": True,
-            "chinese_title": str(data.get("chinese_title") or "").strip()[:40],
+            "chinese_title": str(data.get("chinese_title") or "").strip()[:60],
             "summary": str(data.get("summary") or "")[:150],
             "why_it_matters": str(data.get("why_it_matters", ""))[:200],
             "key_details": [],
@@ -598,6 +497,8 @@ class LLMAnalyzer:
             "source_type": str(data.get("source_type", "news")),
             "reading_minutes": 1,
             "audience": [],
+            # 跨语聚类用：英文规范化的事件指纹（"OpenAI release GPT-5"），≤80 字符
+            "event_signature": str(data.get("event_signature", ""))[:80].strip(),
         }
 
         # importance
@@ -746,7 +647,7 @@ class LLMAnalyzer:
 
             if need_retry:
                 summary_hint = summary[:80] if summary else ""
-                retry_prompt = f'分析以下新闻并返回JSON。标题：{title}\n摘要：{summary_hint}\n\n直接返回JSON，第一个字符必须是{{。与AI相关返回{{"ai_relevant":true,"chinese_title":"中文标题15-25字","summary":"一句话概要50字","why_it_matters":"意义50字","key_details":["要点1","要点2","要点3"],"detailed_content":"按提纲展开详述400-800字","background":"背景80字","deep_analysis":"深度分析80字","importance":3,"categories":["分类"],"source_type":"news"}}，无关返回{{"ai_relevant":false}}'
+                retry_prompt = f'分析以下新闻并返回JSON。标题：{title}\n摘要：{summary_hint}\n\n直接返回JSON，第一个字符必须是{{。与AI相关返回{{"ai_relevant":true,"chinese_title":"中文标题20-40字必须完整成句","summary":"一句话概要50字","why_it_matters":"意义50字","key_details":["要点1","要点2","要点3"],"detailed_content":"按提纲展开详述400-800字","background":"背景80字","deep_analysis":"深度分析80字","importance":3,"categories":["分类"],"source_type":"news"}}，无关返回{{"ai_relevant":false}}'
                 response2 = self._call_api(
                     [{"role": "user", "content": retry_prompt}],
                     json_schema=ARTICLE_SCHEMA,
@@ -873,7 +774,7 @@ class LLMAnalyzer:
 
             if data:
                 field_map = {
-                    "chinese_title": (40, "chinese_title"),
+                    "chinese_title": (60, "chinese_title"),
                     "detailed_content": (3000, "detailed_content"),
                     "background": (600, "background"),
                     "deep_analysis": (600, "deep_analysis"),
