@@ -14,6 +14,37 @@
 set -e
 
 # ────────────────────────────────────────────────
+# Python 版本锁定 + 启动预检
+# ────────────────────────────────────────────────
+# 历史问题：launchd 环境 PATH 按 plist 解析，/usr/local/bin/python3 可能是 3.9，
+# 导致 claude_proxy.py (用 PEP 604 `dict | None`) 启动即崩，流水线 2 小时空转。
+# 锁到 Anaconda 的 3.12（若不存在则回退到 /opt/homebrew/bin/python3），然后严格版本检查。
+if [ -x "/opt/anaconda3/bin/python3" ]; then
+    PYTHON="/opt/anaconda3/bin/python3"
+elif [ -x "/opt/homebrew/bin/python3" ]; then
+    PYTHON="/opt/homebrew/bin/python3"
+else
+    PYTHON="python3"
+fi
+export PYTHON
+
+_PYVER=$("$PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>&1)
+if ! "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)' 2>/dev/null; then
+    # 版本过低 → 发 TG 告警后终止（绝不静默跑空转）
+    ENV_FILE_EARLY="$HOME/.config/ai-briefing/.env"
+    [ -f "$ENV_FILE_EARLY" ] && . "$ENV_FILE_EARLY"
+    if [ -n "$TG_BOT_TOKEN" ] && [ -n "$TG_CHAT_ID" ]; then
+        curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\":\"${TG_CHAT_ID}\",\"text\":\"🚨 AI 早报启动失败：Python 版本 ${_PYVER} < 3.10（锁定路径 ${PYTHON}）\",\"parse_mode\":\"HTML\"}" \
+            > /dev/null 2>&1 || true
+    fi
+    echo "$(date '+%Y-%m-%d %H:%M:%S') 🚨 PYTHON VERSION CHECK FAILED: $PYTHON = $_PYVER (need >=3.10)" \
+        >> "$(cd "$(dirname "$0")" && pwd)/daily_run.log"
+    exit 1
+fi
+
+# ────────────────────────────────────────────────
 # 互斥锁
 # ────────────────────────────────────────────────
 _SCRIPT_DIR_EARLY="$(cd "$(dirname "$0")" && pwd)"
@@ -36,6 +67,7 @@ trap 'rm -f "$PIDFILE"' EXIT
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR"
 LOG_FILE="$PROJECT_DIR/daily_run.log"
+_RUN_START_TS=$(date +%s)
 
 # ────────────────────────────────────────────────
 # 日志轮转（1MB, 保留 7 份）
@@ -67,7 +99,7 @@ send_tg() {
     local message="$1"
     curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
         -H "Content-Type: application/json" \
-        -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": $(printf '%s' "$message" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))'), \"parse_mode\": \"HTML\", \"disable_web_page_preview\": false}" \
+        -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": $(printf '%s' "$message" | "$PYTHON" -c 'import sys,json; print(json.dumps(sys.stdin.read()))'), \"parse_mode\": \"HTML\", \"disable_web_page_preview\": false}" \
         > /dev/null 2>&1 || true
 }
 
@@ -86,7 +118,7 @@ cd "$PROJECT_DIR"
 PROXY_PID=""
 PROXY_STARTED_BY_US=false
 
-LLM_URL=$(python3 -c "import json; print(json.load(open('config.json'))['llm']['base_url'])" 2>/dev/null || echo "http://localhost:3456/v1")
+LLM_URL=$("$PYTHON" -c "import json; print(json.load(open('config.json'))['llm']['base_url'])" 2>/dev/null || echo "http://localhost:3456/v1")
 echo "检查 LLM 服务 ($LLM_URL)..." >> "$LOG_FILE"
 
 NO_LLM=""
@@ -95,7 +127,7 @@ if curl -s --connect-timeout 5 "${LLM_URL}/models" > /dev/null 2>&1; then
 else
     if [ -f "$PROJECT_DIR/claude_proxy.py" ]; then
         echo "  启动 claude_proxy.py..." >> "$LOG_FILE"
-        python3 -u "$PROJECT_DIR/claude_proxy.py" >> "$LOG_FILE" 2>&1 &
+        "$PYTHON" -u "$PROJECT_DIR/claude_proxy.py" >> "$LOG_FILE" 2>&1 &
         PROXY_PID=$!
         PROXY_STARTED_BY_US=true
 
@@ -108,12 +140,21 @@ else
         done
 
         if ! curl -s --connect-timeout 5 "${LLM_URL}/models" > /dev/null 2>&1; then
-            echo "  代理启动超时，使用 --no-llm" >> "$LOG_FILE"
-            NO_LLM="--no-llm"
+            # 代理启动失败 → 发 TG 告警并退出，绝不静默降级跑空转
+            # （Python 版本预检已保证 3.10+，代理仍挂说明 claude CLI / keychain / 代码真故障）
+            echo "  ❌ 代理启动失败，终止流程（不再静默 --no-llm）" >> "$LOG_FILE"
+            if [ -n "$TG_BOT_TOKEN" ] && [ -n "$TG_CHAT_ID" ]; then
+                _ERR_TAIL=$(tail -30 "$LOG_FILE" 2>/dev/null | grep -E "Error|Traceback|line [0-9]" | tail -5 | sed 's/"/\\"/g' | tr '\n' ' ' | cut -c1-400)
+                curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+                    -H "Content-Type: application/json" \
+                    -d "{\"chat_id\":\"${TG_CHAT_ID}\",\"text\":\"🚨 AI 早报启动失败: claude_proxy 30s 内无响应\\n\\n最近错误:\\n${_ERR_TAIL}\\n\\n请检查 claude auth / daily_run.log\",\"parse_mode\":\"HTML\"}" \
+                    > /dev/null 2>&1 || true
+            fi
             if [ -n "$PROXY_PID" ]; then
                 kill "$PROXY_PID" 2>/dev/null || true
                 PROXY_PID=""
             fi
+            exit 1
         fi
     else
         NO_LLM="--no-llm"
@@ -130,21 +171,44 @@ cleanup_proxy() {
 trap cleanup_proxy EXIT
 
 echo "运行出报前采集..." >> "$LOG_FILE"
-python3 -u "$PROJECT_DIR/collector.py" ${NO_LLM:-} >> "$LOG_FILE" 2>&1 || {
+"$PYTHON" -u "$PROJECT_DIR/collector.py" ${NO_LLM:-} >> "$LOG_FILE" 2>&1 || {
     echo "  ⚠️ 出报前采集失败，使用事件库中现有数据继续出报" >> "$LOG_FILE"
 }
 
 # ────────────────────────────────────────────────
 # 第二步：从事件库渲染页面
 # ────────────────────────────────────────────────
+# 早/晚班：按当前小时判断（06:00 触发 = 早班，覆盖前夜 18:00→今晨 06:00）
+CURRENT_HOUR=$(date '+%H' | sed 's/^0//')
+if [ "${CURRENT_HOUR:-0}" -lt 12 ] 2>/dev/null; then
+    SHIFT="am"
+    SHIFT_LABEL="🌅 早班 (前夜→今晨)"
+else
+    SHIFT="pm"
+    SHIFT_LABEL="🌆 晚班 (今晨→今晚)"
+fi
+export BRIEFING_SHIFT="$SHIFT"
+echo "班次: $SHIFT_LABEL" >> "$LOG_FILE"
+
 echo "开始渲染页面..." >> "$LOG_FILE"
-if ! python3 -u "$PROJECT_DIR/briefing_renderer.py" >> "$LOG_FILE" 2>&1; then
+if ! "$PYTHON" -u "$PROJECT_DIR/briefing_renderer.py" --hours 12 >> "$LOG_FILE" 2>&1; then
     echo "  ❌ 渲染失败" >> "$LOG_FILE"
     send_tg "<b>AI 早报渲染失败</b>
 请检查 daily_run.log"
     exit 1
 fi
 echo "  页面渲染完成" >> "$LOG_FILE"
+
+# 生成跑步健康仪表盘（读 output/run_health.jsonl，含过往跑次趋势）
+# 本次 RUN_SUMMARY 在脚本末尾才写 jsonl，所以 dashboard 反映的是"上次及以前"的记录；
+# 下次跑时本次就会进 dashboard。这个延迟 1 次的折中使部署流程更简单。
+"$PYTHON" -u "$PROJECT_DIR/dashboard_generator.py" >> "$LOG_FILE" 2>&1 || \
+    echo "  ⚠️ dashboard 生成失败，跳过" >> "$LOG_FILE"
+# 同时放一份到 output/archive/（走 workflow 白名单 archive/** 部署，避免改 deploy.yml）
+if [ -f "$PROJECT_DIR/output/dashboard.html" ]; then
+    mkdir -p "$PROJECT_DIR/output/archive"
+    cp "$PROJECT_DIR/output/dashboard.html" "$PROJECT_DIR/output/archive/dashboard.html"
+fi
 
 # ────────────────────────────────────────────────
 # 第三步：归档
@@ -153,9 +217,9 @@ ARCHIVE_DIR="$PROJECT_DIR/output/archive"
 TODAY_DATE=$(date '+%Y-%m-%d')
 mkdir -p "$ARCHIVE_DIR"
 if [ -f "$PROJECT_DIR/output/index.html" ]; then
-    cp "$PROJECT_DIR/output/index.html" "$ARCHIVE_DIR/${TODAY_DATE}.html"
-    cp "$PROJECT_DIR/output/modal_data.js" "$ARCHIVE_DIR/${TODAY_DATE}_modal.js" 2>/dev/null || true
-    echo "  已归档: archive/${TODAY_DATE}.html" >> "$LOG_FILE"
+    cp "$PROJECT_DIR/output/index.html" "$ARCHIVE_DIR/${TODAY_DATE}-${SHIFT}.html"
+    cp "$PROJECT_DIR/output/modal_data.js" "$ARCHIVE_DIR/${TODAY_DATE}-${SHIFT}_modal.js" 2>/dev/null || true
+    echo "  已归档: archive/${TODAY_DATE}-${SHIFT}.html" >> "$LOG_FILE"
 fi
 
 # 事件库滚动备份（保留最近 7 份），在渲染成功后才备份，保证备份是"可用的快照"
@@ -166,16 +230,31 @@ for DB in events.db dedup.db llm_cache.db; do
         cp "$SRC" "$PROJECT_DIR/${DB}.bak.${BACKUP_DATE}" 2>>"$LOG_FILE" || true
     fi
 done
-# 清理 7 天前的备份
-find "$PROJECT_DIR" -maxdepth 1 -name "*.db.bak.*" -mtime +7 -delete 2>/dev/null || true
+# 清理 7 天前的备份（含 db 滚动备份、历史修复前快照、损坏 db 文件）
+find "$PROJECT_DIR" -maxdepth 1 -type f \( \
+    -name "*.db.bak.*" -o \
+    -name "*.db.before-fix-*" -o \
+    -name "*.db.bak" -o \
+    -name "*.corrupt" \
+    \) -mtime +7 -delete 2>/dev/null || true
+
+# 异地备份到 iCloud Drive（防本地磁盘事故全丢）
+ICLOUD_BACKUP_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs/AI早报备份"
+if [ -d "$HOME/Library/Mobile Documents/com~apple~CloudDocs" ]; then
+    mkdir -p "$ICLOUD_BACKUP_DIR"
+    cp "$PROJECT_DIR/events.db" "$ICLOUD_BACKUP_DIR/events.db.bak.${BACKUP_DATE}" 2>>"$LOG_FILE" || true
+    # iCloud 端只保留 14 份（半月，比本地宽松）
+    find "$ICLOUD_BACKUP_DIR" -maxdepth 1 -name "events.db.bak.*" -mtime +14 -delete 2>/dev/null || true
+    echo "  ☁️  iCloud 备份: events.db.bak.${BACKUP_DATE}" >> "$LOG_FILE"
+fi
 
 # 从 stats.json 读取文章数量与 LLM 覆盖率
 STATS_FILE="$PROJECT_DIR/output/stats.json"
 if [ -f "$STATS_FILE" ]; then
-    ARTICLE_COUNT=$(python3 -c "import json; print(json.load(open('$STATS_FILE'))['article_count'])" 2>/dev/null || echo "?")
-    LLM_COVERAGE=$(python3 -c "import json; print(json.load(open('$STATS_FILE')).get('llm_coverage', ''))" 2>/dev/null || echo "")
-    LLM_COUNT=$(python3 -c "import json; print(json.load(open('$STATS_FILE')).get('llm_count', ''))" 2>/dev/null || echo "")
-    MULTI_SRC_COUNT=$(python3 -c "import json; print(json.load(open('$STATS_FILE')).get('multi_source_count', ''))" 2>/dev/null || echo "")
+    ARTICLE_COUNT=$("$PYTHON" -c "import json; print(json.load(open('$STATS_FILE'))['article_count'])" 2>/dev/null || echo "?")
+    LLM_COVERAGE=$("$PYTHON" -c "import json; print(json.load(open('$STATS_FILE')).get('llm_coverage', ''))" 2>/dev/null || echo "")
+    LLM_COUNT=$("$PYTHON" -c "import json; print(json.load(open('$STATS_FILE')).get('llm_count', ''))" 2>/dev/null || echo "")
+    MULTI_SRC_COUNT=$("$PYTHON" -c "import json; print(json.load(open('$STATS_FILE')).get('multi_source_count', ''))" 2>/dev/null || echo "")
 else
     ARTICLE_COUNT="?"
     LLM_COVERAGE=""
@@ -192,7 +271,7 @@ fi
 LLM_COVERAGE_LINE=""
 LLM_COVERAGE_WARNING=""
 if [ -n "$LLM_COVERAGE" ]; then
-    COVERAGE_PCT=$(python3 -c "print(int(round(float('$LLM_COVERAGE') * 100)))" 2>/dev/null || echo "")
+    COVERAGE_PCT=$("$PYTHON" -c "print(int(round(float('$LLM_COVERAGE') * 100)))" 2>/dev/null || echo "")
     if [ -n "$COVERAGE_PCT" ]; then
         LLM_COVERAGE_LINE="LLM 深度分析覆盖率: ${COVERAGE_PCT}% (${LLM_COUNT} / ${ARTICLE_COUNT})"
         # < 50% 触发告警
@@ -229,6 +308,7 @@ if [ -n "$REPO_URL" ] && [ -f "$PROJECT_DIR/output/index.html" ]; then
         cp "$PROJECT_DIR/output/index.html" "$DEPLOY_TMP/"
         cp "$PROJECT_DIR/output/modal_data.js" "$DEPLOY_TMP/" 2>/dev/null || true
         cp "$PROJECT_DIR/output/stats.json" "$DEPLOY_TMP/" 2>/dev/null || true
+        cp "$PROJECT_DIR/output/dashboard.html" "$DEPLOY_TMP/" 2>/dev/null || true
         if [ -d "$PROJECT_DIR/output/archive" ]; then
             mkdir -p "$DEPLOY_TMP/archive"
             cp -r "$PROJECT_DIR/output/archive/"* "$DEPLOY_TMP/archive/" 2>/dev/null || true
@@ -263,30 +343,74 @@ fi
 # ────────────────────────────────────────────────
 TODAY=$(date '+%Y年%m月%d日')
 BRIEFING_URL="${BRIEFING_URL:-}"
-ARCHIVE_URL="${BRIEFING_URL%/}/archive/${TODAY_DATE}.html"
+ARCHIVE_URL="${BRIEFING_URL%/}/archive/${TODAY_DATE}-${SHIFT}.html"
+
+# 本次总用时
+_RUN_END_TS=$(date +%s)
+_DURATION_SEC=$(( _RUN_END_TS - _RUN_START_TS ))
+_DURATION_MIN=$(( _DURATION_SEC / 60 ))
+_DURATION_REM=$(( _DURATION_SEC % 60 ))
+DURATION_LINE="⏱ 用时: ${_DURATION_MIN} 分 ${_DURATION_REM} 秒"
+
+# 源健康度统计
+HEALTH_JSON="$PROJECT_DIR/source_health.json"
+SRC_OK=0; SRC_FAIL=0; SRC_DEAD=0
+if [ -f "$HEALTH_JSON" ]; then
+    SRC_OK=$("$PYTHON" -c "import json; d=json.load(open('$HEALTH_JSON')); print(sum(1 for v in d.values() if v.get('status')=='ok'))" 2>/dev/null || echo 0)
+    SRC_FAIL=$("$PYTHON" -c "import json; d=json.load(open('$HEALTH_JSON')); print(sum(1 for v in d.values() if v.get('consecutive_failures',0)>=3 and v.get('consecutive_failures',0)<10))" 2>/dev/null || echo 0)
+    SRC_DEAD=$("$PYTHON" -c "import json; d=json.load(open('$HEALTH_JSON')); print(sum(1 for v in d.values() if v.get('consecutive_failures',0)>=10))" 2>/dev/null || echo 0)
+fi
+SRC_LINE="📡 源健康: ${SRC_OK} OK / ${SRC_FAIL} 告警 / ${SRC_DEAD} 死源"
+
 if [ "$DEPLOY_OK" = true ]; then
-    send_tg "<b>AI 早报 · ${TODAY}</b>
+    # 消息 1：早报主体（内容摘要 + 阅读/归档链接）
+    send_tg "<b>AI 早报 · ${TODAY} · ${SHIFT_LABEL}</b>
 
-今日共收录 ${ARTICLE_COUNT} 条 AI 资讯
-${LLM_COVERAGE_LINE:+${LLM_COVERAGE_LINE}
-}${MULTI_SRC_COUNT:+多源交叉确认: ${MULTI_SRC_COUNT} 个事件
-}${NO_LLM:+LLM 服务不可用，本次跳过了深度分析
+📊 本班次共收录 <b>${ARTICLE_COUNT}</b> 条 AI 资讯（近 12h）
+${LLM_COVERAGE_LINE:+🧠 ${LLM_COVERAGE_LINE}
+}${MULTI_SRC_COUNT:+🔗 多源交叉确认: <b>${MULTI_SRC_COUNT}</b> 个事件
+}${NO_LLM:+⚠️ LLM 服务不可用，本次跳过了深度分析
 }${LLM_COVERAGE_WARNING:+${LLM_COVERAGE_WARNING}
-}${HEALTH_WARNING:+${HEALTH_WARNING}
+}${HEALTH_WARNING:+⚠️ ${HEALTH_WARNING}
 }
-<a href=\"${BRIEFING_URL}\">点击阅读今日早报</a>
-<a href=\"${ARCHIVE_URL}\">查看归档版本</a>"
-else
-    send_tg "<b>AI 早报 · ${TODAY}</b>
+<a href=\"${BRIEFING_URL}\">📖 阅读最新早报</a>
+<a href=\"${ARCHIVE_URL}\">📂 本班次归档</a>"
 
-已渲染 ${ARTICLE_COUNT} 条资讯，但部署失败
-页面未更新，请检查 git 配置"
+    # 消息 2：跑步仪表盘（独立推送，健康指标 + 趋势链接）
+    send_tg "<b>📊 跑步仪表盘 · ${TODAY}</b>
+
+本次运行 ✅ 正常
+${SRC_LINE}
+${DURATION_LINE}
+
+<a href=\"${BRIEFING_URL%/}/archive/dashboard.html\">📈 查看完整趋势仪表盘</a>"
+
+    # kept=0 静默失败防御：单独发醒目告警
+    if [ "${ARTICLE_COUNT:-0}" = "0" ] || [ "${ARTICLE_COUNT:-?}" = "?" ]; then
+        send_tg "<b>🚨 早报告警：本班次条目数为 0</b>
+
+班次：${SHIFT_LABEL}
+${SRC_LINE}
+LLM 可用：$([ -z "$NO_LLM" ] && echo '✅' || echo '❌')
+
+可能原因：① LLM 链路故障 ② 时间窗口无新闻 ③ 聚类全部过滤
+
+请打开 daily_run.log 检查 RUN_SUMMARY 行 + 上下文"
+    fi
+else
+    send_tg "<b>AI 早报 · ${TODAY} · ${SHIFT_LABEL}</b>
+
+已渲染 ${ARTICLE_COUNT} 条资讯，但 <b>部署失败</b>
+${DURATION_LINE}
+${SRC_LINE}
+
+请检查 git 配置 / 日志"
 fi
 
 # ────────────────────────────────────────────────
 # 结构化质量摘要（machine-readable，可被监控脚本 tail -n1 | jq 消费）
 # ────────────────────────────────────────────────
-SUMMARY_JSON=$(python3 -c "
+SUMMARY_JSON=$("$PYTHON" -c "
 import json, os
 from datetime import datetime, timezone
 stats_path = '$STATS_FILE'
@@ -308,6 +432,8 @@ failing = sum(1 for _, v in health.items() if v.get('consecutive_failures', 0) >
 dead = [n for n, v in health.items() if v.get('consecutive_failures', 0) >= 10][:5]
 summary = {
     'run_id': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+    'shift': '$SHIFT',
+    'duration_sec': $_DURATION_SEC,
     'kept': stats.get('article_count', 0),
     'llm_coverage': stats.get('llm_coverage'),
     'llm_count': stats.get('llm_count'),
@@ -319,7 +445,42 @@ summary = {
     'llm_available': '$NO_LLM' == '',
 }
 print('RUN_SUMMARY ' + json.dumps(summary, ensure_ascii=False))
+# 追加到 run_health.jsonl 供 dashboard / 周报消费
+health_log = os.path.join(os.path.dirname(stats_path), 'run_health.jsonl')
+try:
+    with open(health_log, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(summary, ensure_ascii=False) + '\n')
+except Exception:
+    pass
 " 2>/dev/null || echo "RUN_SUMMARY {}")
 echo "$SUMMARY_JSON" >> "$LOG_FILE"
+
+# ────────────────────────────────────────────────
+# Dashboard 后置补部署：本次 RUN_SUMMARY 已写入 jsonl，重新生成 dashboard
+# 让"最新跑"立刻可见（不再滞后 1 次）。只 push 单文件，几秒完成。
+# ────────────────────────────────────────────────
+if [ "$DEPLOY_OK" = true ] && [ -d "$PROJECT_DIR/output/.git" ]; then
+    # 早报阶段是用 $DEPLOY_TMP 临时仓库 push 的，$PROJECT_DIR/output 此刻已落后于 origin。
+    # 先 fetch + reset --hard 同步到 origin，再生成 dashboard、commit、push，
+    # 避免 non-fast-forward / 文件冲突导致 push 被拒。
+    # 注：output/ 全部内容都是部署产物，本地无原创修改，reset 是安全的。
+    (cd "$PROJECT_DIR/output" && \
+     git fetch origin main 2>>"$LOG_FILE" && \
+     git reset --hard origin/main 2>>"$LOG_FILE" && \
+     git clean -fd 2>>"$LOG_FILE") || \
+        echo "  ⚠️ dashboard 同步 origin 失败" >> "$LOG_FILE"
+
+    "$PYTHON" -u "$PROJECT_DIR/dashboard_generator.py" >> "$LOG_FILE" 2>&1 || true
+    if [ -f "$PROJECT_DIR/output/dashboard.html" ]; then
+        cp "$PROJECT_DIR/output/dashboard.html" "$PROJECT_DIR/output/archive/dashboard.html"
+        (cd "$PROJECT_DIR/output" && \
+         git add dashboard.html archive/dashboard.html 2>/dev/null && \
+         git -c user.email="hawaha113@protonmail.com" -c user.name="hawaha112" \
+             commit -m "dashboard: post-run update with latest RUN_SUMMARY" 2>>"$LOG_FILE" && \
+         git push origin main 2>>"$LOG_FILE") && \
+            echo "  📊 dashboard 后置部署完成（含本次 RUN_SUMMARY）" >> "$LOG_FILE" || \
+            echo "  ⚠️ dashboard 后置部署失败（不影响主流程）" >> "$LOG_FILE"
+    fi
+fi
 
 echo "每日出报任务完成" >> "$LOG_FILE"
