@@ -7,13 +7,13 @@
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="zh_CN">
-<meta property="og:title" content="AI 早报 · $date_str">
+<meta property="og:title" content="$briefing_title · $date_str">
 <meta property="og:description" content="$meta_description">
-<meta property="og:site_name" content="AI 早报">
+<meta property="og:site_name" content="$briefing_title">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="AI 早报 · $date_str">
+<meta name="twitter:title" content="$briefing_title · $date_str">
 <meta name="twitter:description" content="$meta_description">
-<title>AI 早报 · $date_str</title>
+<title>$briefing_title · $date_str</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -25,7 +25,7 @@ $css_content
 <!-- Header -->
 <header class="header">
 <div class="header-inner">
-    <div class="h-title">📡 AI 早报</div>
+    <div class="h-title">$briefing_emoji $briefing_title</div>
     <div class="h-date">$date_str 周$weekday · $time_str</div>
     <div class="search-wrap">
         <input type="text" class="search-box" id="searchBox" placeholder="搜索…" aria-label="搜索">
@@ -68,7 +68,7 @@ $vip_html
 
 <!-- Footer -->
 <footer class="footer">
-    AI 早报 · <b>$sources_count</b> 个信息源 · <b>$total</b> 篇资讯 · $date_str
+    $briefing_title · <b>$sources_count</b> 个信息源 · <b>$total</b> 篇资讯 · $date_str
     · <a href="archive/dashboard.html" class="footer-link">📊 跑步仪表盘 →</a>
 </footer>
 

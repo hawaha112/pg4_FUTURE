@@ -3,7 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI 早报 · 2026年04月16日</title>
+<meta name="description" content="今日AI生态呈现三重张力：OpenAI密集布局语音智能，实时语音模型直指客服、教育、翻译场景，同步开放GPT-5.5-Cyber强化网络安全布局；与此同时，中国AI势力在全球视野中持续升温，DeepSeek赢得跨界赞誉，Redis创始人亲自为其造引擎，字节豆包开启付费商业化；而硅谷旧账悄然曝光，微软-OpenAI…">
+<meta name="robots" content="index,follow">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:title" content="AI 早报 · 2026年05月08日">
+<meta property="og:description" content="今日AI生态呈现三重张力：OpenAI密集布局语音智能，实时语音模型直指客服、教育、翻译场景，同步开放GPT-5.5-Cyber强化网络安全布局；与此同时，中国AI势力在全球视野中持续升温，DeepSeek赢得跨界赞誉，Redis创始人亲自为其造引擎，字节豆包开启付费商业化；而硅谷旧账悄然曝光，微软-OpenAI…">
+<meta property="og:site_name" content="AI 早报">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="AI 早报 · 2026年05月08日">
+<meta name="twitter:description" content="今日AI生态呈现三重张力：OpenAI密集布局语音智能，实时语音模型直指客服、教育、翻译场景，同步开放GPT-5.5-Cyber强化网络安全布局；与此同时，中国AI势力在全球视野中持续升温，DeepSeek赢得跨界赞誉，Redis创始人亲自为其造引擎，字节豆包开启付费商业化；而硅谷旧账悄然曝光，微软-OpenAI…">
+<title>AI 早报 · 2026年05月08日</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -503,12 +513,472 @@ body {
     border-top: 1px solid var(--border); margin-top: 20px;
 }
 .footer b { color: var(--accent); }
+.footer-link {
+    color: var(--accent); text-decoration: none;
+    padding: 3px 8px; border-radius: 4px;
+    transition: background 0.15s, color 0.15s;
+}
+.footer-link:hover { background: rgba(120, 200, 255, 0.12); color: var(--accent-hi, #5eead4); }
+
+/* Header 仪表盘入口（h-stats 右侧的小按钮） */
+.h-dashboard-link {
+    color: var(--accent); text-decoration: none;
+    padding: 4px 10px; border-radius: 5px;
+    border: 1px solid var(--border);
+    font-size: 12px; font-weight: 500;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+.h-dashboard-link:hover {
+    background: rgba(120, 200, 255, 0.10);
+    border-color: var(--accent);
+}
 
 /* ═════ Empty & Scrollbar ═════ */
 .empty { text-align: center; padding: 60px 20px; color: var(--text-50); font-size: 13px; }
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+/* ═════ LLM coverage banner — 覆盖率 < 50% 时出现，提醒读者部分内容为规则兜底 ═════ */
+.llm-banner {
+    max-width: 1120px;
+    margin: 12px auto 0;
+    padding: 10px 16px;
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(201, 162, 39, 0.12);
+    border: 1px solid rgba(201, 162, 39, 0.35);
+    border-left: 3px solid var(--amber);
+    border-radius: 8px;
+    color: var(--text-90);
+    font-size: 12px;
+    line-height: 1.5;
+}
+.llm-banner-icon { flex-shrink: 0; font-size: 14px; }
+.llm-banner-text b { color: var(--amber); font-weight: 700; }
+@media (max-width: 640px) {
+    .llm-banner { margin: 10px 14px 0; font-size: 11px; }
+}
+
+/* ═════ Multi-source pill — "N 源报道"，卡片右上角 ═════ */
+/* 依赖 .card / .featured-card 的定位上下文 */
+.card, .featured-card { position: relative; }
+
+.src-pill {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 3px 9px;
+    background: rgba(107, 138, 253, 0.18);
+    border: 1px solid rgba(107, 138, 253, 0.42);
+    border-radius: 11px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #a8bdff;
+    white-space: nowrap;
+    letter-spacing: 0.2px;
+    pointer-events: none;   /* 不挡 card 的点击 */
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+.src-pill-featured {
+    top: 12px;
+    right: 12px;
+    font-size: 11px;
+    padding: 4px 11px;
+    background: rgba(107, 138, 253, 0.22);
+    border-color: rgba(107, 138, 253, 0.55);
+    color: #b8c9ff;
+}
+
+/* inline 多源徽章：放在 featured-source 行里，不遮挡标题 */
+.src-pill-inline {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 1px 7px;
+    background: rgba(107, 138, 253, 0.18);
+    border: 1px solid rgba(107, 138, 253, 0.42);
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #a8bdff;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    margin-left: 2px;
+}
+
+/* 多源详细列表：列出每个 evidence 源 + 报道时间 */
+.featured-other-sources {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+    font-size: 11px;
+    color: var(--text-60);
+}
+.fos-label {
+    font-weight: 600;
+    color: #a8bdff;
+    margin-bottom: 4px;
+    letter-spacing: 0.2px;
+}
+.fos-item {
+    padding-left: 10px;
+    line-height: 1.65;
+    color: var(--text-70);
+}
+
+/* ═════ Source tier badge — 卡片源信息前的小徽章 ═════ */
+.tier-badge {
+    display: inline-flex; align-items: center; gap: 2px;
+    padding: 1px 6px;
+    border-radius: 9px;
+    font-size: 10px; font-weight: 600;
+    margin-right: 4px;
+    letter-spacing: 0.2px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+.tier-badge.tier-官方   { background: rgba(139, 92, 246, 0.16); color: #c4b5fd; border-color: rgba(139, 92, 246, 0.35); }
+.tier-badge.tier-学术   { background: rgba(16, 185, 129, 0.14); color: #86efac; border-color: rgba(16, 185, 129, 0.32); }
+.tier-badge.tier-媒体   { background: rgba(255, 255, 255, 0.05); color: var(--text-50); border-color: var(--border); }
+.tier-badge.tier-社区   { background: rgba(245, 158, 11, 0.14); color: #fcd34d; border-color: rgba(245, 158, 11, 0.32); }
+.tier-badge.tier-视频   { background: rgba(236, 72, 153, 0.14); color: #fbcfe8; border-color: rgba(236, 72, 153, 0.32); }
+
+/* ═════ Hero badge — 行业级 importance=5（inline，位于标题前） ═════ */
+.hero-badge {
+    display: inline-block;
+    align-self: flex-start;
+    padding: 3px 10px;
+    margin-bottom: 2px;
+    background: linear-gradient(135deg, rgba(224, 82, 82, 0.25), rgba(232, 145, 58, 0.25));
+    border: 1px solid rgba(224, 82, 82, 0.55);
+    border-radius: 11px;
+    font-size: 10px; font-weight: 700;
+    color: #ffb4b4;
+    letter-spacing: 0.3px;
+    pointer-events: none;
+}
+
+/* ═════ Audience filter bar — 读者画像过滤 ═════ */
+.audience-bar {
+    max-width: 1120px; margin: 8px auto 0; padding: 0 20px;
+    display: flex; gap: 5px; flex-wrap: wrap;
+    align-items: center;
+}
+.audience-bar:empty { display: none; }
+.a-btn {
+    padding: 4px 11px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-35);
+    border-radius: 14px;
+    font-size: 11px; font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+.a-btn:hover { border-color: rgba(16, 185, 129, 0.4); color: var(--text-60); }
+.a-btn.active {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: rgba(16, 185, 129, 0.6);
+    color: #a7f3d0;
+}
+
+/* ═════ Today's Top 3 hero — 置于必读区之上 ═════ */
+.top3-section {
+    max-width: 1120px;
+    margin: 18px auto 0;
+    padding: 0 20px;
+}
+.top3-title-h {
+    font-family: var(--serif);
+    font-size: 15px; font-weight: 700;
+    color: var(--text-90);
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+}
+.top3-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+@media (max-width: 820px) { .top3-grid { grid-template-columns: 1fr; } }
+
+.top3-card {
+    position: relative;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, rgba(107, 138, 253, 0.08), rgba(107, 138, 253, 0.02));
+    border: 1px solid rgba(107, 138, 253, 0.22);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s, border-color 0.2s;
+    display: flex; gap: 10px;
+}
+.top3-card:hover {
+    background: linear-gradient(135deg, rgba(107, 138, 253, 0.14), rgba(107, 138, 253, 0.04));
+    border-color: rgba(107, 138, 253, 0.4);
+    transform: translateY(-2px);
+}
+.top3-badge {
+    flex-shrink: 0;
+    font-size: 18px; line-height: 1.3;
+}
+.top3-body { flex: 1; min-width: 0; }
+.top3-title {
+    font-family: var(--serif);
+    font-weight: 700; font-size: 14px;
+    color: var(--text-100);
+    line-height: 1.4;
+    margin-bottom: 5px;
+}
+.top3-why {
+    font-size: 12px;
+    color: var(--text-70);
+    line-height: 1.5;
+    margin-bottom: 7px;
+}
+.top3-meta {
+    font-size: 10px;
+    color: var(--text-35);
+    letter-spacing: 0.2px;
+}
+.top3-meta b { color: var(--accent); font-weight: 600; }
+
+/* ═════ Modal TOC — 左侧悬浮目录 ═════ */
+.m-toc-sidebar {
+    position: fixed;
+    top: 90px;
+    left: 20px;
+    z-index: 15000;
+    max-width: 200px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    padding: 12px 14px;
+    background: rgba(20, 20, 28, 0.92);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 11px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: none;
+}
+.m-toc-sidebar.show { display: block; }
+@media (max-width: 1100px) { .m-toc-sidebar { display: none !important; } }
+
+.m-toc-sidebar-title {
+    font-weight: 700;
+    color: var(--text-90);
+    margin-bottom: 8px;
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+.m-toc-sidebar a {
+    display: block;
+    padding: 4px 6px;
+    color: var(--text-60);
+    text-decoration: none;
+    border-radius: 4px;
+    line-height: 1.4;
+    transition: background 0.15s, color 0.15s;
+}
+.m-toc-sidebar a:hover {
+    background: rgba(107, 138, 253, 0.12);
+    color: var(--text-90);
+}
+.m-toc-sidebar a.m-toc-sub { padding-left: 16px; font-size: 10.5px; color: var(--text-50); }
+.m-toc-sidebar a.active {
+    background: rgba(107, 138, 253, 0.18);
+    color: #a8bdff;
+}
+
+/* ═════ Feedback buttons in modal — 👍/👎 ═════ */
+.m-feedback {
+    display: flex; gap: 12px;
+    align-items: center;
+    margin: 20px 0 6px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+.m-feedback-q {
+    font-size: 12px;
+    color: var(--text-70);
+    flex: 1;
+}
+.m-feedback-btn {
+    padding: 5px 14px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--text-70);
+}
+.m-feedback-btn:hover {
+    border-color: rgba(107, 138, 253, 0.4);
+    color: var(--text-90);
+    background: rgba(107, 138, 253, 0.08);
+}
+.m-feedback-btn.picked {
+    background: rgba(16, 185, 129, 0.14);
+    border-color: rgba(16, 185, 129, 0.5);
+    color: #a7f3d0;
+}
+.m-feedback-btn.picked-bad {
+    background: rgba(224, 82, 82, 0.14);
+    border-color: rgba(224, 82, 82, 0.5);
+    color: #fca5a5;
+}
+
+/* ═════ Modal why/deep promotion — 把 why_it_matters 和 deep_analysis 置顶 ═════ */
+.m-lede {
+    margin: 14px 0 18px;
+    padding: 12px 16px;
+    background: rgba(107, 138, 253, 0.06);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+}
+.m-lede-label {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+}
+.m-lede-text {
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text-90);
+}
+.m-lede-text strong { color: var(--text-100); }
+
+/* ═════ 阅后即焚 ═════ */
+/* 已读卡片：默认隐藏（按"显示已读"toggle 切换） */
+body:not(.show-read) .is-read { display: none !important; }
+/* 显示已读时给视觉提示 */
+body.show-read .is-read {
+    opacity: 0.45;
+    filter: grayscale(0.4);
+    transition: opacity 0.2s, filter 0.2s;
+}
+body.show-read .is-read:hover {
+    opacity: 0.85;
+    filter: grayscale(0);
+}
+/* 消散动画：渐变 + 折叠高度 */
+.is-fading {
+    animation: fadeAndCollapse 0.6s ease-out forwards;
+    overflow: hidden;
+}
+@keyframes fadeAndCollapse {
+    0%   { opacity: 1; transform: scale(1); }
+    40%  { opacity: 0.4; transform: scale(0.97); }
+    70%  { opacity: 0; transform: scale(0.94); max-height: 400px; margin-bottom: 14px; padding-top: 14px; padding-bottom: 14px; }
+    100% { opacity: 0; transform: scale(0.94); max-height: 0; margin: 0; padding-top: 0; padding-bottom: 0; border-width: 0; }
+}
+
+/* "显示已读"toggle 按钮 */
+.read-toggle {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    z-index: 200;
+    padding: 8px 14px;
+    background: rgba(11, 11, 18, 0.92);
+    border: 1px solid var(--border-hover);
+    border-radius: 22px;
+    color: var(--text-80);
+    font-size: 12px;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: background 0.15s, border-color 0.15s;
+}
+.read-toggle:hover {
+    background: rgba(11, 11, 18, 0.98);
+    border-color: var(--accent);
+    color: var(--text-100);
+}
+.read-toggle .rt-count {
+    color: var(--accent);
+    font-weight: 700;
+    margin: 0 2px;
+}
+
+/* ═════ 大V 动态 ═════ */
+.vip-section {
+    max-width: 1120px;
+    margin: 28px auto 20px;
+    padding: 0 20px;
+}
+.vip-heading {
+    font-family: var(--serif);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-100);
+    margin-bottom: 14px;
+    letter-spacing: -0.3px;
+}
+.vip-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+}
+.vip-item {
+    padding: 12px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--accent);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.vip-item:hover {
+    background: var(--bg-card-hover);
+    border-left-color: var(--green);
+}
+.vip-meta {
+    font-size: 11px;
+    color: var(--text-50);
+    margin-bottom: 4px;
+    letter-spacing: 0.2px;
+}
+.vip-title-txt {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-90);
+    line-height: 1.45;
+    margin-bottom: 6px;
+}
+.vip-why {
+    font-size: 12px;
+    color: var(--text-60);
+    line-height: 1.5;
+}
+@media (max-width: 640px) {
+    .vip-list { grid-template-columns: 1fr; }
+    .header { padding: 8px 14px; }
+    .h-title { font-size: 15px; }
+    .h-date, .h-stats { font-size: 10px; }
+    .search-wrap { max-width: 100%; flex-basis: 100%; order: 99; margin-top: 6px; }
+    .featured-section { padding: 0 14px; }
+    .featured-grid { grid-template-columns: 1fr !important; gap: 10px; }
+    .featured-card { padding: 12px 14px; }
+    .featured-title-text { font-size: 16px; line-height: 1.45; }
+    .featured-why { font-size: 13px; line-height: 1.55; }
+    .featured-source, .featured-other-sources { font-size: 11px; }
+    .top3-section { padding: 0 14px; }
+    .top3-grid { grid-template-columns: 1fr !important; }
+    .briefing { padding: 0 14px; margin-top: 18px; }
+    .br-editorial { font-size: 13px; }
+    .footer { padding: 14px; font-size: 11px; }
+}
 </style>
 </head>
 <body>
@@ -517,615 +987,368 @@ body {
 <header class="header">
 <div class="header-inner">
     <div class="h-title">📡 AI 早报</div>
-    <div class="h-date">2026年04月16日 周四 · 20:42</div>
+    <div class="h-date">2026年05月08日 周五 · 19:51</div>
     <div class="search-wrap">
         <input type="text" class="search-box" id="searchBox" placeholder="搜索…" aria-label="搜索">
     </div>
     <div class="h-stats">
-        <span><b>43</b> 篇</span>
-        <span><b>16</b> 源</span>
+        <span><b>21</b> 篇</span>
+        <span><b>10</b> 源</span>
+        <a href="archive/dashboard.html" class="h-dashboard-link" title="查看跑步仪表盘 — 历史趋势 / 信息源健康 / 重要事件清单">📊 仪表盘</a>
     </div>
 </div>
 </header>
 
-<!-- Filters -->
-<div class="filter-bar" id="filterBar"><button class="f-btn active" data-filter="all">全部</button>
-<button class="f-btn" data-filter="大模型发布">大模型发布</button>
-<button class="f-btn" data-filter="芯片与算力">芯片与算力</button>
-<button class="f-btn" data-filter="产品与应用">产品与应用</button>
-<button class="f-btn" data-filter="安全与对齐">安全与对齐</button>
-<button class="f-btn" data-filter="学术研究">学术研究</button>
-<button class="f-btn" data-filter="具身智能">具身智能</button>
-<button class="f-btn" data-filter="行业观点">行业观点</button>
-<button class="f-btn" data-filter="其他">其他</button>
-</div>
+<!-- LLM coverage banner (rendered only when coverage < 50%) -->
+
 
 <!-- Briefing -->
 
     <section class="briefing">
         <h2 class="br-title">今日速览</h2>
-        <p class="br-editorial">今日AI产业呈现三重交织：安全与对齐成为焦点，OpenAI布局网络防御、Anthropic验证AI加速对齐研究却坦言局限；机器人赛道提速，谷歌DeepMind发布Gemini Robotics-ER 1.6、宇树R1进军国际市场；商业格局加速分化，斯坦福AI指数揭示中美差距收窄、Anthropic与OpenAI营收路径背离、微软全面押注操作系统级AI整合。技术前沿与商业现实的张力，正在重塑整个行业的竞争坐标。</p>
+        <p class="br-editorial">今日AI生态呈现三重张力：OpenAI密集布局语音智能，实时语音模型直指客服、教育、翻译场景，同步开放GPT-5.5-Cyber强化网络安全布局；与此同时，中国AI势力在全球视野中持续升温，DeepSeek赢得跨界赞誉，Redis创始人亲自为其造引擎，字节豆包开启付费商业化；而硅谷旧账悄然曝光，微软-OpenAI联姻的最初犹豫与AI芯片出口管制疑云，折射出技术竞争背后的地缘博弈。自动驾驶赛场上，Waymo与Wayve在伦敦的路线对决，亦是这场全球AI角力的缩影。</p>
     </section>
 
-<!-- Featured Articles (Importance >= 4) -->
+<!-- Featured Articles (Importance >= 4) —— 重大事件 -->
 <div class="featured-section">
 <h2 class="featured-title">今日必读</h2>
 <div class="featured-grid">
-    <div class="featured-card" data-cat="具身智能|产品与应用" data-idx="4" style="border-left-color: #e8913a">
-        <div class="featured-img" style="background-image:url('https://nitter.net/pic/media%2FHF3-rUNWUAABrwE.jpg')"></div>
+    <div class="featured-card" data-cat="AI工具|开源生态" data-aud="developer|general" data-idx="9" data-iid="be2244cd9c40c89d3e6e6fff70dc6bef" style="border-left-color: #e8913a">
+        
         <div class="featured-body">
-            <div class="featured-title-text">谷歌DeepMind机器人模型上线：面向开发者开放Gemini API</div>
-            <div class="featured-why">大模型正式进入具身智能开发工具链，开发者可直接通过API构建更智能的机器人应用，降低了机器人AI开发门槛。</div>
-            <div class="featured-source">🐦 X-GoogleDeepMind · 04-15 00:54</div>
+            
+            
+            <div class="featured-title-text">Redis之父为DeepSeek V4打造专属本地推理引擎，Mac可直接运行</div>
+            <div class="featured-why">顶级系统工程师主动为中国开源大模型配套工具，说明DeepSeek V4已进入主流开发者生态，本地推理门槛大幅降低。</div>
+            <div class="featured-source"><span class="tier-badge tier-媒体" title="媒体源">📰 媒体</span> ⚛️ 量子位 · 05-08 16:20</div>
+            
+        </div>
+    </div>
+    <div class="featured-card" data-cat="自动驾驶|产品与应用" data-aud="investor|pm|general" data-idx="10" data-iid="56623960b7d2ead2c6addb35846f2cd6" style="border-left-color: #e8913a">
+        <div class="featured-img" style="background-image:url('https://assets.bwbx.io/images/users/iqjWHBFdfxIU/iIAmTeXBDefI/v3/1200x-1.jpg')"></div>
+        <div class="featured-body">
+            
+            
+            <div class="featured-title-text">Waymo与Wayve同台竞技伦敦，自动驾驶两条路线正面交锋</div>
+            <div class="featured-why">同一城市、同一监管环境下，两种对立技术路线直接比拼，胜者将影响全球自动驾驶行业未来十年的技术选型与资本流向。</div>
+            <div class="featured-source"><span class="tier-badge tier-媒体" title="媒体源">📰 媒体</span> 💰 Bloomberg Technology · 05-08 17:30</div>
+            
+        </div>
+    </div>
+    <div class="featured-card" data-cat="产品与应用|AI工具" data-aud="developer|pm" data-idx="11" data-iid="d9a38aa448a90ac05180dd3598add6d9" style="border-left-color: #e8913a">
+        
+        <div class="featured-body">
+            
+            
+            <div class="featured-title-text">OpenAI为API推出新语音智能功能，覆盖客服教育等领域</div>
+            <div class="featured-why">语音AI能力开放API意味着开发者可直接将其集成到产品中，加速语音交互应用规模化落地。</div>
+            <div class="featured-source"><span class="tier-badge tier-媒体" title="媒体源">📰 媒体</span> 💡 TechCrunch AI · 05-08 06:24</div>
+            
         </div>
     </div>
 </div>
 </div>
 
 
-<!-- Cards Grid -->
-<div class="grid" id="grid">
-        <div class="card" data-cat="其他" data-idx="0"
+<!-- Regular Articles (importance < 3) —— 普通资讯网格 -->
+<!-- id="grid" 是 script.js bindCardClick(getElementById('grid')) 必须的，少了它点击 modal 会失效 -->
+<div id="grid" class="grid" aria-label="资讯列表">
+
+        <div class="card" data-cat="AI工具|学术研究" data-aud="developer|researcher" data-idx="0" data-iid="84c586895575a4503ca710f75e7580a4"
              style="animation-delay:0ms">
             
             <div class="card-body">
+                
                 <div class="z1">
-            <span class="z1-left">其他</span>
+            <span class="z1-left">AI工具 · 学术研究</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">OpenAI推出GPT-5.4-Cyber：专为网络安全防御者定制的大模型</div>
-                <div class="z3"><div class="z3-why">AI正式进入专业网络安全防御领域，大模型开始针对特定安全场景深度定制，意味着AI辅助防御能力将迎来质的飞跃。</div></div>
-                <div class="z5">🐦 X-OpenAI · 04-15 00:54 <span style="color:#8b5cf6;font-size:9px;font-weight:600">🏛️ 官方</span></div>
+                <div class="card-title">无需CUDA：在AMD ROCm平台上微调临床AI模型MedQA</div>
+                <div class="z3"><div class="z3-why">打破CUDA垄断，让医疗AI开发者可以用AMD GPU进行模型微调，降低硬件依赖门槛。</div></div>
+                <div class="z5"><span class="tier-badge tier-官方" title="官方源">🏢</span> 🤗 Hugging Face Blog · 05-08 15:54 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="其他" data-idx="1"
+        <div class="card" data-cat="学术研究|AI工具" data-aud="researcher" data-idx="1" data-iid="918c7c3435865fef1ce8723e26012658"
              style="animation-delay:25ms">
             
             <div class="card-body">
+                
                 <div class="z1">
-            <span class="z1-left">其他</span>
+            <span class="z1-left">学术研究 · AI工具</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">OpenAI宣布扩大网络防御计划：为合法防御者提供更广泛模型访问权限</div>
-                <div class="z3"><div class="z3-why">AI能力越强，网络攻防差距越大；OpenAI此举意在确保防御方不落后于攻击方，同时通过生态建设形成护城河。</div></div>
-                <div class="z5">🐦 X-OpenAI · 04-15 00:54 <span style="color:#8b5cf6;font-size:9px;font-weight:600">🏛️ 官方</span></div>
+                <div class="card-title">自适应损失平衡物理信息神经网络：可学习权重与迁移学习</div>
+                <div class="z3"><div class="z3-why">数据稀缺是科学计算的核心痛点，该框架无需手动调参即可稳定训练，降低PINNs落地门槛。</div></div>
+                <div class="z5"><span class="tier-badge tier-学术" title="学术源">🎓</span> 📄 ArXiv ML · 05-08 12:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="其他" data-idx="2"
+        <div class="card" data-cat="学术研究|AI工具" data-aud="researcher" data-idx="2" data-iid="2dce5f4289fee429115cd8594c8d9dcb"
              style="animation-delay:50ms">
-            <div class="card-img" style="background-image:url('https://nitter.net/pic/card_img%2F2044139538692616193%2FTspRuwvt%3Fformat%3Djpg%26name%3D800x419')"></div>
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">Anthropic发布自动化对齐研究员：AI辅助解决超级对齐难题</div>
-                <div class="z3"><div class="z3-why">对齐研究员数量严重不足，若AI能自动化承担部分对齐研究工作，将极大加速安全研究进程，但同时也带来AI自主研究本身的风险。</div></div>
-                <div class="z5">🐦 X-AnthropicAI · 04-15 00:54 <span style="color:#8b5cf6;font-size:9px;font-weight:600">🏛️ 官方</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="3"
-             style="animation-delay:75ms">
             
             <div class="card-body">
+                
+                <div class="z1">
+            <span class="z1-left">学术研究 · AI工具</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">非神经网络框架DVBL：从数据中自适应学习基函数</div>
+                <div class="z3"><div class="z3-why">为追求可解释性和数学透明度的研究者提供了神经网络的可行替代方案，有望在科学计算领域弥合经典方法与数据驱动方法的鸿沟。</div></div>
+                <div class="z5"><span class="tier-badge tier-学术" title="学术源">🎓</span> 📄 ArXiv ML · 05-08 12:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
+            </div>
+        </div>
+        <div class="card" data-cat="其他" data-aud="general" data-idx="3" data-iid="dbcffd988a758ceaedda9e872b08bc49"
+             style="animation-delay:75ms">
+            <div class="card-img" style="background-image:url('https://substackcdn.com/image/fetch/$s_!A0Wm!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F9c9ffc6c-3f36-4f23-a2c3-34d5e64955aa_1014x918.png')"></div>
+            <div class="card-body">
+                
                 <div class="z1">
             <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">Anthropic实验：Claude可加速对齐研究探索但尚非通用对齐科学家</div>
-                <div class="z3"><div class="z3-why">AI自动化对齐研究（AAR）是Anthropic押注的核心路径之一——若AI能加速自身安全研究，可能形成良性循环；但此次承认局限，说明该路径仍处早期。</div></div>
-                <div class="z5">🐦 X-AnthropicAI · 04-15 00:54 <span style="color:#8b5cf6;font-size:9px;font-weight:600">🏛️ 官方</span></div>
+                <div class="card-title">OpenAI发布Realtime-2语音API：性能大幅提升15.2%</div>
+                <div class="z3"><div class="z3-why">实时语音AI的智能上限大幅跃升，开发者可构建更自然、更流畅的语音交互产品，语音AI应用落地门槛进一步降低。</div></div>
+                <div class="z5"><span class="tier-badge tier-学术" title="学术源">🎓</span> 🎙️ Latent Space · 05-08 15:11 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="其他" data-idx="5"
+        <div class="card" data-cat="其他" data-aud="general" data-idx="4" data-iid="b35508cfb78a4565dd021c08767a127e"
+             style="animation-delay:100ms">
+            
+            <div class="card-body">
+                
+                <div class="z1">
+            <span class="z1-left">其他</span>
+            <span class="z1-meta">1 min</span>
+        </div>
+                <div class="card-title">SAT：无协调器即插即用多LLM协同训练新范式</div>
+                <div class="z3"><div class="z3-why">用小模型团队替代单一大模型可大幅降低部署成本，SAT解决了多智能体联合训练的稳定性难题，有望成为高效AI系统新范式。</div></div>
+                <div class="z5"><span class="tier-badge tier-学术" title="学术源">🎓</span> 📄 ArXiv ML · 05-08 12:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
+            </div>
+        </div>
+        <div class="card" data-cat="其他" data-aud="general" data-idx="5" data-iid="ab5388b99660016e043c1977126a1fb6"
              style="animation-delay:125ms">
-            <div class="card-img" style="background-image:url('https://nitter.net/pic/media%2FHF39jzeXwAA4J54.png')"></div>
+            
             <div class="card-body">
+                
                 <div class="z1">
             <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">谷歌DeepMind发布最安全机器人模型Gemini Robotics-ER 1</div>
-                <div class="z3"><div class="z3-why">机器人模型首次将安全约束内化为指令理解的一部分，而非事后过滤，标志着具身AI安全从规则硬编码向语义推理演进。</div></div>
-                <div class="z5">🐦 X-GoogleDeepMind · 04-15 00:54 <span style="color:#8b5cf6;font-size:9px;font-weight:600">🏛️ 官方</span></div>
+                <div class="card-title">地平线约束Rashomon集：混沌预测中的模型多重性理论</div>
+                <div class="z3"><div class="z3-why">为混沌时间序列预测提供了理论基础，说明预测不确定性不仅来自数据噪声，更源于等效模型集合的指数级发散。</div></div>
+                <div class="z5"><span class="tier-badge tier-学术" title="学术源">🎓</span> 📄 ArXiv ML · 05-08 12:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="具身智能|产品与应用" data-idx="6"
+        <div class="card" data-cat="其他" data-aud="general" data-idx="6" data-iid="a061cf7738c83dc490179dbe4b950f67"
              style="animation-delay:150ms">
-            <div class="card-img" style="background-image:url('https://nitter.net/pic/amplify_video_thumb%2F2044068474721349633%2Fimg%2FrQxh3vDXVt_TXwL1.jpg')"></div>
+            
             <div class="card-body">
+                
                 <div class="z1">
-            <span class="z1-left">具身智能 · 产品与应用</span>
+            <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">Gemini Robotics-ER 1.6升级：机器人自主编写代码读取工业模拟</div>
-                <div class="z3"><div class="z3-why">工业巡检长期依赖人工读表，AI机器人若能自主理解模拟仪表，将大幅降低石化、电力等高危行业的人工成本与安全风险。</div></div>
-                <div class="z5">🐦 X-GoogleDeepMind · 04-15 00:54 <span style="color:#8b5cf6;font-size:9px;font-weight:600">🏛️ 官方</span></div>
+                <div class="card-title">稀疏前缀缓存：混合与循环LLM推理的延迟优化新方案</div>
+                <div class="z3"><div class="z3-why">随着Mamba等状态空间模型与Transformer混合架构兴起，传统KV缓存方案不再适用，此方法为新一代架构提供了高效缓存基础设施。</div></div>
+                <div class="z5"><span class="tier-badge tier-学术" title="学术源">🎓</span> 📄 ArXiv ML · 05-08 12:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="安全与对齐|学术研究" data-idx="7"
+        <div class="card" data-cat="其他" data-aud="general" data-idx="7" data-iid="df80cc49d0f8a71797e33a3a1b7ecb55"
              style="animation-delay:175ms">
-            <div class="card-img" style="background-image:url('https://nitter.net/pic/media%2FHF40MLMaIAApyKD.jpg')"></div>
+            
             <div class="card-body">
+                
                 <div class="z1">
-            <span class="z1-left">安全与对齐 · 学术研究</span>
+            <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">Anthropic测试AARs方法泛化能力：最优方法成功迁移编程与数学任务</div>
-                <div class="z3"><div class="z3-why">AARs方法若能跨任务泛化，意味着Anthropic的自动化AI研究路径具备通用性，是迈向可扩展对齐研究的重要信号。</div></div>
-                <div class="z5">🐦 X-AnthropicAI · 04-15 00:54 <span style="color:#8b5cf6;font-size:9px;font-weight:600">🏛️ 官方</span></div>
+                <div class="card-title">MidSteer：生成模型中间表征引导的最优仿射框架</div>
+                <div class="z3"><div class="z3-why">为生成模型的可控性与安全对齐提供了严格理论基础，填补了中间表征引导方法缺乏系统理论的空白。</div></div>
+                <div class="z5"><span class="tier-badge tier-学术" title="学术源">🎓</span> 📄 ArXiv ML · 05-08 12:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="学术研究|大模型发布" data-idx="8"
+        <div class="card" data-cat="其他" data-aud="general" data-idx="8" data-iid="22b8fedf11bfa12e9abd294ddfe7ecbe"
              style="animation-delay:200ms">
             
             <div class="card-body">
+                
                 <div class="z1">
-            <span class="z1-left">学术研究 · 大模型发布</span>
+            <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">强化学习熵控制方法理论对比：正则化 vs 协方差机制</div>
-                <div class="z3"><div class="z3-why">LLM推理训练常因策略熵塌缩而过早收敛，此研究为选择更优的熵控制方法提供理论依据，有助于提升大模型RL训练的可扩展性。</div></div>
-                <div class="z5">📄 ArXiv ML · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
+                <div class="card-title">OpenAI推出GPT-5.5-Cyber：专为关键基础设施防御者服务</div>
+                <div class="z3"><div class="z3-why">AI安全能力正式面向关键基础设施防御者开放，意味着AI在实战级网络安全攻防中的角色从工具演变为战略资产。</div></div>
+                <div class="z5"><span class="tier-badge tier-学术" title="学术源">🎓</span> 🐦 X-Sam Altman · 05-08 09:16 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="学术研究|大模型发布" data-idx="9"
-             style="animation-delay:225ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">学术研究 · 大模型发布</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">STaR-DRO：用Tsallis重加权提升结构化预测的群体鲁棒性</div>
-                <div class="z3"><div class="z3-why">结构化预测是NLP核心任务，群体不均衡导致模型在少数群体上表现差，此方法为鲁棒微调提供新思路。</div></div>
-                <div class="z5">📄 ArXiv ML · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="安全与对齐|学术研究" data-idx="10"
-             style="animation-delay:250ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">安全与对齐 · 学术研究</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">七步法：AI系统日志分析标准化流程与最佳实践</div>
-                <div class="z3"><div class="z3-why">AI系统行为分析长期缺乏规范方法，此框架有助于让模型评估更可复现、更严谨，推动安全与对齐研究走向工程化。</div></div>
-                <div class="z5">📄 ArXiv AI · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="学术研究|产品与应用" data-idx="11"
-             style="animation-delay:275ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">学术研究 · 产品与应用</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">屏幕图灵测试：移动端GUI智能体拟人化基准评测</div>
-                <div class="z3"><div class="z3-why">随着自主GUI智能体普及，平台反检测机制日趋严格，智能体若无法通过「像人类一样操作」的测试将被封禁，这直接影响RPA、自动化测试等商业场景的可行性。</div></div>
-                <div class="z5">📄 ArXiv AI · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="学术研究|具身智能" data-idx="12"
+        <div class="card" data-cat="其他" data-aud="general" data-idx="12" data-iid="c7d9d296ca27d33231c9e195aae38516"
              style="animation-delay:300ms">
             
             <div class="card-body">
+                
                 <div class="z1">
-            <span class="z1-left">学术研究 · 具身智能</span>
+            <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">AHC框架：元学习自适应压缩实现MCU上持续目标检测</div>
-                <div class="z3"><div class="z3-why">边缘AI设备内存极度受限，AHC让微控制器也能持续学习新任务，推动AI真正落地到低成本IoT硬件。</div></div>
-                <div class="z5">📄 ArXiv AI · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
+                <div class="card-title">马斯克诉奥特曼庭审文件披露：微软2018年曾对投资OpenAI心存疑虑</div>
+                <div class="z3"><div class="z3-why">这揭示了OpenAI早期融资的竞争博弈，微软的战略押注并非笃定，而是出于防御性竞争考量。</div></div>
+                <div class="z5"><span class="tier-badge tier-媒体" title="媒体源">📰</span> 🗞️ Techmeme · 05-08 17:30 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="具身智能|学术研究" data-idx="13"
+        <div class="card" data-cat="其他" data-aud="general" data-idx="13" data-iid="f1e419087ae99b20955772cacd0450cd"
              style="animation-delay:325ms">
             
             <div class="card-body">
+                
                 <div class="z1">
-            <span class="z1-left">具身智能 · 学术研究</span>
+            <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">OOWM：用面向对象编程范式重构具身AI世界建模</div>
-                <div class="z3"><div class="z3-why">具身AI规划长期受限于语言模型的线性推理，OOWM引入软件工程形式化方法，可能成为机器人任务规划的新范式。</div></div>
-                <div class="z5">📄 ArXiv AI · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
+                <div class="card-title">美国怀疑泰国AI公司OBON向中国走私英伟达受控芯片</div>
+                <div class="z3"><div class="z3-why">这意味着AI芯片出口管制体系正遭受系统性规避，第三国转口成为制裁漏洞，美国可能进一步收紧对东南亚国家的芯片出口审查。</div></div>
+                <div class="z5"><span class="tier-badge tier-媒体" title="媒体源">📰</span> 🗞️ Techmeme · 05-08 17:20 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="其他" data-idx="14"
+        <div class="card" data-cat="其他" data-aud="general" data-idx="14" data-iid="7082092de7a1080af3f526626f5af198"
              style="animation-delay:350ms">
-            <div class="card-img" style="background-image:url('https://storage.googleapis.com/gweb-uniblog-publish-prod/images/AI_for_the_Economy_Forum_2026.max-600x600.format-webp.webp')"></div>
+            
             <div class="card-body">
+                
                 <div class="z1">
             <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">谷歌在华盛顿举办AI经济论坛汇聚各界人士</div>
-                <div class="z3"><div class="z3-why">谷歌主动介入AI政策对话，在监管敏感时期通过高规格论坛影响华盛顿决策圈对AI经济价值的认知。</div></div>
-                <div class="z5">🔷 Google AI Blog · 04-14 09:00 <span style="color:#8b5cf6;font-size:9px;font-weight:600">🏛️ 官方</span></div>
+                <div class="card-title">Anthropic公开Claude内心独白研究，揭示AI推理过程中的人类识别模式</div>
+                <div class="z3"><div class="z3-why">AI不再只是被动执行指令，它开始「读懂」人类想用它做什么——这重新定义了人机博弈的边界。</div></div>
+                <div class="z5"><span class="tier-badge tier-媒体" title="媒体源">📰</span> ⚛️ 量子位 · 05-08 14:34 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="其他" data-idx="15"
+        <div class="card" data-cat="其他" data-aud="general" data-idx="15" data-iid="d51f6bf929cea059eb472cea17877b74"
              style="animation-delay:375ms">
-            <div class="card-img" style="background-image:url('https://nitter.net/pic/media%2FHF4PXA_asAM29we.jpg')"></div>
+            
             <div class="card-body">
+                
                 <div class="z1">
             <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">吴恩达推荐：Vocal Bridge双智能体架构破解语音UI延迟难题</div>
-                <div class="z3"><div class="z3-why">语音作为视觉应用的UI层（而非独立语音产品）是下一个开发蓝海，双智能体架构让开发者首次能在不牺牲智能性的前提下实现低延迟语音交互。</div></div>
-                <div class="z5">🐦 X-Andrew Ng · 04-15 00:54 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
+                <div class="card-title">OpenAI发布三款实时语音新模型，同传翻译成本大幅下降</div>
+                <div class="z3"><div class="z3-why">语音AI的推理门槛大幅降低，同传翻译等过去需要专业人员的场景将加速被AI替代，开发者可以更低成本构建实时语音应用。</div></div>
+                <div class="z5"><span class="tier-badge tier-媒体" title="媒体源">📰</span> ⚛️ 量子位 · 05-08 12:35 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="学术研究|芯片与算力" data-idx="16"
+        <div class="card" data-cat="其他" data-aud="general" data-idx="16" data-iid="e245c2b0ebf3972a6e7c4ef3f841f66f"
              style="animation-delay:400ms">
-            <div class="card-img" style="background-image:url('https://i.ytimg.com/vi/Ersv1ogj7Jo/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&amp;rs=AOn4CLD44knNs_UeDuyv_FjR8Yv-iIuX6A')"></div>
+            
             <div class="card-body">
+                
                 <div class="z1">
-            <span class="z1-left">学术研究 · 芯片与算力</span>
+            <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">Anthropic</div>
-                
-                <div class="z5">🎬 Two Minute Papers · 04-14 14:54 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
+                <div class="card-title">美国研究员亲历中国AI圈：字节令同行胆寒，DeepSeek备受赞誉</div>
+                <div class="z3"><div class="z3-why">外部视角印证了中国AI生态的真实竞争格局：字节跳动的扩张让同行如坐针毡，DeepSeek的开源路线正成为中国AI走向世界的新名片。</div></div>
+                <div class="z5"><span class="tier-badge tier-媒体" title="媒体源">📰</span> ⚛️ 量子位 · 05-08 12:15 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="行业观点|产品与应用" data-idx="17"
+        <div class="card" data-cat="其他" data-aud="general" data-idx="17" data-iid="91369a3220894f452be2b88c1e354a39"
              style="animation-delay:425ms">
-            
+            <div class="card-img" style="background-image:url('https://media.wired.com/photos/69fd155e0436533ae1a17e00/master/pass/What-Microsoft-Executives-Were-Dishing-About-OpenAI-Business-1778707567.jpg')"></div>
             <div class="card-body">
+                
                 <div class="z1">
-            <span class="z1-left">行业观点 · 产品与应用</span>
+            <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">MIT科技评论推出全AI专项榜单：10大当下最重要AI议题</div>
-                <div class="z3"><div class="z3-why">连权威科技媒体都觉得AI发展快到一份榜单装不下，说明AI技术爆发的广度和速度已超出传统评选框架。</div></div>
-                <div class="z5">🎓 MIT Tech Review · 04-14 11:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
+                <div class="card-title">马斯克诉奥特曼案曝光微软高管对OpenAI的真实看法</div>
+                <div class="z3"><div class="z3-why">这批内部邮件揭示了科技巨头在AI战略布局中的真实博弈逻辑：竞争对手威胁比合作伙伴质量更能左右决策。</div></div>
+                <div class="z5"><span class="tier-badge tier-媒体" title="媒体源">📰</span> 📡 Wired AI · 05-08 09:42 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="其他" data-idx="18"
+        <div class="card" data-cat="其他" data-aud="general" data-idx="18" data-iid="033886ab252e2f2bce8cbd9e06d928bd"
              style="animation-delay:450ms">
-            <div class="card-img" style="background-image:url('https://wp.technologyreview.com/wp-content/uploads/2026/04/Screenshot-2026-04-14-at-12.47.40.png')"></div>
+            <div class="card-img" style="background-image:url('https://img.huxiucdn.com/ai/ai-general-cover/202605/08/19827-prod-db-general-1-1778194954343.png?imageView2/1/w/1440/h/810/|imageMogr2/strip/interlace/1/quality/85/format/png')"></div>
             <div class="card-body">
+                
                 <div class="z1">
             <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">斯坦福2026年AI指数：解读当前AI发展真实状态</div>
-                <div class="z3"><div class="z3-why">技术加速与社会滞后的剪刀差正在扩大——谁先解决落地与治理，谁就掌握下一轮竞争的定义权。</div></div>
-                <div class="z5">🎓 MIT Tech Review · 04-14 12:10 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
+                <div class="card-title">AI时代领导力重塑：从战场指挥官到首席探索官</div>
+                <div class="z3"><div class="z3-why">AI正在重构组织底层逻辑，传统指挥官式管理已难以应对高速变化环境，领导力转型成为企业存续关键。</div></div>
+                <div class="z5"><span class="tier-badge tier-媒体" title="媒体源">📰</span> 🐯 虎嗅科技 · 05-08 07:03 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="其他" data-idx="19"
+        <div class="card" data-cat="其他" data-aud="general" data-idx="19" data-iid="114f4c107f0fd0b776cdbba56c71c5e7"
              style="animation-delay:475ms">
-            
+            <div class="card-img" style="background-image:url('https://img.huxiucdn.com/article/cover/202401/10/195850047039.jpg?imageView2/1/w/1440/h/810/|imageMogr2/strip/interlace/1/quality/85/format/jpg')"></div>
             <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">扩散映射与注意力机制的数学统一理论</div>
-                <div class="z3"><div class="z3-why">该研究在理论层面打通了图论、流形学习与Transformer架构的内在联系，有助于解释注意力机制的几何本质，推动可解释AI发展。</div></div>
-                <div class="z5">📄 ArXiv ML · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="20"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">Fairboard框架：量化评估医疗AI模型的公平性差异</div>
-                <div class="z3"><div class="z3-why">超过1000款FDA批准的AI医疗设备中，公平性评估几乎缺失，这意味着AI医疗可能对特定患者群体存在系统性偏差，影响诊疗公平。</div></div>
-                <div class="z5">📄 ArXiv ML · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="21"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">深思熟虑对齐提升LLM安全性，但不确定性依然存在</div>
-                <div class="z3"><div class="z3-why">推理模型不是安全特效药，蒸馏会稀释对齐能力，基础模型的</div></div>
-                <div class="z5">📄 ArXiv ML · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="22"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">大语言模型展现出类人工作记忆干扰特征</div>
-                <div class="z3"><div class="z3-why">这揭示LLM的认知瓶颈并非来自架构限制，而可能源于预训练过程本身，对改善AI推理能力有重要指导意义。</div></div>
-                <div class="z5">📄 ArXiv ML · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="23"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">Belief-State RWKV：部分可观测强化学习的新框架</div>
-                <div class="z3"><div class="z3-why">RL 智能体首次能同时</div></div>
-                <div class="z5">📄 ArXiv ML · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="24"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">自我先验驱动主动推断：AI模型通过镜像测试验证自我意识涌现</div>
-                <div class="z3"><div class="z3-why">这意味着自我意识行为可能不需要专门设计的奖励函数，仅靠多感官经验密度学习就能自发涌现，为具身AI和认知科学提供新范式。</div></div>
-                <div class="z5">📄 ArXiv ML · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="25"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">LABBench2发布：专为AI生物研究能力测评的新基准</div>
-                <div class="z3"><div class="z3-why">随着AI加速科研的预期升温，现有基准已无法衡量AI的真实科研能力，LABBench2的出现有助于更准确判断AI到底能做多少真正的生物学研究工作。</div></div>
-                <div class="z5">📄 ArXiv AI · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="26"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">混合系统可解释规划：自动化时代AI决策透明化研究</div>
-                <div class="z3"><div class="z3-why">AI 进入安全关键领域的最后一道门槛是</div></div>
-                <div class="z5">📄 ArXiv AI · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="27"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">Vigil：云服务平台主动式智能客服代理系统</div>
-                <div class="z3"><div class="z3-why">传统AI客服只能被动响应，问题升级后就退出。Vigil全程参与并持续学习，有望大幅减轻云平台运维人员的支持负担。</div></div>
-                <div class="z5">📄 ArXiv AI · 04-14 00:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="28"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">斯坦福AI指数报告揭示：美国AI投入远超其他国家</div>
-                <div class="z3"><div class="z3-why">这份报告用数据量化了AI竞赛的真实格局——美国的基础设施优势已形成碾压态势，但供应链集中风险也在同步放大。</div></div>
-                <div class="z5">🎓 MIT Tech Review · 04-13 15:48 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="产品与应用|大模型发布" data-idx="29"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">产品与应用 · 大模型发布</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">腾讯云TDSQL-C引入LLM重塑SQL查询优化与计划管理</div>
-                <div class="z3"><div class="z3-why">数据库查询优化长期依赖DBA人工经验，LLM介入意味着这一门槛大幅降低，企业可减少专家依赖。</div></div>
-                <div class="z5">🚀 AI前线 · 04-14 11:15 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="30"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">微软计划在Windows电脑预装Copilot AI助手应用</div>
-                <div class="z3"><div class="z3-why">微软将AI助手直接嵌入Windows系统，意味着Copilot将成为数亿用户的默认AI入口，对竞争对手构成巨大压力。</div></div>
-                <div class="z5">🔎 36氪 AI搜索 · 04-14 13:42 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="31"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">Anthropic越大越快、OpenAI越大越慢：AI巨头盈利路径分化</div>
-                <div class="z3"><div class="z3-why">企业级 AI 市场的深度绑定正在成为决定大模型公司长期竞争格局的关键变量，渠道与信任比模型能力更难被复制。</div></div>
-                <div class="z5">🔎 36氪 AI搜索 · 04-14 13:40 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="32"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">斯坦福AI指数报告：中美大模型能力差距已基本消除</div>
-                <div class="z3"><div class="z3-why">这意味着美国在前沿AI领域的技术护城河正在快速消失，全球AI竞争格局进入真正意义上的多极化阶段。</div></div>
-                <div class="z5">⚛️ 量子位 · 04-14 05:58 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="33"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">OpenAI收购AI个人理财初创公司Hiro，布局ChatGPT金融规划功能</div>
-                <div class="z3"><div class="z3-why">OpenAI正将ChatGPT从通用助手向垂直专业服务延伸，金融规划是高粘性、高价值的个人消费场景，此举可能开启AI理财顾问新赛道。</div></div>
-                <div class="z5">💡 TechCrunch AI · 04-14 00:23 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="34"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">男子持燃烧弹袭击Altman住所并试图闯入OpenAI总部，面临联邦指控</div>
-                <div class="z3"><div class="z3-why">此事件揭示AI领军人物面临真实人身威胁，或推动科技公司加强高管安保并引发对AI仇恨情绪蔓延的社会关注。</div></div>
-                <div class="z5">⚡ The Verge AI · 04-13 20:02 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="35"
-             style="animation-delay:500ms">
-            <div class="card-img" style="background-image:url('https://media.wired.com/photos/69dd62de5630ccde90450adb/master/pass/2200095767')"></div>
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">宇树科技R1人形机器人登陆速卖通，售价约3.2万元</div>
-                <div class="z3"><div class="z3-why">人形机器人首次以消费级价格进入国际电商平台，意味着具身智能正从实验室走向普通买家，商业化拐点信号明显。</div></div>
-                <div class="z5">📡 Wired AI · 04-13 23:37 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="36"
-             style="animation-delay:500ms">
-            <div class="card-img" style="background-image:url('https://nitter.net/pic/media%2FHF0jGo8aUAAeSW9.png')"></div>
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">美国农业部宣布部署xAI Grok并为其申请联邦认证</div>
-                <div class="z3"><div class="z3-why">这是Grok首次进入美国联邦政府核心机构，意味着xAI正式打入政府AI采购市场，直接与微软/OpenAI的政府合作展开竞争。</div></div>
-                <div class="z5">🐦 X-Elon Musk (xAI) · 04-13 23:10 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="37"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">AI虚拟网红大举入侵科切拉音乐节，真假难辨</div>
                 
-                <div class="z5">⚡ The Verge AI · 04-13 15:53 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="38"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
                 <div class="z1">
             <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">微软正在开发类OpenClaw企业级AI智能体</div>
-                <div class="z3"><div class="z3-why">微软在企业AI智能体赛道加码，意味着大厂正将开源社区的激进探索转化为可商用的安全产品，加速智能体落地企业场景。</div></div>
-                <div class="z5">💡 TechCrunch AI · 04-13 19:05 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
+                <div class="card-title">豆包推出三档付费订阅，最高500元/月引发舆论争议</div>
+                <div class="z3"><div class="z3-why">国内AI免费时代正式终结，用户与厂商均须重新定价</div></div>
+                <div class="z5"><span class="tier-badge tier-媒体" title="媒体源">📰</span> 🐯 虎嗅科技 · 05-08 06:30 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="其他" data-idx="39"
+        <div class="card" data-cat="其他" data-aud="general" data-idx="20" data-iid="4ef6a0403767253800105d3a607e01eb"
              style="animation-delay:500ms">
-            
+            <div class="card-img" style="background-image:url('https://assets.bwbx.io/images/users/iqjWHBFdfxIU/iT6VXNvhip9Q/v1/1200x-1.jpg')"></div>
             <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">斯坦福AI指数报告：专家与公众对AI认知鸿沟持续扩大</div>
-                <div class="z3"><div class="z3-why">专家对AI持乐观态度，而普通人越来越担忧失业和生活影响，这种分裂可能引发监管压力和社会阻力，影响AI产业未来发展空间。</div></div>
-                <div class="z5">💡 TechCrunch AI · 04-13 18:55 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="40"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">OpenAI内部备忘录曝光：锁定用户、拓展企业市场以对抗Anthropic</div>
                 
-                <div class="z5">⚡ The Verge AI · 04-13 12:21 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div>
-        <div class="card" data-cat="其他" data-idx="41"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
                 <div class="z1">
             <span class="z1-left">其他</span>
             <span class="z1-meta">1 min</span>
         </div>
-                <div class="card-title">微软测试OpenClaw风格AI机器人集成至Copilot助手</div>
-                <div class="z3"><div class="z3-why">微软此举意味着企业级AI助手正从「问答工具」升级为「自主执行代理」，将深刻改变办公自动化格局。</div></div>
-                <div class="z5">⚡ The Verge AI · 04-13 11:41 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
+                <div class="card-title">软银股价能否经受住OpenAI巨额押注的现实考验</div>
+                <div class="z3"><div class="z3-why">软银是OpenAI最大外部资本支持方之一，其资产负债表承压意味着OpenAI融资结构稳定性受到关注，可能影响OpenAI未来扩张节奏。</div></div>
+                <div class="z5"><span class="tier-badge tier-媒体" title="媒体源">📰</span> 💰 Bloomberg Technology · 05-08 06:00 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
             </div>
         </div>
-        <div class="card" data-cat="其他" data-idx="42"
-             style="animation-delay:500ms">
-            
-            <div class="card-body">
-                <div class="z1">
-            <span class="z1-left">其他</span>
-            <span class="z1-meta">1 min</span>
-        </div>
-                <div class="card-title">Vercel CEO暗示IPO计划，AI智能体驱动营收激增</div>
-                <div class="z3"><div class="z3-why">Vercel的逆势增长说明基础设施层玩家正在成为AI应用爆发的最大受益者之一，印证&#x27;卖铲子&#x27;逻辑。</div></div>
-                <div class="z5">💡 TechCrunch AI · 04-13 15:22 <span style="color:#3b82f6;font-size:9px;font-weight:600">📰 已报道</span></div>
-            </div>
-        </div></div>
+</div>
+
+<!-- 大V 动态：X-* / YouTube 等社交媒体条目（importance<4 但仍值得展示） -->
+
 
 <!-- Modal -->
-<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modalContent" onclick="if(event.target===this)closeModal()">
 <div class="modal" id="modalContent"></div>
 </div>
 
+<!-- 阅后即焚：toggle 按钮（已读 ≥1 条时显示）。点开看的卡片自动隐藏，要看回历史去仪表盘 -->
+<button id="readToggle" class="read-toggle" style="display:none" onclick="_toggleShowRead()" type="button" aria-label="显示/隐藏已读卡片">
+    📭 已读 <span class="rt-count">0</span> · <span class="rt-label">显示已读</span>
+</button>
+
 <!-- Footer -->
 <footer class="footer">
-    AI 早报 · <b>16</b> 个信息源 · <b>43</b> 篇资讯 · 2026年04月16日
+    AI 早报 · <b>10</b> 个信息源 · <b>21</b> 篇资讯 · 2026年05月08日
+    · <a href="archive/dashboard.html" class="footer-link">📊 跑步仪表盘 →</a>
 </footer>
 
-<script src="modal_data.js"></script>
+<!-- modal_data.js 不在首屏加载；在 openModal() 首次被调用时由 script.js 动态注入 -->
 <script>
 const typeLabels = {"paper":"学术论文","news":"新闻报道","official":"官方发布","opinion":"观点文章","community":"社区讨论","video":"视频"};
 const statusColors = {"official":"#8b5cf6","confirmed":"#10b981","reported":"#3b82f6","rumor":"#f59e0b"};
+
+// ═══ Security helpers ═══
+// Escape HTML special chars before injecting untrusted strings into innerHTML.
+// renderMd() has its own &/</> escape; these helpers cover plain-string fields.
+function escHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, function(c) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+}
+// Returns url only if scheme is http/https/mailto; otherwise null (blocks javascript:, data:, etc).
+function safeLink(url) {
+    if (!url || url === '#') return null;
+    try {
+        var u = new URL(url, location.href);
+        return /^(https?:|mailto:)$/.test(u.protocol) ? url : null;
+    } catch (e) { return null; }
+}
 
 // ═══ Markdown → HTML renderer（带 heading id 注入）═══
 var _headingCounter = 0;
@@ -1202,51 +1425,194 @@ function buildToc(renderedHtml) {
     return toc;
 }
 
+// ═══ Lazy-load modal_data.js ═══
+// 首屏只保证能渲染卡片；真正点开第一张卡时再保证 __data 就位，
+// 避免把 130 KB+ 的 modal_data.js 塞进首屏关键路径。
+var __dataLoading = false;
+function ensureModalData(cb) {
+    if (typeof __data !== 'undefined' && __data && __data.length) { cb(); return; }
+    if (__dataLoading) {
+        var waited = 0;
+        var t = setInterval(function() {
+            waited += 50;
+            if (typeof __data !== 'undefined' && __data) { clearInterval(t); cb(); }
+            else if (waited > 5000) { clearInterval(t); console.error('modal_data.js timeout'); }
+        }, 50);
+        return;
+    }
+    __dataLoading = true;
+    var s = document.createElement('script');
+    s.src = 'modal_data.js';
+    s.onload = function() { cb(); };
+    s.onerror = function() { console.error('failed to load modal_data.js'); };
+    document.head.appendChild(s);
+}
+
+// ═══ Feedback helpers (localStorage) ═══
+// ═══ Read tracker — 阅后即焚（点开即标记，下次访问该卡片消散 + 隐藏）═══
+var _READ_KEY = 'ai_briefing_read_v1';
+function getReadSet() {
+    try { return new Set(JSON.parse(localStorage.getItem(_READ_KEY) || '[]')); }
+    catch(e) { return new Set(); }
+}
+function markRead(iid) {
+    if (!iid) return;
+    var s = getReadSet();
+    if (s.has(iid)) return;
+    s.add(iid);
+    try { localStorage.setItem(_READ_KEY, JSON.stringify(Array.from(s))); }
+    catch(e) {}
+}
+
+// 页面加载后立即按已读集合隐藏对应卡片，并显示"今日 X 条 / 已读 Y 条 · 显示已读"toggle
+function _applyReadState() {
+    var read = getReadSet();
+    var totalCards = 0, readCards = 0;
+    document.querySelectorAll('[data-iid]').forEach(function(card) {
+        totalCards++;
+        if (read.has(card.dataset.iid)) {
+            card.classList.add('is-read');
+            readCards++;
+        }
+    });
+    var toggle = document.getElementById('readToggle');
+    if (!toggle) return;
+    if (readCards === 0) {
+        toggle.style.display = 'none';
+        return;
+    }
+    toggle.style.display = '';
+    toggle.querySelector('.rt-count').textContent = readCards;
+}
+
+// "显示已读"toggle 控制
+function _toggleShowRead() {
+    document.body.classList.toggle('show-read');
+    var btn = document.getElementById('readToggle');
+    if (btn) {
+        var on = document.body.classList.contains('show-read');
+        btn.querySelector('.rt-label').textContent = on ? '隐藏已读' : '显示已读';
+    }
+}
+
+// 标记为已读 + 触发"消散"动画后隐藏卡片
+function _fadeReadCards(iid) {
+    document.querySelectorAll('[data-iid="' + (window.CSS && CSS.escape ? CSS.escape(iid) : iid) + '"]').forEach(function(card) {
+        if (card.classList.contains('is-read')) return;
+        card.classList.add('is-fading');
+        // 等动画结束再加 is-read（让 CSS 过渡顺滑）
+        setTimeout(function() {
+            card.classList.add('is-read');
+            card.classList.remove('is-fading');
+            _applyReadState();  // 刷新计数
+        }, 600);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', _applyReadState);
+
+var _FB_KEY = 'ai_briefing_feedback_v1';
+function getFeedback() {
+    try { return JSON.parse(localStorage.getItem(_FB_KEY) || '{}'); } catch(e) { return {}; }
+}
+function setFeedback(itemId, value) {
+    var fb = getFeedback();
+    if (value === null) { delete fb[itemId]; } else { fb[itemId] = {v: value, t: Date.now()}; }
+    try { localStorage.setItem(_FB_KEY, JSON.stringify(fb)); } catch(e) {}
+}
+
+// ═══ TOC sidebar active-section highlighting (scroll spy) ═══
+var _tocSpyObserver = null;
+function attachTocSpy() {
+    if (_tocSpyObserver) { try { _tocSpyObserver.disconnect(); } catch(e) {} _tocSpyObserver = null; }
+    var sidebar = document.querySelector('.m-toc-sidebar');
+    if (!sidebar) return;
+    var modalRoot = document.getElementById('modalOverlay');
+    var links = sidebar.querySelectorAll('a[href^="#toc-"]');
+    if (!links.length) return;
+    // Use scroll event on the modal overlay (it's what scrolls)
+    function update() {
+        var best = null, bestTop = -Infinity;
+        links.forEach(function(a) {
+            var id = a.getAttribute('href').slice(1);
+            var el = document.getElementById(id);
+            if (!el) return;
+            var top = el.getBoundingClientRect().top - 100;
+            if (top <= 0 && top > bestTop) { bestTop = top; best = a; }
+        });
+        links.forEach(function(a) { a.classList.remove('active'); });
+        if (best) best.classList.add('active');
+    }
+    modalRoot.addEventListener('scroll', update, {passive: true});
+    update();
+}
+
 // ═══ Modal ═══
 function openModal(idx) {
+    _currentModalIdx = idx;
+    ensureModalData(function() { _openModalReal(idx); });
+}
+function _openModalReal(idx) {
     const a = __data[idx];
     if (!a) return;
 
     // Hero image
     let heroHtml = '';
     if (a.image) {
-        heroHtml = '<div class="m-hero"><img src="' + a.image + '" onerror="this.parentElement.style.display=\'none\'" alt=""><div class="m-hero-gradient"></div></div>';
+        heroHtml = '<div class="m-hero"><img src="' + escHtml(a.image) + '" onerror="this.parentElement.style.display=\'none\'" alt=""><div class="m-hero-gradient"></div></div>';
     }
 
     // Title
-    let titleHtml = '<h2 class="m-title">' + (a.chinese_title || a.title || '') + '</h2>';
+    let titleHtml = '<h2 class="m-title">' + escHtml(a.chinese_title || a.title || '') + '</h2>';
 
-    // Source bar + event status badge (colored by status)
-    let srcParts = [(a.source_icon || '') + ' ' + (a.source_name || '')];
-    if (a.pub_date) srcParts.push(a.pub_date);
+    // Source bar: tier badge + icon + name + pub_date + source_type
+    let srcPrefix = '';
+    if (a.source_badge_icon && a.source_badge_label) {
+        srcPrefix = '<span class="tier-badge tier-' + escHtml(a.source_badge_label) + '">' +
+                    escHtml(a.source_badge_icon) + ' ' + escHtml(a.source_badge_label) + '</span> ';
+    }
+    let srcParts = [srcPrefix + escHtml(a.source_icon || '') + ' ' + escHtml(a.source_name || '')];
+    if (a.pub_date) srcParts.push(escHtml(a.pub_date));
     var tl = typeLabels[a.source_type];
-    if (tl) srcParts.push(tl);
+    if (tl) srcParts.push(escHtml(tl));
     let srcBarHtml = '<div class="m-src-bar">' + srcParts.join(' · ');
     if (a.event_status_icon && a.event_status_label) {
         var sc = statusColors[a.event_status] || '#888';
-        srcBarHtml += ' · <span class="m-status-badge" style="color:' + sc + '">' + a.event_status_icon + ' ' + a.event_status_label + '</span>';
+        srcBarHtml += ' · <span class="m-status-badge" style="color:' + sc + '">' + escHtml(a.event_status_icon) + ' ' + escHtml(a.event_status_label) + '</span>';
     }
     srcBarHtml += '</div>';
 
     // Multi-source indicator (moved here, right after source bar)
     let multiSrcHtml = '';
     if (a.also_reported_by && a.also_reported_by.length > 0) {
-        multiSrcHtml = '<div class="m-multi-src"><span class="m-multi-src-label">' + a.report_count + ' 源报道</span>';
+        multiSrcHtml = '<div class="m-multi-src"><span class="m-multi-src-label">' + escHtml(a.report_count) + ' 源报道</span>';
         a.also_reported_by.forEach(function(src) {
-            multiSrcHtml += '<span class="m-multi-src-tag">' + src + '</span>';
+            multiSrcHtml += '<span class="m-multi-src-tag">' + escHtml(src) + '</span>';
         });
         multiSrcHtml += '</div>';
     }
 
-    // Why-it-matters — only when no detailed_content (avoid repeating card)
-    let whyHtml = '';
-    if (a.why_it_matters && !a.detailed_content) {
-        whyHtml = '<div class="m-why">' + a.why_it_matters + '</div>';
+    // ★ LEDE — why_it_matters + deep_analysis（置顶，让读者秒懂"为什么重要"） ★
+    let ledeHtml = '';
+    if (a.why_it_matters) {
+        ledeHtml += '<div class="m-lede">' +
+                    '<span class="m-lede-label">📌 为什么重要</span>' +
+                    '<div class="m-lede-text"><strong>' + escHtml(a.why_it_matters) + '</strong></div>' +
+                    '</div>';
     }
+    if (a.deep_analysis) {
+        ledeHtml += '<div class="m-lede">' +
+                    '<span class="m-lede-label">🔍 深度解读</span>' +
+                    '<div class="m-lede-text">' + renderMd(a.deep_analysis) + '</div>' +
+                    '</div>';
+    }
+    // 原来的 whyHtml 占位改为不输出（已被 ledeHtml 包办）
+    let whyHtml = '';
 
     // Detailed content
     let detailedHtml = '';
-    let tocHtml = '';
+    let tocHtml = '';        // inline TOC（fallback / 窄屏）
+    let tocSidebarHtml = ''; // 左侧悬浮 TOC（宽屏）
     if (a.detailed_content) {
         let cleaned = a.detailed_content.replace(
             /^\s*###\s*(问题背景|背景|前言|引言|简介)[^\n]*\n[\s\S]*?(?=\n###\s|$)/, ''
@@ -1257,25 +1623,29 @@ function openModal(idx) {
         // Build TOC from rendered HTML (reliable — uses actual id attributes)
         var toc = buildToc(rendered);
         if (toc.length >= 2) {
-            tocHtml = '<nav class="m-toc"><span class="m-toc-title">目录</span>';
+            var linksHtml = '';
             toc.forEach(function(h) {
                 var cls = h.level >= 4 ? ' m-toc-sub' : '';
-                tocHtml += '<a href="#' + h.id + '" class="m-toc-link' + cls + '" onclick="event.preventDefault();document.getElementById(\'' + h.id + '\').scrollIntoView({behavior:\'smooth\',block:\'start\'});return false;">' + h.text + '</a>';
+                linksHtml += '<a href="#' + h.id + '" class="m-toc-link' + cls + '" onclick="event.preventDefault();document.getElementById(\'' + h.id + '\').scrollIntoView({behavior:\'smooth\',block:\'start\'});return false;">' + h.text + '</a>';
             });
-            tocHtml += '</nav>';
+            // 两套：inline（窄屏/fallback）+ sidebar（宽屏悬浮）
+            tocHtml = '<nav class="m-toc"><span class="m-toc-title">目录</span>' + linksHtml + '</nav>';
+            tocSidebarHtml = '<nav class="m-toc-sidebar show" aria-label="目录导航">' +
+                             '<div class="m-toc-sidebar-title">目录</div>' +
+                             linksHtml + '</nav>';
         }
         detailedHtml = '<div class="m-detailed" id="m-detailed-area">' + rendered + '</div>';
     } else {
         // Fallback
         var parts = [];
         var mainText = (a.title && a.title.length > (a.summary || '').length + 20) ? a.title : (a.summary || '');
-        if (mainText) parts.push('<p>' + mainText + '</p>');
-        if (a.why_it_matters) parts.push('<div class="m-why">' + a.why_it_matters + '</div>');
+        if (mainText) parts.push('<p>' + escHtml(mainText) + '</p>');
+        if (a.why_it_matters) parts.push('<div class="m-why">' + escHtml(a.why_it_matters) + '</div>');
         if (a.key_details && a.key_details.length > 0) {
             var kd = a.key_details.filter(function(k) { return k && k.length > 5; });
             if (kd.length > 0) {
                 parts.push('<div class="m-keypoints"><div class="m-keypoints-label">要点</div><ul>' +
-                    kd.map(function(k) { return '<li>' + k + '</li>'; }).join('') + '</ul></div>');
+                    kd.map(function(k) { return '<li>' + escHtml(k) + '</li>'; }).join('') + '</ul></div>');
             }
         }
         if (parts.length > 0) detailedHtml = '<div class="m-detailed">' + parts.join('') + '</div>';
@@ -1287,41 +1657,67 @@ function openModal(idx) {
         let imgs = a.extra_images.filter(function(u) { return u !== a.image; });
         if (imgs.length > 0) {
             galleryHtml = '<div class="m-gallery">' + imgs.map(function(u) {
-                return '<img src="' + u + '" onerror="this.style.display=\'none\'" alt="" loading="lazy">';
+                return '<img src="' + escHtml(u) + '" onerror="this.style.display=\'none\'" alt="" loading="lazy">';
             }).join('') + '</div>';
         }
     }
 
-    // Deep sections
+    // Deep sections（只保留 background；deep_analysis 已置顶到 lede）
     let deepHtml = '';
     if (a.background) deepHtml += '<div class="m-deep-section"><div class="m-deep-label">背景脉络</div><div class="m-deep-text">' + renderMd(a.background) + '</div></div>';
-    if (a.deep_analysis) deepHtml += '<div class="m-deep-section"><div class="m-deep-label">深度解读</div><div class="m-deep-text">' + renderMd(a.deep_analysis) + '</div></div>';
     if (deepHtml) deepHtml = '<div class="m-deep">' + deepHtml + '</div>';
 
-    // Footer
+    // Footer — safeLink 限制协议为 http/https/mailto，阻止 javascript: 注入
     let footerAction = '';
-    if (a.link && a.link !== '#') {
-        footerAction = '<a href="' + a.link + '" target="_blank" rel="noopener noreferrer" class="m-action" onclick="event.stopPropagation();">阅读原文 →</a>';
+    var _safeUrl = safeLink(a.link);
+    if (_safeUrl) {
+        footerAction = '<a href="' + escHtml(_safeUrl) + '" target="_blank" rel="noopener noreferrer" class="m-action" onclick="event.stopPropagation();">阅读原文 →</a>';
     }
+
+    // Feedback buttons — 👍/👎，localStorage 持久化
+    var itemId = a.item_id || ('idx-' + idx);
+    var _fbMap = getFeedback();
+    var _fbCur = _fbMap[itemId] ? _fbMap[itemId].v : null;
+    var upCls = _fbCur === 1 ? ' picked' : '';
+    var downCls = _fbCur === -1 ? ' picked-bad' : '';
+    var _itemIdSafe = escHtml(itemId);
+    var feedbackHtml =
+        '<div class="m-feedback">' +
+            '<div class="m-feedback-q">这条早报对你有用吗？</div>' +
+            '<button class="m-feedback-btn' + upCls + '" data-fb="up" data-item="' + _itemIdSafe + '" title="有用" aria-label="有用">👍</button>' +
+            '<button class="m-feedback-btn' + downCls + '" data-fb="down" data-item="' + _itemIdSafe + '" title="没用" aria-label="没用">👎</button>' +
+        '</div>';
+
+    // 先移除旧的 TOC sidebar（避免叠加）
+    var existingToc = document.querySelector('.m-toc-sidebar');
+    if (existingToc) existingToc.remove();
 
     document.getElementById('modalContent').innerHTML =
         heroHtml +
-        '<button class="m-close" onclick="closeModal()">✕</button>' +
+        '<button class="m-close" onclick="closeModal()" aria-label="关闭详情">✕</button>' +
         '<div class="m-body">' +
             srcBarHtml +
             multiSrcHtml +
             titleHtml +
-            whyHtml +
-            tocHtml +
+            ledeHtml +       // ← why_it_matters + deep_analysis 置顶
+            tocHtml +        // inline（窄屏 fallback）
             detailedHtml +
             galleryHtml +
             deepHtml +
-            '<div class="m-close-bottom" onclick="closeModal()">✕</div>' +
+            feedbackHtml +   // ← 👍/👎 反馈
+            '<button type="button" class="m-close-bottom" onclick="closeModal()" aria-label="关闭详情">✕</button>' +
             '<div class="m-footer">' +
-                '<span class="m-footer-src">' + a.reading_minutes + ' min read</span>' +
+                '<span class="m-footer-src">' + escHtml(a.reading_minutes) + ' min read</span>' +
                 footerAction +
             '</div>' +
         '</div>';
+
+    // 插入左侧悬浮 TOC（宽屏）
+    if (tocSidebarHtml) {
+        document.getElementById('modalOverlay').insertAdjacentHTML('beforeend', tocSidebarHtml);
+        // 在下次 paint 后启用滚动高亮
+        requestAnimationFrame(attachTocSpy);
+    }
 
     document.getElementById('modalOverlay').classList.add('show');
     document.body.style.overflow = 'hidden';
@@ -1331,7 +1727,48 @@ function openModal(idx) {
 function closeModal() {
     document.getElementById('modalOverlay').classList.remove('show');
     document.body.style.overflow = '';
+    // 清理 TOC sidebar + scroll spy
+    var tocSb = document.querySelector('.m-toc-sidebar');
+    if (tocSb) tocSb.remove();
+    if (_tocSpyObserver) { try { _tocSpyObserver.disconnect(); } catch(e) {} _tocSpyObserver = null; }
+    // 阅后即焚：标记当前条目已读 + 触发卡片消散
+    if (typeof _currentModalIdx === 'number') {
+        var d = (typeof __data !== 'undefined' && __data) ? __data[_currentModalIdx] : null;
+        var iid = d && (d.item_id || ('idx-' + _currentModalIdx));
+        // 同时尝试从卡片 DOM 取（modal 数据可能不准）
+        var card = document.querySelector('[data-idx="' + _currentModalIdx + '"]');
+        if (card && card.dataset.iid) iid = card.dataset.iid;
+        if (iid) {
+            markRead(iid);
+            _fadeReadCards(iid);
+        }
+    }
 }
+
+var _currentModalIdx = null;
+
+// ═══ Feedback button click (event delegation in modal) ═══
+document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.m-feedback-btn');
+    if (!btn) return;
+    e.stopPropagation();
+    var itemId = btn.dataset.item;
+    if (!itemId) return;
+    var fbMap = getFeedback();
+    var cur = fbMap[itemId] ? fbMap[itemId].v : null;
+    var val = btn.dataset.fb === 'up' ? 1 : -1;
+    // 再次点击取消；否则覆盖
+    var newVal = (cur === val) ? null : val;
+    setFeedback(itemId, newVal);
+    // 视觉反馈（兄弟按钮互斥）
+    var parent = btn.parentElement;
+    parent.querySelectorAll('.m-feedback-btn').forEach(function(b) {
+        b.classList.remove('picked');
+        b.classList.remove('picked-bad');
+    });
+    if (newVal === 1) btn.classList.add('picked');
+    else if (newVal === -1) btn.classList.add('picked-bad');
+});
 
 // ═══ Card click (desktop + touch) ═══
 (function() {
@@ -1358,27 +1795,58 @@ function closeModal() {
     }
     bindCardClick(document.getElementById('grid'));
     bindCardClick(document.querySelector('.featured-grid'));
+    bindCardClick(document.querySelector('.top3-grid'));
+    bindCardClick(document.querySelector('.vip-list'));
 })();
 
-// ═══ Filters ═══
+// ═══ Filters (category AND audience AND search) ═══
+var _activeCat = 'all';
+var _activeAud = 'all';
+var _activeQuery = '';
+
+function _applyFilters() {
+    var q = _activeQuery;
+    document.querySelectorAll('.card,[class*="featured-card"]').forEach(function(c) {
+        var cat = c.dataset.cat || '';
+        var aud = c.dataset.aud || 'general';
+        var catOk = (_activeCat === 'all') || cat.includes(_activeCat);
+        var audOk = (_activeAud === 'all') || aud.split('|').indexOf(_activeAud) >= 0;
+        var qOk   = !q || c.textContent.toLowerCase().includes(q);
+        c.classList.toggle('hidden', !(catOk && audOk && qOk));
+    });
+}
+
 document.querySelectorAll('.f-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
         document.querySelectorAll('.f-btn').forEach(function(b) { b.classList.remove('active'); });
         btn.classList.add('active');
-        var f = btn.dataset.filter;
-        document.querySelectorAll('.card,[class*="featured-card"]').forEach(function(c) {
-            c.classList.toggle('hidden', f !== 'all' && !(c.dataset.cat && c.dataset.cat.includes(f)));
-        });
+        _activeCat = btn.dataset.filter;
+        _applyFilters();
+    });
+});
+
+document.querySelectorAll('.a-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.a-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        _activeAud = btn.dataset.audience;
+        _applyFilters();
     });
 });
 
 // ═══ Search ═══
-document.getElementById('searchBox').addEventListener('input', function() {
-    var q = this.value.toLowerCase();
-    document.querySelectorAll('.card,[class*="featured-card"]').forEach(function(c) {
-        c.classList.toggle('hidden', q && !c.textContent.toLowerCase().includes(q));
-    });
-});
+function _debounce(fn, ms) {
+    var t;
+    return function() {
+        var args = arguments, ctx = this;
+        clearTimeout(t);
+        t = setTimeout(function() { fn.apply(ctx, args); }, ms);
+    };
+}
+document.getElementById('searchBox').addEventListener('input', _debounce(function() {
+    _activeQuery = this.value.toLowerCase();
+    _applyFilters();
+}, 150));
 
 // ═══ Keyboard ═══
 document.addEventListener('keydown', function(e) {
@@ -1388,6 +1856,46 @@ document.addEventListener('keydown', function(e) {
         document.getElementById('searchBox').focus();
     }
 });
+
+// ═══ Auto-open modal from URL hash ═══
+// 当 URL 带 #evt-<event_id>（来自 dashboard 重要事件链接）时，
+// 滚到对应卡片并自动展开 modal。需要 modal_data 已加载（ensureModalData lazy load）。
+function _handleEvtHash() {
+    var h = window.location.hash || '';
+    if (!h.startsWith('#evt-')) return;
+    var eid = decodeURIComponent(h.substring(5));
+    if (!eid) return;
+
+    ensureModalData(function() {
+        if (typeof __data === 'undefined' || !Array.isArray(__data)) return;
+        // 在 modal_data 里找匹配 item_id 的下标
+        // 兼容两种 ID 体系：
+        //   · canonical_event_id: 'evt_' + 24 hex（dashboard 链接用）
+        //   · canonical_article_id: 32 hex（卡片 data-iid 用）
+        // 后者的前 24 位 = 前者去掉 'evt_'。这里前缀匹配兼容两种来源。
+        var bareEid = eid.indexOf('evt_') === 0 ? eid.substring(4) : eid;
+        var matchIdx = -1;
+        for (var i = 0; i < __data.length; i++) {
+            var iid = __data[i] && __data[i].item_id;
+            if (!iid) continue;
+            if (iid === eid) { matchIdx = i; break; }
+            if (iid === bareEid) { matchIdx = i; break; }
+            if (iid.startsWith(bareEid)) { matchIdx = i; break; }
+        }
+        if (matchIdx < 0) return;
+
+        // 滚到对应卡片（如果存在）
+        try {
+            var sel = '[data-iid="' + (window.CSS && CSS.escape ? CSS.escape(eid) : eid) + '"]';
+            var card = document.querySelector(sel);
+            if (card) card.scrollIntoView({behavior: 'smooth', block: 'center'});
+        } catch (_) {}
+
+        openModal(matchIdx);
+    });
+}
+window.addEventListener('load', _handleEvtHash);
+window.addEventListener('hashchange', _handleEvtHash);
 
 </script>
 </body>

@@ -139,6 +139,16 @@ def generate_html(all_items, config, digest=None, meta=None):
     weekday = weekday_map[now.weekday()]
     time_str = now.strftime("%H:%M")
 
+    # 标题随班次切换：早班 → AI 早报；晚班 → AI 晚报；无 shift → AI 早报（兼容默认）
+    import os as _os_briefing
+    _shift = _os_briefing.environ.get('BRIEFING_SHIFT', '').lower()
+    if _shift == 'pm':
+        briefing_title = 'AI 晚报'
+        briefing_emoji = '🌆'
+    else:
+        briefing_title = 'AI 早报'
+        briefing_emoji = '📡'
+
     # 统计
     by_source = {}
     for item in all_items:
@@ -722,6 +732,8 @@ def generate_html(all_items, config, digest=None, meta=None):
         date_str=date_str,
         weekday=weekday,
         time_str=time_str,
+        briefing_title=briefing_title,
+        briefing_emoji=briefing_emoji,
         total=total,
         sources_count=sources_count,
         filter_html=filter_html,

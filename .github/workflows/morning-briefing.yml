@@ -33,6 +33,9 @@ jobs:
     permissions:
       contents: write   # 需要 push briefing-state 分支
     env:
+      # 强制时区为北京时间 — Python datetime.now()、shell date 都会自动用此值，
+      # 否则 GH runner 默认 UTC，UI 上显示的时间会比北京时间晚 8 小时。
+      TZ: Asia/Shanghai
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
       TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
