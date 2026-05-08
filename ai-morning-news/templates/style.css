@@ -153,6 +153,24 @@ body {
     padding-top: 10px; border-top: 1px solid var(--border);
 }
 
+/* ═════ "其他资讯" section 标题(跟 .featured-title 对应,起视觉分界作用) ═════ */
+.grid-section-header {
+    max-width: 1120px; margin: 36px auto 8px; padding: 0 20px;
+    border-top: 1px solid var(--border, rgba(255,255,255,0.08));
+    padding-top: 20px;
+}
+.grid-section-title {
+    font-family: var(--serif); font-size: 18px; font-weight: 700;
+    color: var(--text-100); margin: 0 0 4px; letter-spacing: -0.3px;
+}
+.grid-section-meta {
+    font-size: 11px; color: var(--text-50, #888); letter-spacing: 0.3px;
+}
+@media (max-width: 640px) {
+    .grid-section-header { padding: 16px 14px 0; }
+    .grid-section-title { font-size: 16px; }
+}
+
 /* ═════ Grid — masonry columns ═════ */
 .grid {
     max-width: 1120px; margin: 18px auto; padding: 0 14px;

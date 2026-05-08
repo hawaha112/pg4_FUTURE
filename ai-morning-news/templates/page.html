@@ -48,6 +48,11 @@ $briefing_html
 $featured_html
 
 <!-- Regular Articles (importance < 3) —— 普通资讯网格 -->
+<!-- 在 grid 上方加一个 section 标题,跟"今日必读"对应,视觉分界 -->
+<div class="grid-section-header">
+    <h2 class="grid-section-title">📰 其他资讯</h2>
+    <div class="grid-section-meta">按发布时间倒序 · 点击卡片展开详情</div>
+</div>
 <!-- id="grid" 是 script.js bindCardClick(getElementById('grid')) 必须的，少了它点击 modal 会失效 -->
 <div id="grid" class="grid" aria-label="资讯列表">
 $cards_html
