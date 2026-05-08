@@ -331,6 +331,18 @@ def main():
         )
         log.info("📦 从事件库读取 %d 条文章（最近 %d 小时）", len(events), hours)
 
+        # 班次窗口过滤：早晚班严格按 published_at 落在 12h 班次窗口
+        # （否则 fallback 会把过期班次的文章混进来，比如早报里出现 5-6 的内容）
+        if window_start is not None:
+            before_window = len(events)
+            events = [e for e in events if _in_window(
+                e.get('published_at') or e.get('published') or e.get('collected_at')
+            )]
+            dropped = before_window - len(events)
+            if dropped > 0:
+                log.info("🕘 fallback 按班次窗口过滤：%d → %d 条（窗口外 %d 条排除）",
+                         before_window, len(events), dropped)
+
         if not events:
             log.warning("⚠️ 事件库中无可用事件，跳过出报")
             store.close()
