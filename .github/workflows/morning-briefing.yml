@@ -8,6 +8,8 @@ name: AI Morning Briefing
 #   - schedule cron：北京 06:30 早班 + 18:00 晚班
 
 on:
+  # PoC 阶段：仅手动触发，避免 cron 误跑浪费 Max 额度。
+  # 切换正式生产时把下面 schedule 取消注释 + 关掉本地 launchd。
   workflow_dispatch:
     inputs:
       shift:
@@ -15,9 +17,9 @@ on:
         type: choice
         options: [auto, am, pm]
         default: auto
-  schedule:
-    - cron: '30 22 * * *'   # UTC 22:30 = 北京 06:30 早班
-    - cron: '0 10 * * *'    # UTC 10:00 = 北京 18:00 晚班
+  # schedule:
+  #   - cron: '30 22 * * *'   # UTC 22:30 = 北京 06:30 早班
+  #   - cron: '0 10 * * *'    # UTC 10:00 = 北京 18:00 晚班
 
 concurrency:
   group: ai-morning-briefing
