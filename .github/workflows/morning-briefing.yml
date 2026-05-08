@@ -18,9 +18,9 @@ on:
         type: choice
         options: [auto, am, pm]
         default: auto
-  # schedule:
-  #   - cron: '0 22 * * *'   # UTC 22:00 = 北京 06:00 早班
-  #   - cron: '0 10 * * *'   # UTC 10:00 = 北京 18:00 晚班
+  schedule:
+    - cron: '0 22 * * *'   # UTC 22:00 = 北京 06:00 早班
+    - cron: '0 10 * * *'   # UTC 10:00 = 北京 18:00 晚班
 
 concurrency:
   group: ai-morning-briefing
