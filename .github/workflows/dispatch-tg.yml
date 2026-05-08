@@ -42,37 +42,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build message body
-        id: build
-        run: |
-          python3 .github/scripts/build_tg_message.py > /tmp/tg_body.txt
-          echo "preview (first 200 chars):"
-          head -c 200 /tmp/tg_body.txt; echo
-
-      - name: Send to Telegram
-        env:
-          BODY_FILE: /tmp/tg_body.txt
-        run: |
-          BODY="$(cat /tmp/tg_body.txt)" python3 -c '
-          import json, os, sys, urllib.request
-          parse = os.environ.get("PARSE_MODE", "HTML")
-          data = {
-              "chat_id": os.environ["TG_CHAT_ID"],
-              "text": os.environ["BODY"],
-              "disable_web_page_preview": False,
-          }
-          if parse and parse != "plain":
-              data["parse_mode"] = parse
-          payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-          req = urllib.request.Request(
-              f"https://api.telegram.org/bot{os.environ['TG_BOT_TOKEN']}/sendMessage",
-              data=payload,
-              headers={"Content-Type": "application/json"},
-              method="POST",
-          )
-          with urllib.request.urlopen(req, timeout=15) as resp:
-              body = json.loads(resp.read().decode())
-              print(json.dumps(body, ensure_ascii=False, indent=2))
-              if not body.get("ok"):
-                  sys.exit(1)
-          '
+      - name: Build + send TG message
+        run: python3 .github/scripts/build_tg_message.py

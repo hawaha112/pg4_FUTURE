@@ -79,6 +79,36 @@ def build_health_ping() -> str:
     return f"<b>🟢 系统健康检查</b>\n{now}\n来自 GitHub Actions runner"
 
 
+def send_to_telegram(body: str) -> None:
+    bot_token = os.environ['TG_BOT_TOKEN']
+    chat_id = os.environ['TG_CHAT_ID']
+    parse_mode = os.environ.get('PARSE_MODE', 'HTML')
+
+    data = {
+        'chat_id': chat_id,
+        'text': body,
+        'disable_web_page_preview': False,
+    }
+    if parse_mode and parse_mode != 'plain':
+        data['parse_mode'] = parse_mode
+
+    payload = json.dumps(data, ensure_ascii=False).encode('utf-8')
+    req = urllib.request.Request(
+        f'https://api.telegram.org/bot{bot_token}/sendMessage',
+        data=payload,
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        result = json.loads(resp.read().decode())
+        ok = result.get('ok')
+        msg_id = (result.get('result') or {}).get('message_id', '?')
+        err = result.get('description', '')
+        print(f'TG response: ok={ok} msg_id={msg_id} err={err!r}')
+        if not ok:
+            sys.exit(1)
+
+
 def main():
     preset = os.environ.get('PRESET', 'none').strip()
     if preset == 'dashboard_snapshot':
@@ -88,7 +118,12 @@ def main():
     else:
         body = os.environ.get('MSG', '')
 
-    sys.stdout.write(body)
+    if not body:
+        print('ERROR: empty message body', file=sys.stderr)
+        sys.exit(1)
+
+    print(f'Body preview (first 200 chars): {body[:200]}')
+    send_to_telegram(body)
 
 
 if __name__ == '__main__':
