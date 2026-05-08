@@ -60,8 +60,14 @@ jobs:
           if [ -d .briefing-state/ai-morning-news ]; then
             cp -f .briefing-state/ai-morning-news/*.db ai-morning-news/ 2>/dev/null || true
             cp -f .briefing-state/ai-morning-news/*.json ai-morning-news/ 2>/dev/null || true
+            # output/run_health.jsonl: dashboard_generator 必读,缺它不生成 dashboard.html
+            mkdir -p ai-morning-news/output
+            cp -f .briefing-state/ai-morning-news/output/run_health.jsonl \
+              ai-morning-news/output/run_health.jsonl 2>/dev/null || true
             echo "✓ 从 briefing-state 接续状态"
             ls -la ai-morning-news/*.db 2>/dev/null | awk '{print "  · " $9 ": " $5 " bytes"}'
+            [ -f ai-morning-news/output/run_health.jsonl ] && \
+              echo "  · run_health.jsonl: $(wc -l < ai-morning-news/output/run_health.jsonl) 条历史"
           else
             echo "⚠️ briefing-state 不存在，从 0 冷启动"
           fi
@@ -119,11 +125,14 @@ jobs:
           git init -q -b briefing-state
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
-          mkdir -p ai-morning-news
+          mkdir -p ai-morning-news ai-morning-news/output
           cd "$GITHUB_WORKSPACE/ai-morning-news"
           for f in events.db dedup.db llm_cache.db source_health.json history.json; do
             [ -f "$f" ] && cp "$f" "$STATE_DIR/ai-morning-news/" || true
           done
+          # output/run_health.jsonl: dashboard 历史趋势 + dashboard_generator 必读
+          [ -f output/run_health.jsonl ] && \
+            cp output/run_health.jsonl "$STATE_DIR/ai-morning-news/output/" || true
           cd "$STATE_DIR"
           ls -la ai-morning-news/
           git add ai-morning-news/
