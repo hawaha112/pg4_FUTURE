@@ -1,0 +1,191 @@
+name: AI Weekly Report
+# 每周日 18:00 北京时间生成"本周回顾",
+# 基于过去 7 天 importance ≥ 4 的事件,LLM 给 3 个判断 + 下周展望。
+#
+# 触发:
+#   - schedule cron: '0 10 * * 0'  (UTC 10:00 周日 = 北京 18:00 周日)
+#   - workflow_dispatch (手动)
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Number of days to look back (default 7)'
+        type: string
+        default: '7'
+  schedule:
+    - cron: '0 10 * * 0'   # 北京周日 18:00
+
+concurrency:
+  group: ai-weekly-report
+  cancel-in-progress: false
+
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      TZ: Asia/Shanghai
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      BRIEFING_URL: ${{ secrets.BRIEFING_URL }}
+      DEPLOY_REPO_TOKEN: ${{ secrets.DEPLOY_REPO_TOKEN }}
+      DEPLOY_REPO: hawaha112/ai-morning-briefing
+
+    steps:
+      - name: Checkout main (代码)
+        uses: actions/checkout@v4
+
+      - name: Checkout briefing-state (db 快照)
+        uses: actions/checkout@v4
+        with:
+          ref: briefing-state
+          path: .briefing-state
+        continue-on-error: true
+
+      - name: Restore db files from state branch
+        shell: bash
+        run: |
+          if [ -d .briefing-state/ai-morning-news ]; then
+            cp -f .briefing-state/ai-morning-news/*.db ai-morning-news/ 2>/dev/null || true
+            cp -f .briefing-state/ai-morning-news/*.json ai-morning-news/ 2>/dev/null || true
+            echo "✓ 从 briefing-state 接续状态"
+            ls -la ai-morning-news/*.db 2>/dev/null | awk '{print "  · " $9 ": " $5 " bytes"}'
+          else
+            echo "::error::briefing-state 不存在,周报需要 events.db"
+            exit 1
+          fi
+          rm -rf .briefing-state
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python deps
+        run: pip install certifi
+
+      - name: Install Claude Code CLI
+        shell: bash
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
+          [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && { echo "::error::缺 OAuth token"; exit 1; }
+
+      - name: Start claude_proxy
+        working-directory: ai-morning-news
+        shell: bash
+        run: |
+          nohup python3 -u claude_proxy.py > /tmp/proxy.log 2>&1 &
+          echo $! > /tmp/proxy.pid
+          for i in $(seq 1 30); do
+            curl -s http://localhost:3456/health > /dev/null 2>&1 && { echo "proxy ready ($i sec)"; break; }
+            sleep 1
+          done
+
+      - name: Generate weekly report
+        working-directory: ai-morning-news
+        shell: bash
+        run: |
+          DAYS="${{ github.event.inputs.days || '7' }}"
+          python3 weekly_report.py --days "$DAYS" 2>&1 | tee weekly_run.log
+
+      - name: Stop claude_proxy
+        if: always()
+        run: |
+          [ -f /tmp/proxy.pid ] && kill "$(cat /tmp/proxy.pid)" 2>/dev/null || true
+
+      - name: Deploy weekly to Pages repo
+        if: success()
+        working-directory: ai-morning-news
+        shell: bash
+        run: |
+          if [ ! -d output/weekly ] || [ -z "$(ls -A output/weekly 2>/dev/null)" ]; then
+            echo "::warning::output/weekly 为空,跳过部署"
+            exit 0
+          fi
+          DEPLOY_TMP=$(mktemp -d)
+          git clone --depth 1 \
+            "https://x-access-token:${DEPLOY_REPO_TOKEN}@github.com/${DEPLOY_REPO}.git" \
+            "$DEPLOY_TMP" 2>&1 | tail -2
+          mkdir -p "$DEPLOY_TMP/archive/weekly"
+          cp -r output/weekly/* "$DEPLOY_TMP/archive/weekly/"
+          cd "$DEPLOY_TMP"
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add archive/weekly
+          if git diff --cached --quiet; then
+            echo "无变化,跳过 commit"
+          else
+            WEEK=$(date +%Y-W%V)
+            git commit -m "Weekly report: $WEEK"
+            git push origin main
+            echo "✓ 周报已部署"
+          fi
+
+      - name: Send TG notification
+        if: success()
+        working-directory: ai-morning-news
+        shell: bash
+        run: |
+          # 找最新 weekly meta json
+          META_FILE=$(ls -1t output/weekly/*.json 2>/dev/null | head -1)
+          if [ -z "$META_FILE" ]; then
+            echo "无 meta 文件,跳过 TG"
+            exit 0
+          fi
+
+          BASE="${BRIEFING_URL%/}"
+          BODY=$(META_FILE="$META_FILE" BASE="$BASE" python3 <<'PYEOF'
+          import json, os
+          meta = json.load(open(os.environ['META_FILE'], encoding='utf-8'))
+          base = os.environ['BASE']
+          week = meta.get('week_label', '?')
+          dr = meta.get('date_range', '?')
+          n = meta.get('n_events', 0)
+          titles = meta.get('judgement_titles', [])
+          nw = (meta.get('next_week_focus', '') or '').strip()
+          # 截短 next_week 在 TG 里
+          nw_short = nw[:90] + ('…' if len(nw) > 90 else '')
+          lines = [
+              f'<b>📅 {week} · AI 行业周报</b>',
+              f'{dr} · 基于 <b>{n}</b> 条 importance ≥ 4 事件',
+              '',
+              '<b>本周三个关键判断:</b>',
+          ]
+          for i, t in enumerate(titles[:3], 1):
+              if t:
+                  lines.append(f'  <b>{i}.</b> {t}')
+          lines.append('')
+          if nw_short:
+              lines.append(f'<b>🔭 下周值得关注:</b> {nw_short}')
+              lines.append('')
+          lines.append(f'<a href="{base}/archive/weekly/latest.html">📖 阅读完整周报 →</a>')
+          print('\n'.join(lines))
+          PYEOF
+          )
+          PAYLOAD=$(BODY="$BODY" python3 -c '
+          import json, os
+          print(json.dumps({
+              "chat_id": os.environ["TG_CHAT_ID"],
+              "text": os.environ["BODY"],
+              "parse_mode": "HTML",
+              "disable_web_page_preview": False,
+          }, ensure_ascii=False))')
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" | python3 -m json.tool
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-report-${{ github.run_number }}
+          path: |
+            ai-morning-news/output/weekly/
+            ai-morning-news/weekly_run.log
+            /tmp/proxy.log
+          if-no-files-found: warn
+          retention-days: 30
