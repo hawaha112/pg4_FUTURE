@@ -8,6 +8,24 @@
 set -e
 
 # ────────────────────────────────────────────────
+# Python 版本锁定 + 启动预检（与 run_daily.sh 同策略）
+# ────────────────────────────────────────────────
+if [ -x "/opt/anaconda3/bin/python3" ]; then
+    PYTHON="/opt/anaconda3/bin/python3"
+elif [ -x "/opt/homebrew/bin/python3" ]; then
+    PYTHON="/opt/homebrew/bin/python3"
+else
+    PYTHON="python3"
+fi
+export PYTHON
+if ! "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)' 2>/dev/null; then
+    _V=$("$PYTHON" -c 'import sys; print(sys.version)' 2>&1 | head -1)
+    echo "$(date '+%Y-%m-%d %H:%M:%S') 🚨 PYTHON VERSION CHECK FAILED: $PYTHON = $_V (need >=3.10)" \
+        >> "$(cd "$(dirname "$0")" && pwd)/collect.log"
+    exit 1
+fi
+
+# ────────────────────────────────────────────────
 # 互斥锁
 # ────────────────────────────────────────────────
 _SCRIPT_DIR_EARLY="$(cd "$(dirname "$0")" && pwd)"
@@ -62,7 +80,7 @@ NO_LLM=""
 PROXY_PID=""
 PROXY_STARTED_BY_US=false
 
-LLM_URL=$(python3 -c "import json; print(json.load(open('config.json'))['llm']['base_url'])" 2>/dev/null || echo "http://localhost:3456/v1")
+LLM_URL=$("$PYTHON" -c "import json; print(json.load(open('config.json'))['llm']['base_url'])" 2>/dev/null || echo "http://localhost:3456/v1")
 
 if curl -s --connect-timeout 5 "${LLM_URL}/models" > /dev/null 2>&1; then
     echo "  LLM 服务已在运行" >> "$LOG_FILE"
@@ -70,7 +88,7 @@ else
     # 尝试启动代理
     if [ -f "$PROJECT_DIR/claude_proxy.py" ]; then
         echo "  启动 claude_proxy.py..." >> "$LOG_FILE"
-        python3 -u "$PROJECT_DIR/claude_proxy.py" >> "$LOG_FILE" 2>&1 &
+        "$PYTHON" -u "$PROJECT_DIR/claude_proxy.py" >> "$LOG_FILE" 2>&1 &
         PROXY_PID=$!
         PROXY_STARTED_BY_US=true
 
@@ -107,7 +125,7 @@ trap cleanup_proxy EXIT
 # 运行采集器
 # ────────────────────────────────────────────────
 echo "开始采集..." >> "$LOG_FILE"
-if python3 -u "$PROJECT_DIR/collector.py" ${NO_LLM:-} >> "$LOG_FILE" 2>&1; then
+if "$PYTHON" -u "$PROJECT_DIR/collector.py" ${NO_LLM:-} >> "$LOG_FILE" 2>&1; then
     echo "  采集完成" >> "$LOG_FILE"
 else
     echo "  ❌ 采集失败（退出码: $?）" >> "$LOG_FILE"

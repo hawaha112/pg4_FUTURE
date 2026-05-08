@@ -134,6 +134,35 @@ def _enrich_item_with_event_info(item: dict, event: dict) -> dict:
     return item
 
 
+def _already_rendered_in_shift(event: dict, window_start) -> bool:
+    """事件是否已在本班次窗口起点之后渲染过 — 用于跨 am/pm 班次去重。
+
+    若事件在 window_start 之后已被渲染过 (rendered_at)，默认跳过；
+    但若渲染之后又有新 evidence 进来 (last_updated_at > rendered_at)，
+    视为"重新激活"，仍然允许再次出现。
+
+    背景: commit 093475c 修复——_event_in_window 放行带新跟进的旧事件后，
+    导致同一事件同时出现在早晚两班；本函数是其后置过滤器。
+    """
+    rendered = event.get('rendered_at')
+    if not rendered:
+        return False
+    try:
+        r_dt = datetime.fromisoformat(rendered.replace('Z', '+00:00'))
+    except (ValueError, TypeError, AttributeError):
+        return False
+    if r_dt.astimezone() < window_start:
+        return False  # 早于本班次窗口起点，可以重渲
+    last_upd = event.get('last_updated_at') or ''
+    try:
+        u_dt = datetime.fromisoformat(last_upd.replace('Z', '+00:00'))
+        if u_dt > r_dt:
+            return False  # 渲染后又被更新过，重新激活
+    except (ValueError, TypeError, AttributeError):
+        pass
+    return True
+
+
 def main():
     script_dir = Path(__file__).parent
     config_path = script_dir / 'config.json'
@@ -225,30 +254,11 @@ def main():
                  before, len(canonical_events), before - len(canonical_events))
 
         # 已在本班次窗口开始之后渲染过的事件，跳过 — 防止早班/晚班重复展示同一事件
-        # 当事件 rendered 之后又有新 evidence（last_updated_at > rendered_at）时，
-        # 说明它"重新激活"，仍然可以再次出现。
-        def _already_rendered(event) -> bool:
-            rendered = event.get('rendered_at')
-            if not rendered:
-                return False
-            try:
-                r_dt = datetime.fromisoformat(rendered.replace('Z', '+00:00'))
-            except (ValueError, TypeError, AttributeError):
-                return False
-            if r_dt.astimezone() < window_start:
-                return False  # 早于本班次窗口起点，可以重渲
-            # rendered_at 在窗口内或之后；查是否有更新的跟进
-            last_upd = event.get('last_updated_at') or ''
-            try:
-                u_dt = datetime.fromisoformat(last_upd.replace('Z', '+00:00'))
-                if u_dt > r_dt:
-                    return False  # 渲染后又被更新过，重新激活
-            except (ValueError, TypeError, AttributeError):
-                pass
-            return True
-
         before_dedup = len(canonical_events)
-        canonical_events = [e for e in canonical_events if not _already_rendered(e)]
+        canonical_events = [
+            e for e in canonical_events
+            if not _already_rendered_in_shift(e, window_start)
+        ]
         dedup_dropped = before_dedup - len(canonical_events)
         if dedup_dropped > 0:
             log.info("🔁 跳过本班次窗口内已渲染过的 %d 个事件（去重，避免早晚报重复）",
@@ -646,6 +656,27 @@ def main():
             status = item.get('_event_status', 'unknown')
             status_summary[status] = status_summary.get(status, 0) + 1
 
+        # ── 重要事件清单（importance ≥ 4）—— dashboard 渲染可点击列表用
+        # 链接到本期归档页（archive/YYYY-MM-DD-<shift>.html）
+        import os as _os_iev
+        _today_iev = datetime.now().strftime('%Y-%m-%d')
+        _shift_iev = _os_iev.environ.get('BRIEFING_SHIFT', '')
+        _archive_url = (
+            f"archive/{_today_iev}-{_shift_iev}.html"
+            if _shift_iev in ('am', 'pm') else 'index.html'
+        )
+        important_events_list = []
+        for item in all_items:
+            a = item.get('analysis', {}) or {}
+            if a.get('importance', 0) >= 4:
+                important_events_list.append({
+                    'title': a.get('chinese_title') or item.get('title') or '',
+                    'event_id': item.get('_canonical_event_id', '') or item.get('link', ''),
+                    'importance': int(a.get('importance', 0)),
+                    'source_name': item.get('source_name', ''),
+                    'archive_url': _archive_url,
+                })
+
         stats = {
             "article_count": len(all_items),
             "output_file": str(output_path.relative_to(script_dir)),
@@ -658,6 +689,7 @@ def main():
             "llm_count": llm_count,
             "multi_source_count": multi_source_count,
             "important_count": important_count,
+            "important_events": important_events_list,
             "official_count": official_count,
             "depth_count": depth_count,
             "entity_count": entity_count,

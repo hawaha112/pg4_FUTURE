@@ -192,12 +192,20 @@ class EventClusterer:
 
     @staticmethod
     def _cluster_text(item: dict) -> str:
-        """构造用于聚类匹配的文本：title + summary 前 200 字
+        """构造用于聚类匹配的文本。
 
-        用更多文本做聚类，比仅用标题效果好得多。
+        优先用 LLM 输出的 event_signature（英文规范化指纹，跨语对齐）；
+        没有时退回 title + summary 前 200 字。
+        article 端 signature 在 item['analysis']['event_signature']；
+        canonical_event 端在 item['analysis'] 或 顶层 'event_signature'（看调用方）。
         """
+        a = item.get('analysis', {}) if isinstance(item.get('analysis'), dict) else {}
+        sig = (a.get('event_signature') or item.get('event_signature') or '').strip()
         title = item.get('title', '')
         summary = (item.get('summary') or '')[:200]
+        # signature 重复 3 遍提高 MinHash 命中（短文本 token 太少 LSH 容易漏）
+        if sig:
+            return f"{sig} {sig} {sig} {title} {summary}".strip()
         return f"{title} {summary}".strip()
 
     def cluster_and_link(self, articles: List[dict]) -> Dict[str, int]:
@@ -237,9 +245,12 @@ class EventClusterer:
         idx_to_article: Dict[int, dict] = {}
 
         for event in existing_events:
-            # 加载 canonical article 的 summary 以增强聚类文本
+            # 聚类文本必须和文章端的 _cluster_text（title + summary）语言/分布一致。
+            # event.summary 是 LLM 生成的中文短摘要（60-70字），article.summary 是英文原文摘要（200字）；
+            # 如果用 event.summary 做 MinHash，会和新来文章的英文 summary 词汇不重合，LSH bucket 落不到同一处。
+            # 始终优先用 canonical article 的 summary，让两端分布对齐。
             text = self._cluster_text(event)
-            if event.get('canonical_article_id') and not event.get('summary'):
+            if event.get('canonical_article_id'):
                 art_row = self.store.db.execute(
                     "SELECT title, summary FROM articles WHERE id = ?",
                     (event['canonical_article_id'],)

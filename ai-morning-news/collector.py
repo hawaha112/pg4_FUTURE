@@ -299,7 +299,12 @@ def main():
                 item['source_tier'] = src.get('tier', 2)
             all_items.extend(items)
 
-    health_tracker.print_report()
+    # 已在 config 中 enabled=false 的源不参与告警（它们已被跳过抓取）
+    disabled_names = {
+        s['name'] for s in all_sources_raw
+        if not s.get('enabled', True) or s.get('disabled', False)
+    }
+    health_tracker.print_report(disabled_sources=disabled_names)
     health_tracker.save()
 
     # 自动禁用长期失败的源（默认关闭，通过 AUTO_DISABLE_DEAD_SOURCES=1 或 config.settings.auto_disable_sources 启用）
@@ -324,14 +329,35 @@ def main():
     except (FileNotFoundError, json.JSONDecodeError):
         pass
 
-    # 全局时间过滤
-    global_cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age)
+    # 分层时间过滤：tier 0/1 默认 168h，tier 2 按 max_age；源可在 config 里加
+    # "max_age_hours" 字段 override（例如 GitHub releases 类设 720h 让月发版本通过）。
+    _TIER_MAX_AGE = {0: 168, 1: 168, 2: max_age}
+    # 构建 source_name → max_age_hours override 映射
+    _src_override = {}
+    for _s in all_sources:
+        if _s.get('max_age_hours'):
+            _src_override[_s['name']] = int(_s['max_age_hours'])
+    now_utc = datetime.now(timezone.utc)
     before = len(all_items)
-    all_items = [i for i in all_items
-                 if not i.get('published') or i['published'] >= global_cutoff]
+    _kept = []
+    for i in all_items:
+        pub = i.get('published')
+        if not pub:
+            _kept.append(i)
+            continue
+        sn = i.get('source_name', '')
+        if sn in _src_override:
+            max_h = _src_override[sn]
+        else:
+            tier = i.get('source_tier', 2)
+            max_h = _TIER_MAX_AGE.get(tier, max_age)
+        if pub >= now_utc - timedelta(hours=max_h):
+            _kept.append(i)
+    all_items = _kept
     age_filtered = before - len(all_items)
     if age_filtered > 0:
-        log.info("🕐 时间过滤移除 %s 条超过 %s 小时的旧文章", age_filtered, max_age)
+        log.info("🕐 时间过滤移除 %s 条旧文章（T0/T1=%dh · T2=%dh · %d 源自定义）",
+                 age_filtered, _TIER_MAX_AGE[0], max_age, len(_src_override))
 
     # 按时间排序
     def sort_key(item):
@@ -468,8 +494,11 @@ def main():
     try:
         clusterer = EventClusterer(
             store,
-            similarity_threshold=0.55,
-            similarity_threshold_cjk=0.45,
+            # 实测：英文 0.55 / 中文 0.45 过严 —— GPT-Rosalind、Cursor 50B、AI Mode 等
+            # 明显同事件的 pair sim 落在 0.41–0.55 被毙，连续 10+ 轮"更新 0"。
+            # 降到 0.40 / 0.35 让这些对可以合并；实体共享时自动再 * 0.65 进一步降。
+            similarity_threshold=0.40,
+            similarity_threshold_cjk=0.35,
             merge_window_hours=max_age,
         )
         # 获取所有已分析但未关联的文章

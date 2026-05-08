@@ -7,7 +7,7 @@ Twitter/X 登录工具 — 生成 twikit cookies 文件
 
 首次运行会要求输入 Twitter 用户名、邮箱和密码，
 登录成功后保存 cookies 到 twitter_cookies.json。
-后续 fetch_news.py 会自动读取这个文件。
+后续 collector.py 会自动读取这个文件。
 
 注意：
 - 如果开启了两步验证(2FA)，会提示输入验证码
@@ -72,7 +72,7 @@ async def main():
 
     client.save_cookies(cookies_file)
     print(f"\n✅ 登录成功! cookies 已保存到 {cookies_file}")
-    print(f"   fetch_news.py 现在可以抓取 Twitter 源了")
+    print(f"   collector.py 现在可以抓取 Twitter 源了")
     print(f"\n⚠️ 请确保 {cookies_file} 已在 .gitignore 中")
 
 

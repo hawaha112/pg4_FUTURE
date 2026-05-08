@@ -20,6 +20,7 @@ import json
 import re
 import xml.etree.ElementTree as ET
 import urllib.request
+from tls_client import fetch_bytes
 import urllib.error
 from datetime import datetime, timezone, timedelta
 
@@ -53,13 +54,41 @@ __all__ = [
 # 协议处理器 — 各种特殊源的抓取实现
 # ═══════════════════════════════════════════════════════════════════════
 
+def _fetch_youtube_atom(channel_id, max_items):
+    """优先路径：YouTube 官方 atom feed
+    比 HTML scrape 稳定 10x，因为 atom 格式由 YouTube 后端直接渲染、不受前端 JS 变化影响。
+    """
+    from tls_client import fetch_bytes
+    from rss_parser import parse_rss
+    atom_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+    data, status, _ = fetch_bytes(atom_url, timeout=15)
+    if status >= 400:
+        raise RuntimeError(f"atom feed HTTP {status}")
+    items = parse_rss(data.decode('utf-8', errors='ignore'))
+    return items[:max_items] if items else []
+
+
 def _fetch_youtube_feed(source, channel_id, max_items, max_age_hours, health_tracker):
-    """YouTube 专用抓取：直接从频道页 HTML 提取视频列表"""
+    """YouTube 抓取：优先 atom feed → 失败 fallback HTML scrape"""
     name = source['name']
     try:
-        items = _scrape_youtube_channel(channel_id, max_items)
+        items = []
+        atom_err = None
+        try:
+            items = _fetch_youtube_atom(channel_id, max_items)
+        except Exception as e:
+            atom_err = e
+            log.debug("[%s] atom feed 失败，fallback HTML scrape: %s", name, e)
         if not items:
-            raise RuntimeError("频道页解析无结果")
+            try:
+                items = _scrape_youtube_channel(channel_id, max_items)
+            except Exception as scrape_err:
+                # 两种路径都失败 — 抛 atom 错误（更具诊断价值）
+                raise RuntimeError(
+                    f"atom: {atom_err or 'no items'} | scrape: {scrape_err}"
+                )
+        if not items:
+            raise RuntimeError("atom + HTML scrape 都无结果")
 
         now = datetime.now(timezone.utc)
         cutoff = now - timedelta(hours=max_age_hours)
@@ -120,12 +149,18 @@ def _handle_wechat(source, payload, max_items, max_age_hours, health_tracker, co
     return _fetch_wechat_feed(source, feed_id, wechat_config, max_items, max_age_hours, health_tracker)
 
 
+def _handle_hf_papers(source, payload, max_items, max_age_hours, health_tracker, config):
+    from extractors.hf_papers import fetch_hf_daily_papers
+    return fetch_hf_daily_papers(source, max_items, max_age_hours, health_tracker)
+
+
 _PROTOCOL_REGISTRY = {
     'youtube://': _handle_youtube,
     'zhihu://':   _handle_zhihu,
     'twitter://': _handle_twitter,
     'xhs://':     _handle_xhs,
     'wewe-rss://': _handle_wewe_rss,
+    'hf-papers://': _handle_hf_papers,
     'wechat://':  _handle_wechat,
 }
 
@@ -151,29 +186,17 @@ def fetch_feed(source, max_items=10, max_age_hours=24, health_tracker=None, conf
             return handler(source, payload, max_items, max_age_hours, health_tracker, config)
 
     # 默认：标准 HTTP RSS 抓取
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
-                       'AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
-    }
-
-    class SmartRedirectHandler(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, req, fp, code, msg, headers, newurl):
-            return urllib.request.Request(newurl, headers=dict(req.header_items()))
-
+    # 走 tls_client.fetch_bytes：curl_cffi 可用时模拟 Chrome TLS 指纹绕过 Cloudflare
     try:
-        req = urllib.request.Request(url, headers=headers)
-        opener = urllib.request.build_opener(SmartRedirectHandler)
-        with opener.open(req, timeout=20) as resp:
-            data = resp.read()
-            for encoding in ['utf-8', 'latin-1', 'gb2312', 'gbk']:
-                try:
-                    xml_text = data.decode(encoding)
-                    break
-                except (UnicodeDecodeError, LookupError):
-                    continue
-            else:
-                xml_text = data.decode('utf-8', errors='replace')
+        data, _status, _final_url = fetch_bytes(url, timeout=20)
+        for encoding in ['utf-8', 'latin-1', 'gb2312', 'gbk']:
+            try:
+                xml_text = data.decode(encoding)
+                break
+            except (UnicodeDecodeError, LookupError):
+                continue
+        else:
+            xml_text = data.decode('utf-8', errors='replace')
 
         items = parse_rss(xml_text)
 

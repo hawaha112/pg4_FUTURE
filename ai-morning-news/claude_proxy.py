@@ -9,6 +9,7 @@ Claude Max API Proxy - 极简版
 支持 response_format.json_schema 透传到 CLI 的 --json-schema 参数，保证 100% 有效 JSON 输出。
 """
 
+from __future__ import annotations  # PEP 604 `dict | None` 兼容 Python 3.9
 import json
 import os
 import re
@@ -100,14 +101,27 @@ class ProxyHandler(BaseHTTPRequestHandler):
         # 把 messages 拼成 prompt
         prompt = self._build_prompt(messages)
 
-        # 提取 JSON Schema → 注入 prompt 末尾（不用 --json-schema，该参数会导致 CLI 挂起）
+        # 提取 JSON Schema → 把完整 schema 注入 prompt 末尾。
+        # 历史问题：仅注入"输出合法 JSON"的告诫文字、丢弃 schema 内容，
+        # 导致 schema.required 完全无效（event_signature 等关键字段被 LLM 省略，
+        # 跨语聚类失效 multi_source_count=0）。现在把 schema 真正给到模型。
+        # 仍然不用 --json-schema CLI 参数（该参数会让 claude CLI 挂起）。
         schema = self._extract_json_schema(body)
 
         if schema:
+            schema_str = json.dumps(schema, ensure_ascii=False, indent=2)
+            required = schema.get("required") or []
+            required_hint = (
+                f"\n\n以下字段是 schema.required，缺失或留空 = 整次输出作废："
+                f"\n  {', '.join(required)}"
+            ) if required else ""
             prompt += (
-                "\n\n[CRITICAL] 直接输出合法 JSON，第一个字符必须是 {，最后一个字符必须是 }。"
+                "\n\n[CRITICAL] 你必须输出严格遵守以下 JSON Schema 的合法 JSON。"
+                "第一个字符必须是 {，最后一个字符必须是 }。"
                 "禁止输出 ```json 代码块、解释文字或任何非 JSON 内容。"
                 "所有字段必须认真填写，不允许留空字符串。"
+                f"{required_hint}"
+                f"\n\nJSON Schema:\n```json\n{schema_str}\n```"
             )
 
         # 构建命令行参数列表（不用 shell=True，避免管道/stdin 挂起）

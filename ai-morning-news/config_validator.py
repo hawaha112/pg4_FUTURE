@@ -15,7 +15,10 @@ log = get_logger('config_validator')
 # Known valid keys for source objects
 VALID_SOURCE_KEYS = {
     'name', 'url', 'icon', 'color', 'category',
-    'description', 'ai_only', 'enabled', 'disabled', 'type', 'tier'
+    'description', 'ai_only', 'enabled', 'disabled', 'type', 'tier',
+    # 扩展字段
+    'max_age_hours',  # 源级时间过滤 override（GitHub releases 720h 等）
+    'vip',            # 标记为大V 源（在前端"🎙️ 大V 动态"区块展示）
 }
 
 def validate_config(config: dict) -> list[str]:

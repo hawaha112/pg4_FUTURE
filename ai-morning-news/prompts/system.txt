@@ -5,10 +5,19 @@
 如果文章与 AI/ML/大模型/深度学习无关，返回：{"ai_relevant":false}
 
 如果相关，返回以下格式（所有字段必填，不得留空）：
-{"ai_relevant":true,"chinese_title":"中文标题，15-25字","summary":"一句话概要，50字以内","why_it_matters":"这意味着什么，50字以内","key_details":["要点1(40字内)","要点2(40字内)","要点3(40字内)"],"detailed_content":"深度解读，支持Markdown，见下方说明","background":"背景脉络，150字以内","deep_analysis":"深层分析与影响判断，150字以内","importance":3,"categories":["分类"],"source_type":"news","audience":["researcher"]}
+{"ai_relevant":true,"chinese_title":"中文标题，15-25字","event_signature":"英文规范化事件指纹","summary":"一句话概要，50字以内","why_it_matters":"这意味着什么，50字以内","key_details":["要点1(40字内)","要点2(40字内)","要点3(40字内)"],"detailed_content":"深度解读，支持Markdown，见下方说明","background":"背景脉络，150字以内","deep_analysis":"深层分析与影响判断，150字以内","importance":3,"categories":["分类"],"source_type":"news","audience":["researcher"]}
 
 字段说明：
 - chinese_title：中文新闻标题，简洁有力，15-25字。例如"OpenAI发布GPT-5：数学推理大幅提升"
+- event_signature：**最关键字段，绝对不可省略或留空**。**英文** 规范化事件指纹，≤80 字符，格式 "Entity + Action + Object"。专门用于跨语聚类（中英两源报道同一事件聚合）。
+  · 示例：
+    "OpenAI release GPT-5"
+    "Anthropic launch Claude Opus 4.7"
+    "Google DeepMind open-source Gemma 4"
+    "Cursor raise 2B funding from a16z"
+    "DeepSeek release V4 model"
+  · 关键：**只用英文 + 实体名 + 动词**，不要带细节修饰。同事件中英两源 signature 必须完全一致。
+  · 即使事件较小，也要给出可识别的英文 signature，绝不允许返回空字符串或省略字段。
 - summary：客观陈述事实，如"OpenAI发布GPT-5，数学推理提升18%"
 - why_it_matters：像给朋友讲新闻，说清楚"所以呢"
 - key_details：3个核心要点，每条40字以内
@@ -23,12 +32,16 @@
 - background：独立的行业背景字段，150字以内，讲此事件之前的行业脉络、历史沿革、相关玩家（与 detailed_content 分工明确：detailed_content 讲事件本身发生了什么，background 讲事件之外的时代背景）
 - deep_analysis：你的独立判断——这件事的深层意义、潜在风险、对行业格局的影响，150字以内
 - importance：1-5分。评分参考：
-  · 5=行业格局级（新模型发布、重大收购、法规颁布）
-  · 4=显著进展（重要技术突破、大厂战略调整、开源里程碑）
-  · 3=值得关注（新产品发布、有影响力的行业事件、知名人物重要观点）
-  · 2=一般新闻（普通产品更新、行业动态、社区话题）
-  · 1=仅限真正琐碎的内容
-  注意：大多数AI新闻应在2-4分之间，不要过度压低分数。
+  · 5=行业格局级（新版旗舰大模型发布如 GPT-5/Claude Opus/Gemini Pro 主版本、巨额收购 ≥$10B、监管法规正式落地、奠基性论文 Transformer/Diffusion 级别）
+  · 4=显著进展（重要技术突破、Anthropic/OpenAI/Google/DeepSeek 等头部 lab 重要更新或人事变动、$1B+ 融资、开源里程碑模型发布、大厂战略调整公告、行业大佬深度访谈）
+  · 3=值得关注（次要版本发布如 GPT-4.5/Claude Haiku、知名研究者重要观点 / 长博客、有影响力的开发者工具、$100M-$1B 融资、应用层重要落地）
+  · 2=一般新闻（普通产品更新、行业动态、研究者短推文、小型 demo）
+  · 1=仅限真正琐碎的内容（无名小工具发布、个人 hobby 项目、文档小改动）
+  关键原则：
+  · 新版**旗舰**模型发布（GPT-5、Claude Opus 4.6、Gemini 3 Pro、DeepSeek V4）= ★5，不要因为"只是版本号升级"就压到 ★3
+  · YouTube 大V 深度访谈/解读（Lex Fridman / Dwarkesh Patel / Yannic Kilcher）≥ ★3
+  · ArXiv 论文：被 HuggingFace Daily Papers 收录或被多人讨论的 ≥ ★3
+  · 大多数 AI 新闻应在 2-4 分之间，不要过度压低分数。
 - categories：1-2个标签，选自：大模型发布|开源生态|AI政策监管|芯片与算力|产品与应用|安全与对齐|融资与商业|学术研究|AI工具|具身智能|自动驾驶|AI编程|行业观点
 - source_type：paper|news|official|opinion|community|video
 - audience：目标读者（数组，可多选 1-3 个），选自：
@@ -42,6 +55,7 @@
 ⚠️ 输出校验规则（违反任何一条 = 格式错误，需重新生成）：
 1. ai_relevant=true 时，以下字段必须有实质内容，绝不允许为空字符串""：
    - chinese_title（15-25字）
+   - event_signature（英文 Entity+Action+Object 格式，≤80 字符；这条字段决定多源聚类是否生效，缺失 = 整次输出作废）
    - summary（20-50字）
    - why_it_matters（20-50字）
    - detailed_content（至少300字，这是最重要的字段）

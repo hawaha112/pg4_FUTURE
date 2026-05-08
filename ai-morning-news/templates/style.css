@@ -494,6 +494,26 @@ body {
     border-top: 1px solid var(--border); margin-top: 20px;
 }
 .footer b { color: var(--accent); }
+.footer-link {
+    color: var(--accent); text-decoration: none;
+    padding: 3px 8px; border-radius: 4px;
+    transition: background 0.15s, color 0.15s;
+}
+.footer-link:hover { background: rgba(120, 200, 255, 0.12); color: var(--accent-hi, #5eead4); }
+
+/* Header 仪表盘入口（h-stats 右侧的小按钮） */
+.h-dashboard-link {
+    color: var(--accent); text-decoration: none;
+    padding: 4px 10px; border-radius: 5px;
+    border: 1px solid var(--border);
+    font-size: 12px; font-weight: 500;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+.h-dashboard-link:hover {
+    background: rgba(120, 200, 255, 0.10);
+    border-color: var(--accent);
+}
 
 /* ═════ Empty & Scrollbar ═════ */
 .empty { text-align: center; padding: 60px 20px; color: var(--text-50); font-size: 13px; }
@@ -552,6 +572,41 @@ body {
     background: rgba(107, 138, 253, 0.22);
     border-color: rgba(107, 138, 253, 0.55);
     color: #b8c9ff;
+}
+
+/* inline 多源徽章：放在 featured-source 行里，不遮挡标题 */
+.src-pill-inline {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 1px 7px;
+    background: rgba(107, 138, 253, 0.18);
+    border: 1px solid rgba(107, 138, 253, 0.42);
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #a8bdff;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    margin-left: 2px;
+}
+
+/* 多源详细列表：列出每个 evidence 源 + 报道时间 */
+.featured-other-sources {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+    font-size: 11px;
+    color: var(--text-60);
+}
+.fos-label {
+    font-weight: 600;
+    color: #a8bdff;
+    margin-bottom: 4px;
+    letter-spacing: 0.2px;
+}
+.fos-item {
+    padding-left: 10px;
+    line-height: 1.65;
+    color: var(--text-70);
 }
 
 /* ═════ Source tier badge — 卡片源信息前的小徽章 ═════ */
@@ -783,3 +838,125 @@ body {
     color: var(--text-90);
 }
 .m-lede-text strong { color: var(--text-100); }
+
+/* ═════ 阅后即焚 ═════ */
+/* 已读卡片：默认隐藏（按"显示已读"toggle 切换） */
+body:not(.show-read) .is-read { display: none !important; }
+/* 显示已读时给视觉提示 */
+body.show-read .is-read {
+    opacity: 0.45;
+    filter: grayscale(0.4);
+    transition: opacity 0.2s, filter 0.2s;
+}
+body.show-read .is-read:hover {
+    opacity: 0.85;
+    filter: grayscale(0);
+}
+/* 消散动画：渐变 + 折叠高度 */
+.is-fading {
+    animation: fadeAndCollapse 0.6s ease-out forwards;
+    overflow: hidden;
+}
+@keyframes fadeAndCollapse {
+    0%   { opacity: 1; transform: scale(1); }
+    40%  { opacity: 0.4; transform: scale(0.97); }
+    70%  { opacity: 0; transform: scale(0.94); max-height: 400px; margin-bottom: 14px; padding-top: 14px; padding-bottom: 14px; }
+    100% { opacity: 0; transform: scale(0.94); max-height: 0; margin: 0; padding-top: 0; padding-bottom: 0; border-width: 0; }
+}
+
+/* "显示已读"toggle 按钮 */
+.read-toggle {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    z-index: 200;
+    padding: 8px 14px;
+    background: rgba(11, 11, 18, 0.92);
+    border: 1px solid var(--border-hover);
+    border-radius: 22px;
+    color: var(--text-80);
+    font-size: 12px;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: background 0.15s, border-color 0.15s;
+}
+.read-toggle:hover {
+    background: rgba(11, 11, 18, 0.98);
+    border-color: var(--accent);
+    color: var(--text-100);
+}
+.read-toggle .rt-count {
+    color: var(--accent);
+    font-weight: 700;
+    margin: 0 2px;
+}
+
+/* ═════ 大V 动态 ═════ */
+.vip-section {
+    max-width: 1120px;
+    margin: 28px auto 20px;
+    padding: 0 20px;
+}
+.vip-heading {
+    font-family: var(--serif);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-100);
+    margin-bottom: 14px;
+    letter-spacing: -0.3px;
+}
+.vip-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+}
+.vip-item {
+    padding: 12px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--accent);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.vip-item:hover {
+    background: var(--bg-card-hover);
+    border-left-color: var(--green);
+}
+.vip-meta {
+    font-size: 11px;
+    color: var(--text-50);
+    margin-bottom: 4px;
+    letter-spacing: 0.2px;
+}
+.vip-title-txt {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-90);
+    line-height: 1.45;
+    margin-bottom: 6px;
+}
+.vip-why {
+    font-size: 12px;
+    color: var(--text-60);
+    line-height: 1.5;
+}
+@media (max-width: 640px) {
+    .vip-list { grid-template-columns: 1fr; }
+    .header { padding: 8px 14px; }
+    .h-title { font-size: 15px; }
+    .h-date, .h-stats { font-size: 10px; }
+    .search-wrap { max-width: 100%; flex-basis: 100%; order: 99; margin-top: 6px; }
+    .featured-section { padding: 0 14px; }
+    .featured-grid { grid-template-columns: 1fr !important; gap: 10px; }
+    .featured-card { padding: 12px 14px; }
+    .featured-title-text { font-size: 16px; line-height: 1.45; }
+    .featured-why { font-size: 13px; line-height: 1.55; }
+    .featured-source, .featured-other-sources { font-size: 11px; }
+    .top3-section { padding: 0 14px; }
+    .top3-grid { grid-template-columns: 1fr !important; }
+    .briefing { padding: 0 14px; margin-top: 18px; }
+    .br-editorial { font-size: 13px; }
+    .footer { padding: 14px; font-size: 11px; }
+}

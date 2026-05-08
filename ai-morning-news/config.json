@@ -7,7 +7,7 @@
     "model": "claude-sonnet-4",
     "max_retries": 3,
     "timeout": 600,
-    "max_workers": 1,
+    "max_workers": 10,
     "temperature": 0.3,
     "max_tokens": 8000,
     "_注释_当前方案": "通过 claude-max-api-proxy 使用 Max 订阅的 Sonnet 额度，无需 API Key",
@@ -69,16 +69,117 @@
         "ai_only": true
       },
       {
-        "name": "Meta AI Blog",
+        "name": "NVIDIA Deep Learning",
         "tier": 0,
         "category": "official",
-        "url": "https://ai.meta.com/blog/rss/",
-        "enabled": false,
-        "_note_2026_04_10": "已禁用：/blog/rss/ 返回 404；Meta 目前没有公开 RSS，找到替代源后可重启",
-        "icon": "🔵",
-        "color": "#1877F2",
-        "description": "Meta AI 官方博客",
+        "url": "https://blogs.nvidia.com/blog/category/deep-learning/feed/",
+        "icon": "💚",
+        "color": "#76B900",
+        "description": "NVIDIA 官方深度学习 / AI 博客",
         "ai_only": true
+      },
+      {
+        "name": "Apple ML Research",
+        "tier": 0,
+        "category": "official",
+        "url": "https://machinelearning.apple.com/rss.xml",
+        "icon": "🍎",
+        "color": "#A2AAAD",
+        "description": "Apple 机器学习研究",
+        "ai_only": true
+      },
+      {
+        "name": "NVIDIA Developer Blog",
+        "tier": 1,
+        "category": "research",
+        "url": "https://developer.nvidia.com/blog/feed",
+        "icon": "⚙️",
+        "color": "#76B900",
+        "description": "NVIDIA 开发者博客（硬核技术 / CUDA / 推理）",
+        "ai_only": true
+      },
+      {
+        "name": "Import AI",
+        "tier": 1,
+        "category": "researcher",
+        "url": "https://importai.substack.com/feed",
+        "icon": "📬",
+        "color": "#D4A574",
+        "description": "Anthropic Jack Clark 的 AI 行业周刊",
+        "ai_only": true
+      },
+      {
+        "name": "Latent Space",
+        "tier": 1,
+        "category": "researcher",
+        "url": "https://www.latent.space/feed",
+        "icon": "🎙️",
+        "color": "#8B5CF6",
+        "description": "Swyx 的 AI 开发者周刊 + 访谈",
+        "ai_only": true
+      },
+      {
+        "name": "Interconnects",
+        "tier": 1,
+        "category": "researcher",
+        "url": "https://www.interconnects.ai/feed",
+        "icon": "🔗",
+        "color": "#2563EB",
+        "description": "Nathan Lambert 的开源模型 / RLHF 深度分析",
+        "ai_only": true
+      },
+      {
+        "name": "Simon Willison",
+        "tier": 1,
+        "category": "researcher",
+        "url": "https://simonwillison.net/atom/everything/",
+        "icon": "🧪",
+        "color": "#0EA5E9",
+        "description": "Simon Willison 独立博客（高信噪 AI 工程实践）",
+        "ai_only": false,
+        "vip": true
+      },
+      {
+        "name": "Dwarkesh Patel",
+        "tier": 1,
+        "category": "researcher",
+        "url": "https://www.dwarkeshpatel.com/feed",
+        "icon": "🎤",
+        "color": "#DC2626",
+        "description": "Dwarkesh Patel 深度访谈播客（Zuckerberg/Dario/Demis 等首发长谈）",
+        "ai_only": false,
+        "vip": true
+      },
+      {
+        "name": "Hugging Face Daily Papers",
+        "tier": 1,
+        "category": "research",
+        "url": "hf-papers://daily",
+        "icon": "🤗",
+        "color": "#FFD21E",
+        "description": "Hugging Face 每日社区精选论文（信噪比远高于 ArXiv 全量）",
+        "ai_only": true
+      },
+      {
+        "name": "Sebastian Raschka",
+        "tier": 1,
+        "category": "researcher",
+        "url": "https://magazine.sebastianraschka.com/feed",
+        "icon": "📘",
+        "color": "#7C3AED",
+        "description": "Sebastian Raschka 大模型工程细节深度分析",
+        "ai_only": true,
+        "vip": true
+      },
+      {
+        "name": "SemiWiki",
+        "tier": 1,
+        "category": "research",
+        "url": "https://semiwiki.com/feed/",
+        "icon": "🔧",
+        "color": "#1F2937",
+        "description": "半导体 / 芯片行业深度（AI 算力相关）",
+        "ai_only": false
       },
       {
         "name": "ArXiv AI",
@@ -148,7 +249,8 @@
         "icon": "🎬",
         "color": "#FF0000",
         "description": "AI论文深度解读",
-        "ai_only": true
+        "ai_only": true,
+        "vip": true
       },
       {
         "name": "TechCrunch AI",
@@ -201,6 +303,56 @@
         "ai_only": true
       },
       {
+        "name": "Axios",
+        "tier": 2,
+        "category": "media",
+        "url": "https://www.axios.com/feeds/feed.rss",
+        "icon": "📰",
+        "color": "#3B82F6",
+        "description": "Axios 权威简报（含 AI/科技头条）",
+        "ai_only": false
+      },
+      {
+        "name": "Bloomberg Technology",
+        "tier": 2,
+        "category": "media",
+        "url": "https://feeds.bloomberg.com/technology/news.rss",
+        "icon": "💰",
+        "color": "#000000",
+        "description": "Bloomberg 科技版（权威市场视角）",
+        "ai_only": false
+      },
+      {
+        "name": "Techmeme",
+        "tier": 2,
+        "category": "media",
+        "url": "https://www.techmeme.com/feed.xml",
+        "icon": "🗞️",
+        "color": "#E11D48",
+        "description": "Techmeme 科技头条聚合（多源交叉关键）",
+        "ai_only": false
+      },
+      {
+        "name": "The Information",
+        "tier": 2,
+        "category": "media",
+        "url": "https://www.theinformation.com/feed",
+        "icon": "📡",
+        "color": "#DC2626",
+        "description": "The Information 付费科技媒体的 RSS（标题 + 摘要）",
+        "ai_only": false
+      },
+      {
+        "name": "Intel Newsroom",
+        "tier": 1,
+        "category": "research",
+        "url": "https://newsroom.intel.com/feed",
+        "icon": "💙",
+        "color": "#0071C5",
+        "description": "Intel 新闻室（含 Gaudi AI 加速器、芯片业务）",
+        "ai_only": false
+      },
+      {
         "name": "Hacker News AI",
         "tier": 2,
         "category": "community",
@@ -218,7 +370,8 @@
         "icon": "🎬",
         "color": "#FF0000",
         "description": "深度AI视频解读",
-        "ai_only": true
+        "ai_only": true,
+        "vip": true
       },
       {
         "name": "Two Minute Papers",
@@ -228,7 +381,41 @@
         "icon": "🎬",
         "color": "#FF0000",
         "description": "AI论文快速解读",
-        "ai_only": true
+        "ai_only": true,
+        "vip": true
+      },
+      {
+        "name": "Lex Fridman",
+        "tier": 1,
+        "category": "researcher",
+        "url": "youtube://UCSHZKyawb77ixDdsGog4iWA",
+        "icon": "🎙️",
+        "color": "#E11D48",
+        "description": "Lex Fridman 长访谈（AI 研究者、行业 CEO 常客）",
+        "ai_only": false,
+        "vip": true
+      },
+      {
+        "name": "Andrej Karpathy",
+        "tier": 1,
+        "category": "researcher",
+        "url": "youtube://UCPk8m_r6fkUSYmvgCBwq-sw",
+        "icon": "🎓",
+        "color": "#0EA5E9",
+        "description": "Andrej Karpathy 个人频道（手撸神经网络、GPT 解剖）",
+        "ai_only": true,
+        "vip": true
+      },
+      {
+        "name": "DeepLearning.AI",
+        "tier": 1,
+        "category": "research",
+        "url": "youtube://UCcIXc5mJsHVYTZR1maL5l9w",
+        "icon": "📚",
+        "color": "#F59E0B",
+        "description": "Andrew Ng 的 DeepLearning.AI 课程与 The Batch 视频",
+        "ai_only": true,
+        "vip": true
       },
       {
         "name": "Matthew Berman",
@@ -238,7 +425,8 @@
         "icon": "🎬",
         "color": "#FF0000",
         "description": "AI产品评测与新闻",
-        "ai_only": true
+        "ai_only": true,
+        "vip": true
       },
       {
         "name": "X-Elon Musk (xAI)",
@@ -363,16 +551,6 @@
         "ai_only": false
       },
       {
-        "name": "掘金 AI",
-        "tier": 2,
-        "category": "community",
-        "url": "https://rsshub.rssforever.com/juejin/trending/ai/weekly",
-        "icon": "💎",
-        "color": "#1E80FF",
-        "description": "掘金 AI 板块热门文章",
-        "ai_only": true
-      },
-      {
         "name": "AI前线",
         "tier": 2,
         "category": "media",
@@ -401,42 +579,6 @@
         "color": "#0084FF",
         "description": "知乎日报精选",
         "ai_only": false
-      },
-      {
-        "name": "机器之心",
-        "tier": 2,
-        "category": "media",
-        "url": "https://www.jiqizhixin.com/rss",
-        "enabled": false,
-        "_note_2026_04_10": "已禁用：/rss 返回 HTML 而非 RSS（mismatched tag），官网取消了 RSS",
-        "icon": "🤖",
-        "color": "#09B83E",
-        "description": "AI 领域头部中文媒体",
-        "ai_only": true
-      },
-      {
-        "name": "小红书热门",
-        "tier": 2,
-        "category": "community",
-        "url": "xhs://explore",
-        "enabled": false,
-        "_note_2026_04_11": "已禁用：小红书 SSR 失效",
-        "icon": "📕",
-        "color": "#FE2C55",
-        "description": "小红书推荐 feed",
-        "ai_only": false
-      },
-      {
-        "name": "新智元",
-        "tier": 2,
-        "category": "media",
-        "url": "https://rsshub.rssforever.com/aijishu/channel/explore",
-        "enabled": false,
-        "_note_2026_04_10": "已禁用：rsshub.rssforever.com 持续 503",
-        "icon": "🧪",
-        "color": "#FF6B35",
-        "description": "AI 资讯",
-        "ai_only": true
       }
     ]
   },
@@ -499,8 +641,8 @@
   },
   "dedup": {
     "_comment": "语义去重阈值：英文 0.60 / 中文 0.50（中文同义改写多，阈值更低）。recent_hours 决定与多久内的历史标题做相似度比较。",
-    "threshold_en": 0.60,
-    "threshold_cjk": 0.50,
+    "threshold_en": 0.6,
+    "threshold_cjk": 0.5,
     "recent_hours": 72
   },
   "settings": {

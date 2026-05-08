@@ -31,6 +31,7 @@ import sqlite3
 import ssl
 import urllib.request
 import urllib.error
+from urllib.parse import urlparse
 import concurrent.futures
 import time
 import sys
@@ -197,7 +198,10 @@ ARTICLE_SCHEMA = {
             "items": {"type": "string"}
         }
     },
-    "required": ["ai_relevant"],
+    # required 是 schema 唯一的硬约束 — 历史上只列 ai_relevant 导致
+    # event_signature 经常被 LLM 省略，跨语聚类全失效（multi_source=0）。
+    # 把决定下游质量的字段都加上：缺一就触发 retry / 兜底。
+    "required": ["ai_relevant", "chinese_title", "summary", "importance", "event_signature"],
     "additionalProperties": False
 }
 
@@ -246,10 +250,21 @@ class LLMAnalyzer:
         self.temperature = temperature
         self.max_tokens = max_tokens
 
-        # SSL context（某些服务需要跳过验证）
-        self._ssl_ctx = ssl.create_default_context()
-        self._ssl_ctx.check_hostname = False
-        self._ssl_ctx.verify_mode = ssl.CERT_NONE
+        # SSL context：仅本地代理（localhost/127.0.0.1）允许关验证，
+        # 因为本地代理常用自签证书且流量不出本机；远程 API 必须验证
+        # 证书，否则 API Key 在中间人攻击下会泄漏。
+        host = (urlparse(self.base_url).hostname or "").lower()
+        is_local = host in ("localhost", "::1") or host.startswith("127.")
+        if is_local:
+            self._ssl_ctx = ssl.create_default_context()
+            self._ssl_ctx.check_hostname = False
+            self._ssl_ctx.verify_mode = ssl.CERT_NONE
+        else:
+            try:
+                import certifi
+                self._ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+            except ImportError:
+                self._ssl_ctx = ssl.create_default_context()
 
     # ------------------------------------------------------------------
     # 底层 API 调用

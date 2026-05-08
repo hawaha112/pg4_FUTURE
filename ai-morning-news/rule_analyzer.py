@@ -23,6 +23,7 @@ rule_analyzer.py — 纯规则结构化分析器，零 LLM 依赖
     # result 格式与 LLMAnalyzer 输出完全兼容
 """
 
+import concurrent.futures
 import re
 import hashlib
 from collections import Counter
@@ -516,63 +517,105 @@ class TieredAnalyzer:
             candidates.append(i)
 
         if candidates:
-            log.info("🧠 Level 1 LLM 分析: %d 条 AI 相关文章全部送 LLM",
-                     len(candidates))
-
-            consecutive_failures = 0
-            max_consecutive_failures = 3  # 连续失败3次才放弃
-
+            # ── 先吃缓存（串行，SQLite 读无开销）── 剩余候选进 LLM 并发 ──
+            pending_indices = []
             for idx in candidates:
                 art = articles[idx]
                 url = art.get('url', '') or art.get('link', '')
-
-                # 检查缓存（仅使用内容完整的缓存结果）
                 if llm_cache and url:
                     cached = llm_cache.get(url)
                     if cached:
-                        # 缓存命中但关键字段缺失 → 视为无效缓存，重新走 LLM
                         is_relevant = cached.get('ai_relevant', False)
                         has_substance = (
                             cached.get('detailed_content', '').strip()
-                            or not is_relevant  # 非 AI 相关的不需要 detailed_content
+                            or not is_relevant
                         )
                         if has_substance:
                             results[idx] = cached
                             results[idx]['_analysis_level'] = 1
                             continue
-                        else:
-                            log.info("♻️ 缓存命中但 detailed_content 为空，重新分析: %s",
-                                     art.get('title', '')[:30])
-                            # 删除旧缓存
-                            llm_cache.delete(url)
+                        log.info("♻️ 缓存命中但 detailed_content 为空，重新分析: %s",
+                                 art.get('title', '')[:30])
+                        llm_cache.delete(url)
+                pending_indices.append(idx)
 
-                try:
-                    llm_result = self.llm.analyze_article(
-                        title=art.get('title', ''),
-                        summary=art.get('summary', ''),
-                        full_text=art.get('full_text', ''),
-                        source_name=art.get('source_name', ''),
-                    )
-                    if llm_result and llm_result.get('ai_relevant') is not None:
-                        llm_result['_analysis_level'] = 1
+            if pending_indices:
+                max_workers = max(1, getattr(self.llm, 'max_workers', 4))
+                log.info("🧠 Level 1 LLM 分析: 缓存命中 %d / 待分析 %d（并发 %d）",
+                         len(candidates) - len(pending_indices),
+                         len(pending_indices), max_workers)
+
+                import threading
+                failure_count = 0
+                failure_lock = threading.Lock()
+                # 失败率熔断：总失败数 ≥ 3 且 ≥ 30% 则放弃
+                MIN_FAILURES = 3
+                FAILURE_RATE_CUTOFF = 0.3
+                fuse_trigger = max(MIN_FAILURES,
+                                   int(len(pending_indices) * FAILURE_RATE_CUTOFF))
+
+                def _analyze_one(idx):
+                    art = articles[idx]
+                    url = art.get('url', '') or art.get('link', '')
+                    try:
+                        llm_result = self.llm.analyze_article(
+                            title=art.get('title', ''),
+                            summary=art.get('summary', ''),
+                            full_text=art.get('full_text', ''),
+                            source_name=art.get('source_name', ''),
+                        )
+                        if llm_result and llm_result.get('ai_relevant') is not None:
+                            llm_result['_analysis_level'] = 1
+                            return idx, llm_result, url
+                        return idx, None, url
+                    except Exception as e:
+                        nonlocal_fail_info = (art.get('title', '')[:30], str(e))
+                        return idx, 'ERR', nonlocal_fail_info
+
+                # 识别"配额/限流类错误"的字符串特征（Claude Max 5h window / Anthropic RPM)
+                def _is_rate_limit_err(err_msg: str) -> bool:
+                    em = (err_msg or '').lower()
+                    return any(k in em for k in (
+                        '429', 'rate_limit', 'rate limit', 'overloaded',
+                        'quota', 'too many requests', 'usage limit',
+                    ))
+
+                rate_limit_hit = False
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+                    futures = {pool.submit(_analyze_one, idx): idx for idx in pending_indices}
+                    for fut in concurrent.futures.as_completed(futures):
+                        idx, llm_result, extra = fut.result()
+                        if llm_result == 'ERR':
+                            title30, err = extra
+                            with failure_lock:
+                                failure_count += 1
+                                fc_now = failure_count
+                            if _is_rate_limit_err(err):
+                                # 命中配额/限流 — 立即熔断，不等累计 → 避免浪费额度
+                                if not rate_limit_hit:
+                                    rate_limit_hit = True
+                                    self._llm_available = False
+                                    log.warning("🚨 命中 LLM 限流/配额（%s）— 立即熔断，"
+                                                "剩余 %d 条退回规则兜底",
+                                                err[:80], len(pending_indices) - fc_now)
+                                    # 取消尚未开始的 futures（已执行的无法停）
+                                    for f in futures:
+                                        if not f.done():
+                                            f.cancel()
+                                continue
+                            log.warning("⚠️ LLM 分析失败 [%s]: %s（累计失败 %d）",
+                                        title30, err, fc_now)
+                            if fc_now >= fuse_trigger and self._llm_available:
+                                self._llm_available = False
+                                log.warning("⚠️ 失败率触发熔断（≥%d），LLM 标记为不可用",
+                                            fuse_trigger)
+                            continue
+                        if llm_result is None:
+                            continue
+                        # 主线程写 results[idx] 与 cache（避免 SQLite 并发写锁争用）
                         results[idx] = llm_result
-
-                        if llm_cache and url:
-                            llm_cache.set(url, llm_result)
-
-                    consecutive_failures = 0  # 成功则重置计数
-
-                except Exception as e:
-                    consecutive_failures += 1
-                    log.warning("⚠️ LLM 分析失败 [%s]: %s（连续失败 %d/%d）",
-                                art.get('title', '')[:30], e,
-                                consecutive_failures, max_consecutive_failures)
-                    if consecutive_failures >= max_consecutive_failures:
-                        self._llm_available = False
-                        log.warning("⚠️ 连续 %d 次失败，LLM 标记为不可用",
-                                    max_consecutive_failures)
-                        break
-                    # 单篇失败不中断，继续下一篇
+                        if llm_cache and extra:  # extra = url
+                            llm_cache.set(url=extra, result=llm_result)
 
         # ── 统计 Level 2 候选（深度分析留给 collector.py 按需调用） ──
         level1_count = sum(1 for r in results if r.get('_analysis_level', 0) >= 1)

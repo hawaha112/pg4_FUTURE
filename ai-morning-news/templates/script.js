@@ -525,3 +525,43 @@ document.addEventListener('keydown', function(e) {
         document.getElementById('searchBox').focus();
     }
 });
+
+// ═══ Auto-open modal from URL hash ═══
+// 当 URL 带 #evt-<event_id>（来自 dashboard 重要事件链接）时，
+// 滚到对应卡片并自动展开 modal。需要 modal_data 已加载（ensureModalData lazy load）。
+function _handleEvtHash() {
+    var h = window.location.hash || '';
+    if (!h.startsWith('#evt-')) return;
+    var eid = decodeURIComponent(h.substring(5));
+    if (!eid) return;
+
+    ensureModalData(function() {
+        if (typeof __data === 'undefined' || !Array.isArray(__data)) return;
+        // 在 modal_data 里找匹配 item_id 的下标
+        // 兼容两种 ID 体系：
+        //   · canonical_event_id: 'evt_' + 24 hex（dashboard 链接用）
+        //   · canonical_article_id: 32 hex（卡片 data-iid 用）
+        // 后者的前 24 位 = 前者去掉 'evt_'。这里前缀匹配兼容两种来源。
+        var bareEid = eid.indexOf('evt_') === 0 ? eid.substring(4) : eid;
+        var matchIdx = -1;
+        for (var i = 0; i < __data.length; i++) {
+            var iid = __data[i] && __data[i].item_id;
+            if (!iid) continue;
+            if (iid === eid) { matchIdx = i; break; }
+            if (iid === bareEid) { matchIdx = i; break; }
+            if (iid.startsWith(bareEid)) { matchIdx = i; break; }
+        }
+        if (matchIdx < 0) return;
+
+        // 滚到对应卡片（如果存在）
+        try {
+            var sel = '[data-iid="' + (window.CSS && CSS.escape ? CSS.escape(eid) : eid) + '"]';
+            var card = document.querySelector(sel);
+            if (card) card.scrollIntoView({behavior: 'smooth', block: 'center'});
+        } catch (_) {}
+
+        openModal(matchIdx);
+    });
+}
+window.addEventListener('load', _handleEvtHash);
+window.addEventListener('hashchange', _handleEvtHash);

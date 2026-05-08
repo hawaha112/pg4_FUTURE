@@ -223,7 +223,11 @@ mkdir -p "$ARCHIVE_DIR"
 if [ -f "$PROJECT_DIR/output/index.html" ]; then
     # 归档时把 HTML 里硬编码的 'modal_data.js' 替换成本班次专属文件名，
     # 否则 archive/ 下找不到 modal_data.js 导致点击卡片无反应（404）。
-    sed "s|s\.src = 'modal_data\.js'|s.src = '${TODAY_DATE}-${SHIFT}_modal.js'|" \
+    # 同时把仪表盘链接 'archive/dashboard.html' 改回 'dashboard.html' —
+    # 主页用前者（GitHub Pages workflow 的白名单不含根目录 dashboard.html），
+    # 归档页本身就在 archive/ 里，链接直接相对到同目录的 dashboard.html 即可。
+    sed -e "s|s\.src = 'modal_data\.js'|s.src = '${TODAY_DATE}-${SHIFT}_modal.js'|" \
+        -e 's|href="archive/dashboard\.html"|href="dashboard.html"|g' \
         "$PROJECT_DIR/output/index.html" > "$ARCHIVE_DIR/${TODAY_DATE}-${SHIFT}.html"
     cp "$PROJECT_DIR/output/modal_data.js" "$ARCHIVE_DIR/${TODAY_DATE}-${SHIFT}_modal.js" 2>/dev/null || true
     echo "  已归档: archive/${TODAY_DATE}-${SHIFT}.html" >> "$LOG_FILE"
@@ -446,6 +450,7 @@ summary = {
     'llm_count': stats.get('llm_count'),
     'multi_source_count': stats.get('multi_source_count'),
     'important_count': stats.get('important_count'),
+    'important_events': stats.get('important_events', []),
     'official_count': stats.get('official_count'),
     'depth_count': stats.get('depth_count'),
     'entity_count': stats.get('entity_count'),

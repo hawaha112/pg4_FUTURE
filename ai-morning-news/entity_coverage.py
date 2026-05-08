@@ -74,17 +74,23 @@ class EntityCoverageMatrix:
                     primary_down.append(src)
 
             if primary and primary_ok == 0:
-                # 所有主源失效
+                # 所有主源失效 — 若备用源兜住则降级为 info（不告警）
                 backup_ok = sum(
                     1 for src in backup
                     if source_health.get(src, {}).get('status') == 'ok'
                 )
-                msg = (
-                    f"🚨 [{entity_name}] 所有主源失效: {primary_down}. "
-                    f"备用源可用 {backup_ok}/{len(backup)} 个"
-                )
-                self._alerts.append(msg)
-                log.warning(msg)
+                if backup_ok >= 1:
+                    log.info(
+                        "ℹ️ [%s] 主源失效但备用源接管: %s → backup %d/%d OK",
+                        entity_name, primary_down, backup_ok, len(backup)
+                    )
+                else:
+                    msg = (
+                        f"🚨 [{entity_name}] 所有主源 + 备用源均失效: {primary_down}. "
+                        f"backup {backup_ok}/{len(backup)}"
+                    )
+                    self._alerts.append(msg)
+                    log.warning(msg)
             elif primary_down:
                 msg = f"⚠️ [{entity_name}] 部分主源失效: {primary_down}"
                 self._alerts.append(msg)

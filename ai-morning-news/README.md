@@ -1,31 +1,45 @@
 # AI Morning Briefing
 
-每天早上 7:00 自动从 19+ 个 RSS 源抓取 AI 相关新闻，通过 LLM 分析后生成精美的 HTML 早报页面。
+每天早上 06:30 自动从 37 个 RSS 源（22 英文 + 15 中文）抓取 AI 相关新闻，通过 LLM 分析、事件聚类后生成精美的 HTML 早报页面。
 
 ## 工作流程
 
 ```
-RSS 源 (14 个) → 全文提取 → LLM 分析 → HTML 生成 → GitHub Pages 部署 → Telegram 通知
+RSS 源 (37 个)
+    │
+    ├─ collector.py  (每 2h, launchd)   ── 抓取 → 全文提取 → 去重 → LLM 分析 → 事件聚类
+    │      │
+    │      ▼
+    │   events.db (canonical_events + evidence + articles)
+    │      │
+    └─ briefing_renderer.py  (每日 06:30, launchd) ── 出报 → HTML
+           │
+           ▼
+       output/index.html ── 推送至部署仓库 ── GitHub Pages ── Telegram 通知
 ```
 
-1. 从官方博客（OpenAI、Anthropic、Google AI、DeepMind）、媒体（The Verge、TechCrunch）、学术（ArXiv）等抓取 RSS
-2. 多策略提取文章全文（article 标签、语义 class、JSON-LD、meta 标签）
-3. LLM 分析每篇文章：AI 相关性过滤、重要性评分、核心要点提取
-4. 生成暗色主题响应式 HTML 页面，支持搜索和分类筛选
-5. 部署到 GitHub Pages 并发送 Telegram 通知
+详细数据流与模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ## 快速开始
 
+主流程被拆为两个独立入口：采集（collector.py）+ 出报（briefing_renderer.py），由 `run_daily.sh` 统一编排。
+
 ```bash
-# 手动运行
-python3 fetch_news.py
+# 一键完整流程（采集 + 出报 + 部署）
+bash run_daily.sh
 
-# 跳过 LLM 分析（更快，无需 API）
-python3 fetch_news.py --no-llm
+# 仅采集，不生成早报页面
+python3 collector.py
+python3 collector.py --no-llm           # 跳过 LLM 分析（更快，无需 API）
+python3 collector.py --tier 0,1         # 仅采集指定层级的源
 
-# 运行并在浏览器中打开
-python3 fetch_news.py --open
+# 仅出报（基于现有 events.db）
+python3 briefing_renderer.py
+python3 briefing_renderer.py --open     # 生成并在浏览器中打开
+python3 briefing_renderer.py --hours 12 # 只取最近 12 小时的事件
 ```
+
+> 注：v3 之前的单体入口 `fetch_news.py` 已迁至 [legacy/](legacy/)，仅作历史保留。
 
 ## 配置
 

@@ -1,11 +1,15 @@
 # AI Morning Briefing - 依赖列表
-# 核心功能（纯标准库即可运行基本 RSS 抓取）
+# 主链路（采集/渲染/部署）零 pip 依赖，纯 Python 标准库即可跑通。
+# 系统要求：Python >= 3.10（项目使用 PEP 604 `dict | None` 等语法）。
+#
+# 下面是 *可选* 增强：装则能力增强，不装功能仍可降级运行。
 
-# X/Twitter 抓取（可选 — 需配置 cookies）
+# Cloudflare 穿透（让 Axios / Bloomberg 等高阶反爬站可抓）
+# 不装时 tls_client 自动回退 urllib，严审站会 403
+curl_cffi>=0.15
+
+# X/Twitter 抓取（可选 — 需 ~/.config/ai-briefing/twitter_cookies.json）
 twikit>=2.0
 
-# 小红书抓取（可选 — 需配置 cookies）
-xhs>=0.2
-
-# LLM 分析用（如果用 OpenAI 兼容 API）
-# openai 或其他兼容库按需安装
+# 小红书抓取（已 disabled，源失效）
+# xhs>=0.2

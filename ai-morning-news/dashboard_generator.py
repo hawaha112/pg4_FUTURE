@@ -263,6 +263,198 @@ def _collect_source_stats(script_dir: Path) -> list:
     return merged
 
 
+def _render_week_important(script_dir: Path) -> str:
+    """渲染过去 7 天 importance ≥ 4 的事件，按事件发布日期(published_at)分组。
+    每条显示具体时间 + 来源 + 跳归档链接(按 rendered_at 推断 am/pm 班次)。
+    """
+    import sqlite3
+    from collections import OrderedDict
+    db_path = script_dir / 'events.db'
+    if not db_path.exists():
+        return ''
+    try:
+        con = sqlite3.connect(str(db_path))
+        rows = con.execute("""
+            SELECT
+                published_at,
+                json_extract(analysis, '$.chinese_title') AS title,
+                event_id,
+                rendered_at,
+                (SELECT a.source_name FROM articles a
+                  WHERE a.canonical_event_id = e.event_id LIMIT 1) AS src
+            FROM canonical_events e
+            WHERE rendered_at >= datetime('now','-7 days')
+              AND importance >= 4
+              AND analysis IS NOT NULL
+              AND published_at IS NOT NULL
+            ORDER BY datetime(published_at) DESC
+        """).fetchall()
+        con.close()
+    except sqlite3.Error:
+        return ''
+
+    if not rows:
+        return ''
+
+    def _parse_dt(s):
+        try:
+            return datetime.fromisoformat((s or '').replace('Z', '+00:00')).astimezone()
+        except (ValueError, TypeError, AttributeError):
+            return None
+
+    # 按事件发布的本地日期分组（DESC 顺序保持）
+    by_date = OrderedDict()
+    earliest_pub = None
+    latest_pub = None
+    for pub_iso, title, eid, rendered_at, src in rows:
+        pub_dt = _parse_dt(pub_iso)
+        rendered_dt = _parse_dt(rendered_at)
+        if pub_dt is None:
+            continue
+        if earliest_pub is None or pub_dt < earliest_pub:
+            earliest_pub = pub_dt
+        if latest_pub is None or pub_dt > latest_pub:
+            latest_pub = pub_dt
+        d_key = pub_dt.strftime('%Y-%m-%d')
+        # 用 rendered_at 推断这条事件落到哪个班次的归档页
+        shift = 'pm' if (rendered_dt and rendered_dt.hour >= 12) else 'am'
+        rendered_date_key = (
+            rendered_dt.strftime('%Y-%m-%d') if rendered_dt else d_key
+        )
+        by_date.setdefault(d_key, []).append({
+            'title': title or '',
+            'event_id': eid,
+            'src': src or '',
+            'time_str': pub_dt.strftime('%H:%M'),
+            # dashboard.html 自己就在 archive/ 下，归档页同目录，不带前缀。
+            # #evt- hash 让归档页里 script.js 滚到对应卡片并自动展开 modal。
+            'archive_url': f'{rendered_date_key}-{shift}.html#evt-{eid}',
+        })
+
+    # section title 的日期范围
+    if earliest_pub and latest_pub:
+        e_str = earliest_pub.strftime('%m-%d')
+        l_str = latest_pub.strftime('%m-%d')
+        date_range = e_str if e_str == l_str else f'{e_str} ~ {l_str}'
+    else:
+        date_range = '近 7 天'
+
+    # 中文星期映射，方便快速识别
+    weekday_zh = ['一', '二', '三', '四', '五', '六', '日']
+
+    lines = []
+    for d, items in by_date.items():
+        # 给日期加上"周X"和"今天/昨天"提示
+        try:
+            d_dt = datetime.strptime(d, '%Y-%m-%d').astimezone()
+            wd = weekday_zh[d_dt.weekday()]
+            today_local = datetime.now().astimezone().date()
+            if d_dt.date() == today_local:
+                hint = '今天'
+            elif (today_local - d_dt.date()).days == 1:
+                hint = '昨天'
+            else:
+                hint = f'周{wd}'
+            label = f'{d} · {hint}'
+        except ValueError:
+            label = d
+        lines.append(f'<div class="wi-date">{escape(label)}</div>')
+        for it in items:
+            t = (it['title'] or '')[:64]
+            lines.append(
+                f'<div class="wi-row">'
+                f'<a href="{escape(it["archive_url"])}" target="_blank" rel="noopener">'
+                f'<span class="wi-star">⭐</span>'
+                f'<span class="wi-time">{escape(it["time_str"])}</span>'
+                f'<span class="wi-title">{escape(t)}</span>'
+                f'<span class="wi-src">{escape(it["src"])}</span>'
+                f'</a></div>'
+            )
+
+    return (
+        f'<div class="section-title">📅 本周重要事件 · {date_range} · 共 {len(rows)} 条</div>'
+        f'<div class="wi-block">{"".join(lines)}</div>'
+    )
+
+
+def _render_week_entities(script_dir: Path) -> str:
+    """扫描过去 7 天 ai_relevant 文章的标题/摘要，统计预定义实体出现次数。
+    渲染成 chip 云，字号按频次加权。
+    """
+    import sqlite3
+    import re as _re
+    db_path = script_dir / 'events.db'
+    reg_path = script_dir / 'entity_registry.json'
+    if not db_path.exists() or not reg_path.exists():
+        return ''
+
+    try:
+        registry = json.loads(reg_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return ''
+
+    entities = registry.get('entities', [])
+    patterns = []  # [(name, compiled_pattern)]
+    for e in entities:
+        kws = e.get('keywords') or []
+        if not kws:
+            continue
+        pat = _re.compile('|'.join(_re.escape(k) for k in kws), _re.IGNORECASE)
+        patterns.append((e.get('name') or e.get('id'), pat))
+
+    if not patterns:
+        return ''
+
+    try:
+        con = sqlite3.connect(str(db_path))
+        rows = con.execute("""
+            SELECT title,
+                   json_extract(analysis,'$.chinese_title'),
+                   json_extract(analysis,'$.summary')
+            FROM articles
+            WHERE collected_at >= datetime('now','-7 days')
+              AND ai_relevant = 1
+        """).fetchall()
+        con.close()
+    except sqlite3.Error:
+        return ''
+
+    if not rows:
+        return ''
+
+    counts = {}
+    for title, ct, sm in rows:
+        text = ' '.join(filter(None, [title, ct, sm]))
+        if not text:
+            continue
+        for name, pat in patterns:
+            if pat.search(text):
+                counts[name] = counts.get(name, 0) + 1
+
+    if not counts:
+        return ''
+
+    sorted_e = sorted(counts.items(), key=lambda x: -x[1])[:12]
+    max_n = sorted_e[0][1]
+
+    chips = []
+    for name, n in sorted_e:
+        # 字号 13–22 px，亮度 0.55–1.0
+        size = 13 + int(round((n / max_n) * 9))
+        intensity = 0.55 + (n / max_n) * 0.45
+        chips.append(
+            f'<span class="ent-chip" style="font-size:{size}px;opacity:{intensity:.2f}">'
+            f'{escape(name)}<span class="ent-count">×{n}</span>'
+            f'</span>'
+        )
+
+    total_articles = len(rows)
+    return (
+        f'<div class="section-title">🏷️ 本周焦点实体 · {total_articles} 篇文章累积</div>'
+        f'<div class="ent-chips">{" ".join(chips)}</div>'
+    )
+
+
 def main():
     script_dir = Path(__file__).parent
     jsonl_path = script_dir / 'output' / 'run_health.jsonl'
@@ -316,7 +508,7 @@ def main():
             return ''
 
     table_rows = []
-    for r in reversed(runs[-30:]):  # 从 20 → 30 更多历史
+    for r in reversed(runs[-14:]):  # 一周 ~14 次（早晚两班 × 7 天）
         run_id = r.get('run_id', '')
         shift = r.get('shift', '') or ''
         label = _fmt_label(run_id)
@@ -398,7 +590,47 @@ def main():
     )
 
     # ── 班次分组 KPI（早班一组 / 晚班一组，每组 5 张经典大数字卡）──
-    def _kpi_card(label: str, val_html: str, sub: str, extra_cls: str = '') -> str:
+    def _kpi_card(label: str, val_html: str, sub: str, extra_cls: str = '',
+                  expandable_items: list = None) -> str:
+        """普通 KPI 卡。若传入 expandable_items，则卡片可点击展开为列表。"""
+        if expandable_items:
+            from html import escape as _esc
+
+            def _norm_archive_href(u: str) -> str:
+                """dashboard.html 在 archive/ 下，stats.json 里 important_events.archive_url
+                带 'archive/' 前缀（设计给主页用），从这里出发会变成 /archive/archive/X.html
+                而 404。剥掉前缀即可。"""
+                if u and u.startswith('archive/'):
+                    return u[len('archive/'):]
+                return u or '#'
+
+            def _add_evt_hash(href: str, eid: str) -> str:
+                """追加 #evt-<event_id>，归档页 script.js 会据此滚到对应卡 + 开 modal"""
+                if not eid or '#' in (href or ''):
+                    return href
+                return f'{href}#evt-{eid}'
+
+            items_html = ''.join(
+                f'<li><a href="{_esc(_add_evt_hash(_norm_archive_href(ev.get("archive_url")), ev.get("event_id") or ""))}" '
+                f'target="_blank" rel="noopener" '
+                f'title="{_esc(ev.get("source_name") or "")}">'
+                f'<span class="kpi-list-star">⭐</span>'
+                f'<span class="kpi-list-title">'
+                f'{_esc((ev.get("title") or "")[:80])}</span>'
+                f'<span class="kpi-list-src">{_esc(ev.get("source_name") or "")}</span>'
+                f'</a></li>'
+                for ev in expandable_items
+            )
+            return (
+                f'<details class="kpi kpi-expandable" open>'
+                f'<summary>'
+                f'<div class="kpi-label">{label} <span class="kpi-toggle">▾</span></div>'
+                f'<div class="kpi-val {extra_cls}">{val_html}</div>'
+                f'<div class="kpi-sub">{sub} · 点击折叠</div>'
+                f'</summary>'
+                f'<ul class="kpi-list">{items_html}</ul>'
+                f'</details>'
+            )
         return (
             f'<div class="kpi">'
             f'<div class="kpi-label">{label}</div>'
@@ -438,25 +670,14 @@ def main():
         deploy_ok = bool(run.get('deploy_ok'))
         ts_label = _fmt_label(run.get('run_id', ''))
 
-        cards = (
-            _kpi_card('重要事件',
-                      str(important),
-                      f'importance ≥ 4 · 占总条目 {int(important_pct)}%',
-                      extra_cls='hi' if important > 0 else '')
-            + _kpi_card('多源覆盖',
-                        f'{multi}<span style="font-size:14px;color:var(--text-50)"> / {kept}</span>',
-                        f'跨源交叉确认 · {multi_pct}%',
-                        extra_cls='hi' if multi > 0 else '')
-            + _kpi_card('原厂直发',
-                        str(official),
-                        '官方账号 / 公司发布的原始消息',
-                        extra_cls='hi' if official > 0 else '')
-            + _kpi_card('深度分析',
-                        f'{int(depth_pct)}<span style="font-size:18px;color:var(--text-50)">%</span>',
-                        f'{depth} / {kept} · 含 background + detailed_content')
-            + _kpi_card('覆盖实体',
-                        str(entities),
-                        '本期出现的去重公司 / 项目 / 人物')
+        important_events_list = run.get('important_events') or []
+
+        cards = _kpi_card(
+            '重要事件',
+            str(important),
+            f'importance ≥ 4 · 占总条目 {int(important_pct)}%',
+            extra_cls='hi' if important > 0 else '',
+            expandable_items=important_events_list if important > 0 else None,
         )
 
         # ── Tier 3 状态条（运维降级为单行小字）──
@@ -519,118 +740,14 @@ def main():
         f'</div>'
     )
 
-    # ── Tier 2：知识库累积（全库快照，跨班次/历史）──
-    kb_section_html = _render_kb_section(script_dir)
+    # 早期版本这里构建过 知识库累积 / 错误聚合 / 数据源质量 三个 section，
+    # 反馈：日常读者用不上这些运维数据，已从首屏下线。
+    # 函数 _render_kb_section / _collect_recent_errors / _collect_source_stats
+    # 保留在文件顶部，未来做独立"运维页"时可直接复用。
 
-    # ── 错误聚合区块 ──
-    errors = _collect_recent_errors(script_dir, max_errors=15)
-    if errors:
-        err_rows = []
-        for e in errors:
-            color = 'var(--red)' if e['level'] == 'E' else 'var(--amber)'
-            err_rows.append(
-                f'<tr>'
-                f'<td style="color:{color};font-weight:600">{e["level"]} ×{e["count"]}</td>'
-                f'<td>{escape(e["module"])}</td>'
-                f'<td>{escape(e["last_ts"])}</td>'
-                f'<td style="font-family:monospace;font-size:11px">{escape(e["message"][:120])}</td>'
-                f'</tr>'
-            )
-        errors_section_html = f'''
-  <div class="section-title">⚠️ 最近错误事件 (top {len(errors)})</div>
-  <div style="font-size:11px;color:var(--text-50);margin-bottom:10px">
-    从 daily_run.log 聚合最近 ~500KB 内的 WARN/ERROR 行；按出现频次降序
-  </div>
-  <div style="overflow-x:auto">
-  <table>
-    <thead><tr><th>级别×次数</th><th>模块</th><th>最近时间</th><th>消息</th></tr></thead>
-    <tbody>{chr(10).join(err_rows)}</tbody>
-  </table>
-  </div>
-'''
-    else:
-        errors_section_html = '<div style="color:var(--green);padding:10px 0">✓ 近期日志无 WARN/ERROR</div>'
-
-    # ── 源质量区块 ──
-    sources = _collect_source_stats(script_dir)
-
-    def _tier_color(t):
-        return {0: 'var(--green)', 1: 'var(--accent)', 2: 'var(--text-70)'}.get(t, 'var(--text-70)')
-
-    def _tier_label(t):
-        return {0: 'T0 官方', 1: 'T1 研究', 2: 'T2 媒体'}.get(t, f'T{t}')
-
-    def _health_badge(tag):
-        colors = {
-            'ok': ('●', 'var(--green)', 'OK'),
-            'failing': ('●', 'var(--amber)', '告警'),
-            'dead': ('●', 'var(--red)', '死源'),
-            'disabled': ('○', 'var(--text-50)', '禁用'),
-        }
-        m, c, lbl = colors.get(tag, ('●', 'var(--text-50)', '?'))
-        return f'<span style="color:{c}">{m} {lbl}</span>'
-
-    def _fmt_last(s):
-        if not s:
-            return '—'
-        try:
-            dt = datetime.fromisoformat(s.replace('Z', '+00:00'))
-            return dt.astimezone().strftime('%m-%d %H:%M')
-        except (ValueError, TypeError):
-            return s[:16].replace('T', ' ')
-
-    sources_rows = []
-    for s in sources:
-        url = s.get('url', '') or ''
-        # youtube:// URL 转成可点击的 channel 链接
-        if url.startswith('youtube://'):
-            cid = url[len('youtube://'):]
-            url_display = f'https://www.youtube.com/channel/{cid}'
-        else:
-            url_display = url
-        url_cell = (
-            f'<a href="{escape(url_display)}" target="_blank" rel="noopener">🔗 源</a>'
-            if url_display.startswith('http') else '—'
-        )
-        sources_rows.append(
-            f'<tr>'
-            f'<td>{escape(s["name"])}</td>'
-            f'<td style="color:{_tier_color(s["tier"])}">{_tier_label(s["tier"])}</td>'
-            f'<td>{escape(s["lang"])}</td>'
-            f'<td>{url_cell}</td>'
-            f'<td><b>{s["w7"]}</b></td>'
-            f'<td>{s["w7_hi"]}</td>'
-            f'<td>{s["avg_imp_w7"] or "—"}</td>'
-            f'<td>{s["total"]}</td>'
-            f'<td>{_fmt_last(s["last_collected"])}</td>'
-            f'<td>{_health_badge(s["health_tag"])}</td>'
-            f'</tr>'
-        )
-
-    # 源汇总 KPI
-    enabled_total = sum(1 for s in sources if s['enabled'])
-    active_w7 = sum(1 for s in sources if s['enabled'] and s['w7'] > 0)
-    dead_count = sum(1 for s in sources if s['health_tag'] == 'dead')
-    silent_w7 = sum(1 for s in sources if s['enabled'] and s['w7'] == 0)
-
-    sources_section_html = f'''
-  <div class="section-title">📡 数据源质量（{len(sources)} 源：{enabled_total} 启用 / {active_w7} 近 7d 有贡献 / {silent_w7} 静默 / {dead_count} 死）</div>
-  <div style="font-size:11px;color:var(--text-50);margin-bottom:10px">
-    按"近 7 天贡献数"降序排列；点"🔗 源"直接打开原始 RSS/Feed 监控源头
-  </div>
-  <div style="overflow-x:auto">
-  <table>
-    <thead><tr>
-      <th>源名</th><th>Tier</th><th>Lang</th><th>URL</th>
-      <th>近 7d</th><th>近 7d ★≥3</th><th>近 7d 均 ★</th><th>总数</th>
-      <th>最近采集</th><th>健康</th>
-    </tr></thead>
-    <tbody>
-{chr(10).join(sources_rows)}
-    </tbody>
-  </table>
-  </div>
-'''
+    # 本周维度的两个 section：补充早报只看当天的局限
+    week_important_html = _render_week_important(script_dir)
+    week_entities_html = _render_week_entities(script_dir)
 
     generated_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -774,6 +891,39 @@ def main():
   .kpi-val.hi {{ color: var(--accent-hi); text-shadow: 0 0 12px var(--accent-glow); }}
   .kpi-sub {{ font-size: 11px; color: var(--text-70); margin-top: 6px; font-weight: 500; }}
 
+  /* 可展开 KPI 卡（重要事件） */
+  details.kpi-expandable {{ cursor: pointer; }}
+  details.kpi-expandable > summary {{
+    list-style: none; cursor: pointer;
+  }}
+  details.kpi-expandable > summary::-webkit-details-marker {{ display: none; }}
+  details.kpi-expandable .kpi-toggle {{
+    font-size: 10px; color: var(--text-50); margin-left: 4px;
+    transition: transform 0.15s;
+    display: inline-block;
+  }}
+  details.kpi-expandable[open] .kpi-toggle {{ transform: rotate(180deg); }}
+  .kpi-list {{
+    list-style: none; padding: 12px 0 0 0; margin: 12px 0 0 0;
+    border-top: 1px solid var(--border);
+  }}
+  .kpi-list li {{ margin: 0; padding: 0; }}
+  .kpi-list li + li {{ margin-top: 6px; }}
+  .kpi-list a {{
+    display: block; padding: 8px 10px; border-radius: 4px;
+    color: var(--text-100); text-decoration: none;
+    background: rgba(255,255,255,0.02);
+    transition: background 0.15s, transform 0.1s;
+    font-size: 12px; line-height: 1.4;
+  }}
+  .kpi-list a:hover {{ background: rgba(255,255,255,0.06); transform: translateX(2px); }}
+  .kpi-list-star {{ margin-right: 6px; }}
+  .kpi-list-title {{ font-weight: 500; color: var(--text-100); }}
+  .kpi-list-src {{
+    display: block; font-size: 10px; color: var(--text-50);
+    margin-top: 3px; margin-left: 18px;
+  }}
+
   /* ─── KPI 班次 Tab 切换 ─── */
   .kpi-tabs {{
     display: flex; gap: 0; margin-bottom: 16px;
@@ -857,6 +1007,72 @@ def main():
     background: linear-gradient(180deg, var(--accent), var(--accent-hi));
     box-shadow: 0 0 8px var(--accent-glow); border-radius: 2px;
   }}
+
+  /* 本周重要事件 */
+  .wi-block {{ margin: 8px 0 28px; }}
+  .wi-date {{
+    font-size: 11px; color: var(--text-50); letter-spacing: 1px;
+    margin: 14px 0 6px; padding-left: 2px; font-weight: 600;
+    text-transform: uppercase;
+  }}
+  .wi-row {{ margin: 0 0 4px; }}
+  .wi-row a {{
+    display: block; padding: 10px 12px; border-radius: 5px;
+    background: rgba(255,255,255,0.025);
+    color: var(--text-100); text-decoration: none;
+    transition: background 0.15s, transform 0.1s;
+    font-size: 13px; line-height: 1.45;
+    border-left: 2px solid var(--accent);
+  }}
+  .wi-row a:hover {{ background: rgba(120,200,255,0.08); transform: translateX(2px); }}
+  .wi-star {{ margin-right: 6px; }}
+  .wi-time {{
+    display: inline-block; margin-right: 10px;
+    font-family: var(--mono);
+    font-size: 11px; color: var(--accent);
+    min-width: 36px;
+  }}
+  .wi-title {{ font-weight: 500; }}
+  .wi-src {{
+    display: inline-block; margin-left: 10px;
+    font-size: 11px; color: var(--text-50);
+  }}
+
+  /* 本周焦点实体 */
+  .ent-chips {{
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin: 12px 0 32px; align-items: baseline;
+  }}
+  .ent-chip {{
+    padding: 4px 10px; border-radius: 14px;
+    background: rgba(120,200,255,0.08);
+    border: 1px solid rgba(120,200,255,0.18);
+    color: var(--text-100); font-weight: 500;
+    transition: background 0.15s;
+  }}
+  .ent-chip:hover {{ background: rgba(120,200,255,0.16); }}
+  .ent-count {{
+    margin-left: 5px; font-size: 0.78em;
+    color: var(--text-50); font-weight: 400;
+  }}
+
+  /* 历史跑记录默认收起 */
+  details.run-history {{ margin: 32px 0 8px; }}
+  details.run-history > summary {{
+    list-style: none; cursor: pointer;
+    font-size: 13px; font-weight: 700; color: var(--text-100);
+    padding: 8px 12px 8px 14px; letter-spacing: 0.5px;
+    border-left: 3px solid var(--accent);
+    background: var(--bg-card); border-radius: 0 4px 4px 0;
+    transition: background 0.15s;
+  }}
+  details.run-history > summary::-webkit-details-marker {{ display: none; }}
+  details.run-history > summary:hover {{ background: var(--bg-card-hi, rgba(255,255,255,0.04)); }}
+  details.run-history .hist-toggle {{
+    float: right; color: var(--text-50); font-size: 11px;
+    transition: transform 0.15s; display: inline-block;
+  }}
+  details.run-history[open] .hist-toggle {{ transform: rotate(180deg); }}
   .section-hint {{ font-size: 11px; color: var(--text-50); margin-bottom: 14px; padding-left: 12px; }}
 
   /* ─── Tables ─── */
@@ -917,25 +1133,25 @@ def main():
 
 {kpi_blocks_html}
 
-{kb_section_html}
+{week_important_html}
 
-  <div class="section-title">历史跑记录（最近 30 次）</div>
-  <div style="font-size:11px;color:var(--text-50);margin-bottom:10px">
-    点击"时间"列可跳转到该次的归档早报页面；异常行（条目=0 或 部署失败）标红
-  </div>
-  <table>
-    <thead><tr>
-      <th>时间</th><th>班</th><th>条目</th><th>LLM</th><th>多源</th>
-      <th>用时(分)</th><th>源 OK/死</th><th>部署</th>
-    </tr></thead>
-    <tbody>
+{week_entities_html}
+
+  <details class="run-history">
+    <summary>📜 历史跑记录（最近 14 次）<span class="hist-toggle">▾</span></summary>
+    <div style="font-size:11px;color:var(--text-50);margin:8px 0 10px">
+      点"时间"列跳到该次归档；条目=0 或 部署失败的行会标红
+    </div>
+    <table>
+      <thead><tr>
+        <th>时间</th><th>班</th><th>条目</th><th>LLM</th><th>多源</th>
+        <th>用时(分)</th><th>源 OK/死</th><th>部署</th>
+      </tr></thead>
+      <tbody>
 {table_body}
-    </tbody>
-  </table>
-
-{errors_section_html}
-
-{sources_section_html}
+      </tbody>
+    </table>
+  </details>
 </div>
 
 <script>

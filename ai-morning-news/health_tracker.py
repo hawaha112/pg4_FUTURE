@@ -160,8 +160,11 @@ class SourceHealthTracker:
                 })
         return alerts
 
-    def print_report(self):
-        alerts = self.get_alerts()
+    def print_report(self, disabled_sources: set = None):
+        """打印连续失败的源。已在 config 中 enabled=false 的源不再告警
+        （它们已经不被抓取，告警是噪声）。"""
+        disabled = disabled_sources or set()
+        alerts = [a for a in self.get_alerts() if a['source'] not in disabled]
         if not alerts:
             return
         log.warning("🚨 源健康度警报：%d 个源连续失败", len(alerts))

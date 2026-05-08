@@ -463,8 +463,9 @@ def generate_html(all_items, config, digest=None, meta=None):
         aud_list = analysis.get('audience', []) or ['general']
         aud_data = '|'.join(a for a in aud_list if a in AUDIENCE_LABELS) or 'general'
 
+        _riid = item.get('_event_id') or item.get('link') or f'r{idx}'
         cards_html += f'''
-        <div class="card" data-cat="{_safe_escape(cat_data)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}"
+        <div class="card" data-cat="{_safe_escape(cat_data)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_riid)}"
              style="animation-delay:{min(idx * 25, 500)}ms">
             {img_html}
             <div class="card-body">
