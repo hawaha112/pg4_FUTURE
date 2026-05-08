@@ -249,14 +249,16 @@ find "$PROJECT_DIR" -maxdepth 1 -type f \( \
     -name "*.corrupt" \
     \) -mtime +7 -delete 2>/dev/null || true
 
-# 异地备份到 iCloud Drive（防本地磁盘事故全丢）
-ICLOUD_BACKUP_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs/AI早报备份"
-if [ -d "$HOME/Library/Mobile Documents/com~apple~CloudDocs" ]; then
-    mkdir -p "$ICLOUD_BACKUP_DIR"
-    cp "$PROJECT_DIR/events.db" "$ICLOUD_BACKUP_DIR/events.db.bak.${BACKUP_DATE}" 2>>"$LOG_FILE" || true
-    # iCloud 端只保留 14 份（半月，比本地宽松）
-    find "$ICLOUD_BACKUP_DIR" -maxdepth 1 -name "events.db.bak.*" -mtime +14 -delete 2>/dev/null || true
-    echo "  ☁️  iCloud 备份: events.db.bak.${BACKUP_DATE}" >> "$LOG_FILE"
+# 异地备份到 iCloud Drive（防本地磁盘事故全丢）— 仅 macOS
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    ICLOUD_BACKUP_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs/AI早报备份"
+    if [ -d "$HOME/Library/Mobile Documents/com~apple~CloudDocs" ]; then
+        mkdir -p "$ICLOUD_BACKUP_DIR"
+        cp "$PROJECT_DIR/events.db" "$ICLOUD_BACKUP_DIR/events.db.bak.${BACKUP_DATE}" 2>>"$LOG_FILE" || true
+        # iCloud 端只保留 14 份（半月，比本地宽松）
+        find "$ICLOUD_BACKUP_DIR" -maxdepth 1 -name "events.db.bak.*" -mtime +14 -delete 2>/dev/null || true
+        echo "  ☁️  iCloud 备份: events.db.bak.${BACKUP_DATE}" >> "$LOG_FILE"
+    fi
 fi
 
 # 从 stats.json 读取文章数量与 LLM 覆盖率
@@ -299,9 +301,18 @@ DEPLOY_OK=false
 echo "开始部署..." >> "$LOG_FILE"
 
 DEPLOY_TMP="/tmp/ai_briefing_deploy_$$"
-REPO_URL=$(cd "$PROJECT_DIR/output" && git remote get-url origin 2>/dev/null || echo "")
-if [ -z "$REPO_URL" ]; then
-    REPO_URL="${DEPLOY_REPO_URL:-}"
+# REPO_URL 优先级：
+#   1. DEPLOY_REPO_TOKEN env（云端 GH Actions） → 拼 PAT 认证 URL
+#   2. output/.git remote（Mac 本地，已 clone 过部署仓库）
+#   3. DEPLOY_REPO_URL env（手动覆盖）
+if [ -n "${DEPLOY_REPO_TOKEN:-}" ]; then
+    DEPLOY_REPO="${DEPLOY_REPO:-hawaha112/ai-morning-briefing}"
+    REPO_URL="https://x-access-token:${DEPLOY_REPO_TOKEN}@github.com/${DEPLOY_REPO}.git"
+else
+    REPO_URL=$(cd "$PROJECT_DIR/output" && git remote get-url origin 2>/dev/null || echo "")
+    if [ -z "$REPO_URL" ]; then
+        REPO_URL="${DEPLOY_REPO_URL:-}"
+    fi
 fi
 
 # 自动修复 output/.git 的损坏状态
