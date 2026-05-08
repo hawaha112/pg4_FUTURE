@@ -96,19 +96,31 @@ jobs:
         shell: bash
         run: |
           INPUT_SHIFT="${{ github.event.inputs.shift }}"
+          CRON="${{ github.event.schedule }}"
+          # 优先级: 手动 input → cron 表达式 → wall clock (仅手动 dispatch 且 auto 时走 fallback)
+          # 不靠 wall clock 主因: GH cron 经常延迟 5-15 分钟, 06:00 cron 实际可能 06:54
+          # 触发, 让 wall clock 边界判错班次。直接读 github.event.schedule 最准。
           if [ -n "$INPUT_SHIFT" ] && [ "$INPUT_SHIFT" != "auto" ]; then
             FINAL=$INPUT_SHIFT
+            REASON="manual input"
+          elif [ "$CRON" = "0 22 * * *" ]; then
+            FINAL=am
+            REASON="cron 北京 06:00 (am)"
+          elif [ "$CRON" = "0 10 * * *" ]; then
+            FINAL=pm
+            REASON="cron 北京 18:00 (pm)"
           else
             UTC_HOUR=$(date -u +%-H)
             CN_HOUR=$(( (UTC_HOUR + 8) % 24 ))
-            if [ "$CN_HOUR" -ge 6 ] && [ "$CN_HOUR" -lt 18 ]; then
-              FINAL=pm
-            else
+            if [ "$CN_HOUR" -lt 12 ]; then
               FINAL=am
+            else
+              FINAL=pm
             fi
+            REASON="wall clock fallback (CN=$CN_HOUR)"
           fi
           echo "shift=$FINAL" >> $GITHUB_OUTPUT
-          echo "→ shift=$FINAL (UTC $(date -u +%H:%M), CN $(TZ='Asia/Shanghai' date +%H:%M))"
+          echo "→ shift=$FINAL ($REASON, UTC $(date -u +%H:%M), CN $(TZ='Asia/Shanghai' date +%H:%M))"
 
       - name: Run run_daily.sh (跟 Mac launchd 同一份脚本)
         working-directory: ai-morning-news
