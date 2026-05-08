@@ -1,0 +1,158 @@
+name: AI Morning Briefing
+# PoC: 在 GitHub Actions 上跑 collector + briefing_renderer，
+# 验证 Claude Max OAuth token 在云端是否正常工作。
+# 暂不做部署 + TG，跑完 upload artifact 让人工验证。
+#
+# 触发方式：
+#   - workflow_dispatch（手动）：可强制 shift（am/pm/auto）
+#   - schedule cron：北京 06:30 早班 + 18:00 晚班
+
+on:
+  workflow_dispatch:
+    inputs:
+      shift:
+        description: 'Force shift (auto = follow current UTC time)'
+        type: choice
+        options: [auto, am, pm]
+        default: auto
+  schedule:
+    - cron: '30 22 * * *'   # UTC 22:30 = 北京 06:30 早班
+    - cron: '0 10 * * *'    # UTC 10:00 = 北京 18:00 晚班
+
+concurrency:
+  group: ai-morning-briefing
+  cancel-in-progress: false
+
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      BRIEFING_URL: ${{ secrets.BRIEFING_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python deps
+        run: pip install certifi
+
+      - name: Install Claude Code CLI
+        shell: bash
+        run: |
+          # 用 npm 装最稳（native installer 在 GH Actions 上可能要交互）
+          npm install -g @anthropic-ai/claude-code
+          # 验证 OAuth token 已识别
+          which claude
+          claude --version
+          if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "::error::CLAUDE_CODE_OAUTH_TOKEN secret 未设置"
+            exit 1
+          fi
+          echo "✓ token 已注入环境"
+
+      - name: Restore SQLite state from cache
+        id: state-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ai-morning-news/events.db
+            ai-morning-news/dedup.db
+            ai-morning-news/llm_cache.db
+            ai-morning-news/source_health.json
+            ai-morning-news/history.json
+          key: ai-news-state-v2-${{ github.run_id }}
+          restore-keys: |
+            ai-news-state-v2-
+
+      - name: Determine shift
+        id: shift
+        shell: bash
+        run: |
+          INPUT_SHIFT="${{ github.event.inputs.shift }}"
+          if [ -n "$INPUT_SHIFT" ] && [ "$INPUT_SHIFT" != "auto" ]; then
+            FINAL=$INPUT_SHIFT
+          else
+            # GH runner 是 UTC，北京 = UTC+8
+            UTC_HOUR=$(date -u +%-H)
+            CN_HOUR=$(( (UTC_HOUR + 8) % 24 ))
+            if [ "$CN_HOUR" -ge 6 ] && [ "$CN_HOUR" -lt 18 ]; then
+              FINAL=pm
+            else
+              FINAL=am
+            fi
+          fi
+          echo "shift=$FINAL" >> $GITHUB_OUTPUT
+          echo "→ shift = $FINAL (UTC=$(date -u +%H:%M), CN=$(TZ='Asia/Shanghai' date +%H:%M))"
+
+      - name: Start claude_proxy + LLM smoke test
+        working-directory: ai-morning-news
+        shell: bash
+        run: |
+          nohup python3 -u claude_proxy.py > /tmp/proxy.log 2>&1 &
+          echo $! > /tmp/proxy.pid
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:3456/health > /dev/null 2>&1; then
+              echo "✓ proxy ready ($i sec)"
+              break
+            fi
+            sleep 1
+          done
+          echo "=== smoke test: 调一次 LLM 验证 OAuth token ==="
+          resp=$(curl -s -m 90 http://localhost:3456/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -d '{"messages":[{"role":"user","content":"reply with single word OK"}],"model":"claude-sonnet-4","max_tokens":50}')
+          echo "$resp" | head -c 600; echo ""
+          if echo "$resp" | grep -q '"content"'; then
+            echo "✓ LLM 可调通"
+          else
+            echo "::error::LLM smoke test 失败，dump proxy.log:"
+            cat /tmp/proxy.log
+            exit 1
+          fi
+
+      - name: Run collector (抓 RSS + LLM 分析 + 事件聚类)
+        working-directory: ai-morning-news
+        env:
+          BRIEFING_SHIFT: ${{ steps.shift.outputs.shift }}
+        run: python3 collector.py 2>&1 | tee collect.log
+
+      - name: Run briefing renderer (生成早报 HTML)
+        working-directory: ai-morning-news
+        env:
+          BRIEFING_SHIFT: ${{ steps.shift.outputs.shift }}
+        run: |
+          python3 briefing_renderer.py 2>&1 | tee daily_run.log
+          if [ -f output/stats.json ]; then
+            echo "=== stats.json ==="
+            cat output/stats.json | python3 -m json.tool
+          fi
+
+      - name: Stop claude_proxy
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/proxy.pid ]; then
+            kill $(cat /tmp/proxy.pid) 2>/dev/null || true
+          fi
+
+      - name: Upload PoC artifacts (output + logs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: briefing-${{ steps.shift.outputs.shift }}-${{ github.run_number }}
+          path: |
+            ai-morning-news/output/
+            ai-morning-news/daily_run.log
+            ai-morning-news/collect.log
+            /tmp/proxy.log
+          if-no-files-found: warn
+          retention-days: 7
