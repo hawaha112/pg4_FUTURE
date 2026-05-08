@@ -1,0 +1,118 @@
+name: Dispatch TG Message
+# 通用 TG 发送 workflow —— 任何"手动发 TG"操作都通过这个,
+# 云端发,不依赖本地 ~/.config/ai-briefing/.env。
+#
+# 使用:
+#   gh workflow run dispatch-tg.yml -R hawaha112/pg4_FUTURE \
+#     -f message="<b>your html message</b>" \
+#     -f parse_mode=HTML
+
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'Message text (HTML or Markdown supported)'
+        required: true
+        type: string
+      parse_mode:
+        description: 'Parse mode'
+        type: choice
+        options: [HTML, Markdown, plain]
+        default: HTML
+      preset:
+        description: 'Preset content type (overrides message if set)'
+        type: choice
+        options:
+          - none                # 用 message 字段
+          - dashboard_snapshot  # 自动从 stats.json 拼仪表盘摘要
+          - health_ping         # 简单的 "我还活着" ping
+        default: none
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      BRIEFING_URL: ${{ secrets.BRIEFING_URL }}
+    steps:
+      - name: Build message body
+        id: build
+        shell: bash
+        env:
+          MSG: ${{ github.event.inputs.message }}
+          PARSE: ${{ github.event.inputs.parse_mode }}
+          PRESET: ${{ github.event.inputs.preset }}
+        run: |
+          if [ "$PRESET" = "dashboard_snapshot" ]; then
+            # 实时拉部署仓库的 stats.json,组合一份仪表盘摘要
+            BASE="${BRIEFING_URL%/}"
+            STATS=$(curl -s "${BASE}/stats.json?_=$(date +%s)")
+            BODY=$(python3 -c "
+import json, sys, datetime
+stats = json.loads('''$STATS''')
+ev = stats.get('event_db_stats', {})
+kept = stats.get('article_count', '?')
+llm = int(round(stats.get('llm_coverage', 0) * 100))
+multi = stats.get('multi_source_count', 0)
+imp = stats.get('important_count', 0)
+official = stats.get('official_count', 0)
+gen = stats.get('generated_at', '')
+try:
+    gen_local = datetime.datetime.fromisoformat(gen.replace('Z','+00:00')).astimezone(datetime.timezone(datetime.timedelta(hours=8)))
+    gen_str = gen_local.strftime('%m-%d %H:%M')
+except Exception:
+    gen_str = '?'
+print(f'''<b>📊 跑步仪表盘 · {gen_str}</b>
+
+<b>本班次产出:</b>
+· 收录 <b>{kept}</b> 条 AI 资讯
+· 🧠 LLM 深度分析 <b>{llm}%</b>
+· ⭐ 重要事件 <b>{imp}</b> 条 (importance ≥ 4)
+· 🔗 多源交叉确认 <b>{multi}</b> 条
+· 🏢 原厂直发 <b>{official}</b> 条
+
+<b>知识库累积:</b>
+· 总事件 <b>{ev.get(\"total_events\", \"?\")}</b> 个
+· 总文章 <b>{ev.get(\"total_articles\", \"?\")}</b> 篇
+
+<a href=\"$BASE/archive/dashboard.html\">📈 打开完整仪表盘 →</a>
+<a href=\"$BASE/\">📖 当前最新早报</a>''')")
+            FINAL_PARSE=HTML
+          elif [ "$PRESET" = "health_ping" ]; then
+            BODY="<b>🟢 系统健康检查</b>
+$(date '+%Y-%m-%d %H:%M:%S %Z')
+来自 GitHub Actions runner"
+            FINAL_PARSE=HTML
+          else
+            BODY="$MSG"
+            FINAL_PARSE="$PARSE"
+          fi
+
+          echo "FINAL_PARSE=$FINAL_PARSE" >> $GITHUB_OUTPUT
+          # 写入文件避免 GITHUB_OUTPUT 多行 escape 麻烦
+          printf '%s' "$BODY" > /tmp/tg_body.txt
+          echo "preview (first 200 chars):"
+          head -c 200 /tmp/tg_body.txt; echo
+
+      - name: Send to Telegram
+        shell: bash
+        env:
+          FINAL_PARSE: ${{ steps.build.outputs.FINAL_PARSE }}
+        run: |
+          PAYLOAD=$(BODY="$(cat /tmp/tg_body.txt)" python3 -c "
+import json, os
+parse = os.environ['FINAL_PARSE']
+data = {
+    'chat_id': os.environ['TG_CHAT_ID'],
+    'text': os.environ['BODY'],
+    'disable_web_page_preview': False,
+}
+if parse and parse != 'plain':
+    data['parse_mode'] = parse
+print(json.dumps(data, ensure_ascii=False))")
+
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" | python3 -m json.tool
