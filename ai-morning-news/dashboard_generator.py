@@ -1111,10 +1111,16 @@ def main():
 
   @media (max-width: 640px) {{
     body {{ padding: 20px 12px; }}
-    .kpis {{ grid-template-columns: repeat(2, 1fr); }}
+    /* KPI 卡只剩 1 张("重要事件")时强制 2 列会让它占左半屏右半空,
+       改用 1fr 让单卡占满整宽,展开列表也能撑满 */
+    .kpis {{ grid-template-columns: 1fr; gap: 10px; }}
     .today-cards {{ grid-template-columns: 1fr; }}
     h1 {{ font-size: 22px; }}
     .kpi-val {{ font-size: 22px; }}
+    /* 展开列表的链接卡片在小屏改大间距和字号,更可读 */
+    .kpi-list a {{ padding: 12px 14px; font-size: 13px; }}
+    .kpi-list-title {{ display: block; line-height: 1.5; }}
+    .kpi-list-src {{ margin-left: 22px; font-size: 11px; }}
   }}
 </style>
 </head>
