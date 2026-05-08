@@ -286,7 +286,9 @@ def generate_html(all_items, config, digest=None, meta=None):
                         chinese_title_raw = truncated.rstrip()
 
             chinese_title = _safe_escape(chinese_title_raw)
-            why_it_matters = _safe_escape(analysis.get('why_it_matters', ''))
+            # 卡片显示客观事实陈述(summary),不显示意义解读(why_it_matters)。
+            # 后者跟 modal 里的 deep_analysis 内容重叠,留给 modal 展开看。
+            card_summary = _safe_escape(analysis.get('summary', '') or raw_summary)
             categories = analysis.get('categories', ['其他'])
 
             pub_str = _format_local_time(item.get('published'))
@@ -307,8 +309,8 @@ def generate_html(all_items, config, digest=None, meta=None):
             # 标题
             title_html = f'<div class="featured-title-text">{chinese_title}</div>'
 
-            # why_it_matters
-            why_html = f'<div class="featured-why">{why_it_matters}</div>' if why_it_matters else ""
+            # 卡片简介:用 summary(事实)而不是 why_it_matters(意义),后者留给 modal
+            why_html = f'<div class="featured-why">{card_summary}</div>' if card_summary else ""
 
             # 来源徽章 + 时间
             tb = _source_badge(item)
@@ -416,7 +418,9 @@ def generate_html(all_items, config, digest=None, meta=None):
                     chinese_title_raw = truncated.rstrip()
 
         chinese_title = _safe_escape(chinese_title_raw)
-        why_it_matters = _safe_escape(analysis.get('why_it_matters', ''))
+        # 卡片用 summary(事实陈述)替代 why_it_matters(意义),
+        # 避免和 modal 的 deep_analysis 重复。
+        card_summary = _safe_escape(analysis.get('summary', '') or raw_summary)
         categories = analysis.get('categories', ['其他'])
         source_type = analysis.get('source_type', 'news')
         reading_minutes = analysis.get('reading_minutes', 1)
@@ -443,10 +447,10 @@ def generate_html(all_items, config, digest=None, meta=None):
         # 标题
         title_html = f'<div class="card-title">{chinese_title}</div>'
 
-        # 精简的 why_it_matters（只显示，不显示 key_details/summary）
+        # 卡片简介用 summary(事实陈述),不重复 modal 里的 deep_analysis(意义解读)
         z3_html = ""
-        if why_it_matters:
-            z3_html = f'<div class="z3"><div class="z3-why">{why_it_matters}</div></div>'
+        if card_summary:
+            z3_html = f'<div class="z3"><div class="z3-why">{card_summary}</div></div>'
 
         # Z5: 来源徽章 + 来源 + 时间 + 事件状态（多源指示提升为独立 pill，见下方）
         tb = _source_badge(item)
