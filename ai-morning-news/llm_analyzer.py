@@ -918,6 +918,8 @@ class LLMAnalyzer:
             )
             data = self._extract_json(response)
             if not data:
+                log.warning("digest _extract_json 空，原始响应前 400 字: %r",
+                            (response or '')[:400])
                 return {"editorial": "速览生成失败。", "top_stories": []}
 
             # 校验
