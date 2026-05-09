@@ -535,12 +535,14 @@ def main():
                 pass
 
     editorial = digest.get('editorial', '')
-    # 检查速览是否有效（排除失败占位符和过短内容）
+    # 检查速览是否有效（排除 fallback 占位符与过短内容）
+    # 只匹配完整 fallback 短语 — 旧版黑名单里单独列"失败"/"错误"，但这俩
+    # 在正常 AI 新闻里太常见（"创业失败"/"训练错误"），会误杀 LLM 速览。
+    _FALLBACK_PHRASES = ('速览生成失败', '速览生成错误', '今天暂无重要')
     _is_valid_editorial = (
         editorial
         and len(editorial) >= 20
-        and '失败' not in editorial
-        and '错误' not in editorial
+        and not any(p in editorial for p in _FALLBACK_PHRASES)
     )
 
     if not _is_valid_editorial:
