@@ -408,6 +408,39 @@ class LLMAnalyzer:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _escape_inline_newlines(text: str) -> str:
+        """把双引号包围的字符串值里的真换行/制表/回车转成 JSON 转义形式。
+
+        LLM 在写多段内容（editorial、detailed_content）时常吐出违反 JSON
+        规范的字符串值，里面有真实 \\n。json.loads 会直接报错。这里只
+        替换 JSON 字符串值内部的换行，结构层的空白不动。
+        """
+        out = []
+        in_str = False
+        escape_next = False
+        for ch in text:
+            if escape_next:
+                out.append(ch)
+                escape_next = False
+                continue
+            if ch == '\\':
+                out.append(ch)
+                escape_next = True
+                continue
+            if ch == '"':
+                in_str = not in_str
+                out.append(ch)
+                continue
+            if in_str and ch == '\n':
+                out.append('\\n'); continue
+            if in_str and ch == '\r':
+                out.append('\\r'); continue
+            if in_str and ch == '\t':
+                out.append('\\t'); continue
+            out.append(ch)
+        return ''.join(out)
+
+    @staticmethod
     def _extract_json(text: str) -> dict:
         """从 LLM 响应中提取 JSON，兼容各种包裹和截断情况。"""
         text = text.strip()
@@ -420,6 +453,13 @@ class LLMAnalyzer:
         # 尝试直接解析
         try:
             return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        # 容错: LLM 经常在 JSON 字符串值里塞真换行 (写多段 editorial 时尤甚),
+        # 这违反 JSON 规范。先把字符串值内部的真 \n / \r 转成 \\n / \\r 再解析。
+        try:
+            return json.loads(LLMAnalyzer._escape_inline_newlines(text))
         except json.JSONDecodeError:
             pass
 
