@@ -544,6 +544,8 @@ def main():
         and len(editorial) >= 20
         and not any(p in editorial for p in _FALLBACK_PHRASES)
     )
+    log.info("📝 editorial 校验: valid=%s, len=%d, head=%r",
+             _is_valid_editorial, len(editorial or ''), (editorial or '')[:120])
 
     if not _is_valid_editorial:
         # 从已有分析中提取关键信息，生成规则版速览
