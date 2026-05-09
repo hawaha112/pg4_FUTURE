@@ -156,6 +156,30 @@ else
             fi
             exit 1
         fi
+
+        # ────────────────────────────────────────────────
+        # token 真打探测：proxy /health 起来不代表 OAuth token 有效
+        # 历史问题：token 失效时 proxy 启动正常，每篇 LLM 调用 401 返 500，
+        # 流水线静默跑完 → kept=0 → 跳过部署 → TG 收到的是"部署失败"而非
+        # 根因告警，要 download artifact 才能看到 401。改成开跑前先打一发。
+        # ────────────────────────────────────────────────
+        echo "  验证 LLM token..." >> "$LOG_FILE"
+        PROBE_RESP=$(curl -s --max-time 60 -X POST "${LLM_URL}/chat/completions" \
+            -H "Content-Type: application/json" \
+            -d '{"model":"claude-sonnet-4","messages":[{"role":"user","content":"ping"}],"max_tokens":4}' 2>&1)
+        if echo "$PROBE_RESP" | grep -qiE '401|invalid auth|failed to authenticate'; then
+            echo "  ❌ LLM token 鉴权失败 (401), 终止流程" >> "$LOG_FILE"
+            echo "  探测响应: $(echo "$PROBE_RESP" | tr '\n' ' ' | cut -c1-300)" >> "$LOG_FILE"
+            if [ -n "$TG_BOT_TOKEN" ] && [ -n "$TG_CHAT_ID" ]; then
+                curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+                    -H "Content-Type: application/json" \
+                    -d "{\"chat_id\":\"${TG_CHAT_ID}\",\"text\":\"🚨 AI 早报启动失败: <b>CLAUDE_CODE_OAUTH_TOKEN 已失效 (401)</b>\\n\\n本地跑 <code>claude setup-token</code> 重新生成, 然后:\\n<code>gh secret set CLAUDE_CODE_OAUTH_TOKEN -R hawaha112/pg4_FUTURE</code>\",\"parse_mode\":\"HTML\"}" \
+                    > /dev/null 2>&1 || true
+            fi
+            kill "$PROXY_PID" 2>/dev/null || true
+            exit 1
+        fi
+        echo "  ✅ LLM token 验证通过" >> "$LOG_FILE"
     else
         NO_LLM="--no-llm"
     fi
@@ -406,19 +430,6 @@ ${SRC_LINE}
 ${DURATION_LINE}
 
 <a href=\"${BRIEFING_URL%/}/archive/dashboard.html\">📈 查看完整趋势仪表盘</a>"
-
-    # kept=0 静默失败防御：单独发醒目告警
-    if [ "${ARTICLE_COUNT:-0}" = "0" ] || [ "${ARTICLE_COUNT:-?}" = "?" ]; then
-        send_tg "<b>🚨 早报告警：本班次条目数为 0</b>
-
-班次：${SHIFT_LABEL}
-${SRC_LINE}
-LLM 可用：$([ -z "$NO_LLM" ] && echo '✅' || echo '❌')
-
-可能原因：① LLM 链路故障 ② 时间窗口无新闻 ③ 聚类全部过滤
-
-请打开 daily_run.log 检查 RUN_SUMMARY 行 + 上下文"
-    fi
 else
     send_tg "<b>AI 早报 · ${TODAY} · ${SHIFT_LABEL}</b>
 
@@ -427,6 +438,20 @@ ${DURATION_LINE}
 ${SRC_LINE}
 
 请检查 git 配置 / 日志"
+fi
+
+# kept=0 静默失败防御：醒目告警（无论部署成功与否都发，DEPLOY_OK=false 也常因 kept=0 触发）
+if [ "${ARTICLE_COUNT:-0}" = "0" ] || [ "${ARTICLE_COUNT:-?}" = "?" ]; then
+    send_tg "<b>🚨 早报告警：本班次条目数为 0</b>
+
+班次：${SHIFT_LABEL}
+部署：$([ "$DEPLOY_OK" = true ] && echo '✅' || echo '❌')
+${SRC_LINE}
+LLM 可用：$([ -z "$NO_LLM" ] && echo '✅' || echo '❌ (--no-llm)')
+
+可能原因：① LLM token 失效 ② LLM 链路故障 ③ 时间窗口无新闻 ④ 聚类/质量全部过滤
+
+请打开 daily_run.log 检查 RUN_SUMMARY 行 + 上下文"
 fi
 
 # ────────────────────────────────────────────────
