@@ -18,6 +18,10 @@ on:
         type: choice
         options: [auto, am, pm]
         default: auto
+      backfill_polluted_hours:
+        description: '出报前重跑此小时数内"LLM 字段全空"文章 (token 失效后用), 0=跳过'
+        type: string
+        default: '0'
   schedule:
     - cron: '0 22 * * *'   # UTC 22:00 = 北京 06:00 早班
     - cron: '0 10 * * *'   # UTC 10:00 = 北京 18:00 晚班
@@ -121,6 +125,21 @@ jobs:
           fi
           echo "shift=$FINAL" >> $GITHUB_OUTPUT
           echo "→ shift=$FINAL ($REASON, UTC $(date -u +%H:%M), CN $(TZ='Asia/Shanghai' date +%H:%M))"
+
+      - name: Backfill polluted articles (optional)
+        if: github.event.inputs.backfill_polluted_hours != '' && github.event.inputs.backfill_polluted_hours != '0'
+        working-directory: ai-morning-news
+        shell: bash
+        run: |
+          # 启 proxy（run_daily.sh 自己也会启，这里独立启好让 backfill 用）
+          nohup python3 -u claude_proxy.py > /tmp/backfill_proxy.log 2>&1 &
+          PROXY_PID=$!
+          for i in $(seq 1 30); do
+            curl -s http://localhost:3456/health > /dev/null 2>&1 && break
+            sleep 1
+          done
+          python3 backfill_polluted_analysis.py "${{ github.event.inputs.backfill_polluted_hours }}" 2>&1 | tee backfill.log
+          kill "$PROXY_PID" 2>/dev/null || true
 
       - name: Run run_daily.sh (跟 Mac launchd 同一份脚本)
         working-directory: ai-morning-news
