@@ -881,8 +881,10 @@ class LLMAnalyzer:
                 return {"editorial": "速览生成失败。", "top_stories": []}
 
             # 校验
+            # editorial 限 800 字 — 三层结构（主旋律 + 2-4 个分类组 + 收束）
+            # 装得下且留余地。300 字时代是单段编辑导语，多段 prompt 后必须放宽。
             result = {
-                "editorial": str(data.get("editorial", ""))[:300],
+                "editorial": str(data.get("editorial", ""))[:800],
                 "top_stories": [],
             }
             for s in data.get("top_stories", [])[:5]:

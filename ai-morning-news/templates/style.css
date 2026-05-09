@@ -93,8 +93,12 @@ body {
 }
 .br-editorial {
     font-size: 14px; line-height: 1.75; color: var(--text-70);
-    margin-bottom: 14px;
+    margin-bottom: 10px;
     border-left: 2px solid var(--accent); padding-left: 14px;
+}
+.br-editorial:last-child { margin-bottom: 14px; }
+.br-editorial .br-bold {
+    color: var(--text-100); font-weight: 600;
 }
 
 /* ═════ Featured Section (Importance >= 4) ═════ */

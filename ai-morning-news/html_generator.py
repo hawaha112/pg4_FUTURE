@@ -10,6 +10,7 @@ Uses string.Template for substitution (zero external dependencies).
 """
 
 import json
+import re
 from html import escape, unescape
 
 
@@ -17,6 +18,29 @@ def _safe_escape(text):
     """先 unescape 已有 HTML 实体（如 RSS 里的 &#x27;），再 escape 一次防 XSS。
     避免双重 escape 让 &#x27; 变成 &amp;#x27; 在浏览器里显示为字面量。"""
     return escape(unescape(str(text or '')))
+
+
+def _render_editorial(raw: str) -> str:
+    """把"今日速览"原文渲染成多段 HTML。
+
+    新版 digest prompt 让 LLM 输出三层结构（主旋律 / 分类组 / 收束），用
+    `\\n\\n` 分段、用 `**xxx**` 加粗主题。这里负责：
+      1. 按空行切段
+      2. 每段 escape 后把 `**...**` 还原成 `<strong>...</strong>`
+      3. 包成 <p class="br-editorial">
+
+    `**` 在 escape 之后仍是字面量（HTML 不转义星号），所以正则替换安全。
+    """
+    paragraphs = []
+    for raw_para in (raw or '').split('\n\n'):
+        para = raw_para.strip()
+        if not para:
+            continue
+        body = _safe_escape(para)
+        body = re.sub(r'\*\*([^*\n]+?)\*\*',
+                      r'<strong class="br-bold">\1</strong>', body)
+        paragraphs.append(f'<p class="br-editorial">{body}</p>')
+    return ''.join(paragraphs) if paragraphs else ''
 from datetime import datetime, timezone
 
 
@@ -633,11 +657,12 @@ def generate_html(all_items, config, digest=None, meta=None):
     # 今日速览
     briefing_html = ""
     if digest and digest.get('editorial'):
-        editorial = _safe_escape(digest.get('editorial', ''))
-        briefing_html = f'''
+        editorial_html = _render_editorial(digest.get('editorial', ''))
+        if editorial_html:
+            briefing_html = f'''
     <section class="briefing">
         <h2 class="br-title">今日速览</h2>
-        <p class="br-editorial">{editorial}</p>
+        {editorial_html}
     </section>'''
 
     # LLM 覆盖率 banner：覆盖率 < 50% 时在页首提示读者"部分内容为规则兜底"
