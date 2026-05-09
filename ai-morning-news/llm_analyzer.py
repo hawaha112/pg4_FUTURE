@@ -909,34 +909,31 @@ class LLMAnalyzer:
         )
 
         try:
+            # digest 不再走 JSON schema — LLM 写多段中文 editorial 时常在 JSON
+            # 字符串值里塞未转义的换行/引号（中文场景尤甚），_extract_json 救不回。
+            # 直接拿纯文本/Markdown 当 editorial，渲染端自己拆段+加粗。
             response = self._call_api(
                 [
                     {"role": "system", "content": DIGEST_SYSTEM_PROMPT},
                     {"role": "user", "content": user_msg},
                 ],
-                json_schema=DIGEST_SCHEMA,
             )
-            data = self._extract_json(response)
-            if not data:
-                log.warning("digest _extract_json 空，原始响应前 400 字: %r",
-                            (response or '')[:400])
+            editorial = (response or '').strip()
+            # 兜底剥代码块标记 (LLM 偶尔仍会包 ```markdown ... ```)
+            editorial = re.sub(r'^```(?:\w+)?\s*', '', editorial)
+            editorial = re.sub(r'\s*```\s*$', '', editorial).strip()
+            # 兜底剥 JSON 包装 (LLM 偶尔仍按旧习惯返 {"editorial": "..."})
+            if editorial.startswith('{') and '"editorial"' in editorial:
+                data = self._extract_json(editorial)
+                if data and data.get('editorial'):
+                    editorial = str(data['editorial']).strip()
+
+            if len(editorial) < 20:
+                log.warning("digest 响应太短（%d 字）: %r",
+                            len(editorial), editorial[:200])
                 return {"editorial": "速览生成失败。", "top_stories": []}
 
-            # 校验
-            # editorial 限 800 字 — 三层结构（主旋律 + 2-4 个分类组 + 收束）
-            # 装得下且留余地。300 字时代是单段编辑导语，多段 prompt 后必须放宽。
-            result = {
-                "editorial": str(data.get("editorial", ""))[:800],
-                "top_stories": [],
-            }
-            for s in data.get("top_stories", [])[:5]:
-                if isinstance(s, dict):
-                    result["top_stories"].append({
-                        "index": int(s.get("index", 0)),
-                        "headline": str(s.get("headline", ""))[:30],
-                        "why": str(s.get("why", ""))[:80],
-                    })
-            return result
+            return {"editorial": editorial[:1500], "top_stories": []}
 
         except Exception as e:
             log.error("❌ 速览生成失败: %s", e)
