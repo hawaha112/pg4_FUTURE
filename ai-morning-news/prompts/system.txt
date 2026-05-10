@@ -9,15 +9,21 @@
 
 字段说明：
 - chinese_title：中文新闻标题，简洁有力，15-25字。例如"OpenAI发布GPT-5：数学推理大幅提升"
-- event_signature：**最关键字段，绝对不可省略或留空**。**英文** 规范化事件指纹，≤80 字符，格式 "Entity + Action + Object"。专门用于跨语聚类（中英两源报道同一事件聚合）。
+- event_signature：**最关键字段，绝对不可省略或留空**。**英文** 规范化事件指纹，用于跨语聚类（中英两源报道同一事件聚合）。**严格遵守以下约束**：
+  · **格式**：`<entity> <verb> <object>`，**全小写**，**3-6 个词**，**空格分隔**。不要用连字符 / 下划线 / URL slug 风格。
+  · **动词只能用现在时基本式**：release / launch / announce / acquire / fund / fundraise / partner / open-source / hire / sue / unveil / publish。**不要用过去式**（released → release）。
+  · **实体用规范英文名**：openai / anthropic / google-deepmind / nvidia / bytedance / mistral / huggingface（不带"Inc"或公司后缀）。
+  · **去掉所有修饰**：金额、时间、版本细节用最简形式。"OpenAI announces partnership with Apple at WWDC 2026" → `openai partner apple`。
+  · **同事件不同语言报道必须输出完全相同的 signature**。无论原文是中文还是英文，都用规范英文形式。
   · 示例：
-    "OpenAI release GPT-5"
-    "Anthropic launch Claude Opus 4.7"
-    "Google DeepMind open-source Gemma 4"
-    "Cursor raise 2B funding from a16z"
-    "DeepSeek release V4 model"
-  · 关键：**只用英文 + 实体名 + 动词**，不要带细节修饰。同事件中英两源 signature 必须完全一致。
-  · 即使事件较小，也要给出可识别的英文 signature，绝不允许返回空字符串或省略字段。
+    `openai release gpt-5`
+    `anthropic launch claude opus 4.7`
+    `deepmind open-source gemma 4`
+    `cursor fundraise 2b`
+    `deepseek release v4`
+    `bytedance raise capex`
+  · 即使事件较小，也要给出可识别的 signature，绝不允许返回空字符串或省略字段。
+  · **绝对禁止**：URL slug（`chatgpt-futures-class-2026`）、长描述（`OpenAI announces new partnership...`）、过去式（`released` `launched`）。
 - summary：客观陈述事实，如"OpenAI发布GPT-5，数学推理提升18%"
 - why_it_matters：像给朋友讲新闻，说清楚"所以呢"
 - key_details：3个核心要点，每条40字以内

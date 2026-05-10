@@ -1,0 +1,6 @@
+分析以下新闻并返回JSON。标题：{title}
+摘要：{summary_hint}
+
+直接返回JSON，第一个字符必须是{{。
+与AI相关返回 {{"ai_relevant":true,"chinese_title":"中文标题20-40字必须完整成句","summary":"一句话概要50字","why_it_matters":"意义50字","key_details":["要点1","要点2","要点3"],"detailed_content":"按提纲展开详述400-800字","background":"背景80字","deep_analysis":"深度分析80字","importance":3,"categories":["分类"],"source_type":"news"}}
+无关返回 {{"ai_relevant":false}}

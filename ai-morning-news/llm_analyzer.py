@@ -167,6 +167,15 @@ USER_PROMPT_TEMPLATE = _loaded_user if _loaded_user else """分析以下文章�
 
 【正文】{full_text}"""
 
+# Retry prompt: 第一次解析失败后用更紧凑的指令重发
+_loaded_retry = _load_prompt('article_retry')
+ARTICLE_RETRY_TEMPLATE = _loaded_retry if _loaded_retry else (
+    '分析以下新闻并返回JSON。标题：{title}\n摘要：{summary_hint}\n\n'
+    '直接返回JSON，第一个字符必须是{{。'
+    '与AI相关返回{{"ai_relevant":true,"chinese_title":"...","summary":"..."}}'
+    '，无关返回{{"ai_relevant":false}}'
+)
+
 
 # ---------------------------------------------------------------------------
 # JSON Schema 定义（用于 --json-schema 强制有效 JSON 输出）
@@ -747,7 +756,10 @@ class LLMAnalyzer:
 
             if need_retry:
                 summary_hint = summary[:80] if summary else ""
-                retry_prompt = f'分析以下新闻并返回JSON。标题：{title}\n摘要：{summary_hint}\n\n直接返回JSON，第一个字符必须是{{。与AI相关返回{{"ai_relevant":true,"chinese_title":"中文标题20-40字必须完整成句","summary":"一句话概要50字","why_it_matters":"意义50字","key_details":["要点1","要点2","要点3"],"detailed_content":"按提纲展开详述400-800字","background":"背景80字","deep_analysis":"深度分析80字","importance":3,"categories":["分类"],"source_type":"news"}}，无关返回{{"ai_relevant":false}}'
+                retry_prompt = ARTICLE_RETRY_TEMPLATE.format(
+                    title=title or '',
+                    summary_hint=summary_hint,
+                )
                 response2 = self._call_api(
                     [{"role": "user", "content": retry_prompt}],
                     json_schema=ARTICLE_SCHEMA,
