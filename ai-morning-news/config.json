@@ -106,7 +106,9 @@
         "icon": "📬",
         "color": "#D4A574",
         "description": "Anthropic Jack Clark 的 AI 行业周刊",
-        "ai_only": true
+        "ai_only": true,
+        "enabled": false,
+        "_disabled_reason": "Substack RSS 长期 HTTP 403, 28+ 次连续失败"
       },
       {
         "name": "Latent Space",
@@ -148,7 +150,9 @@
         "color": "#DC2626",
         "description": "Dwarkesh Patel 深度访谈播客（Zuckerberg/Dario/Demis 等首发长谈）",
         "ai_only": false,
-        "vip": true
+        "vip": true,
+        "enabled": false,
+        "_disabled_reason": "RSS 重定向无限循环 (HTTP 301), 28+ 次连续失败"
       },
       {
         "name": "Hugging Face Daily Papers",
@@ -310,7 +314,9 @@
         "icon": "📰",
         "color": "#3B82F6",
         "description": "Axios 权威简报（含 AI/科技头条）",
-        "ai_only": false
+        "ai_only": false,
+        "enabled": false,
+        "_disabled_reason": "RSS 长期 HTTP 403 (Cloudflare), 28+ 次连续失败"
       },
       {
         "name": "Bloomberg Technology",

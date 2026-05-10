@@ -487,9 +487,29 @@ if os.path.exists(health_path):
         health = json.load(open(health_path, 'r', encoding='utf-8'))
     except Exception:
         pass
-ok = sum(1 for _, v in health.items() if v.get('status') == 'ok')
-failing = sum(1 for _, v in health.items() if v.get('consecutive_failures', 0) >= 3)
-dead = [n for n, v in health.items() if v.get('consecutive_failures', 0) >= 10][:5]
+
+# 构建 enabled=false 名单, 让 dead/failing 统计排除已被显式禁用的源 —
+# 否则 source_health.json 里历史 consecutive_failures>=10 的失败记录会让
+# dashboard 一直显示"💀 死源 N"，即使该源已 enabled=false 不再被请求。
+config_path = os.path.join(os.path.dirname(stats_path), '..', 'config.json')
+disabled = set()
+try:
+    cfg = json.load(open(config_path, 'r', encoding='utf-8'))
+    for lst in cfg.get('sources', {}).values():
+        if isinstance(lst, list):
+            for s in lst:
+                if not s.get('enabled', True) or s.get('disabled', False):
+                    nm = s.get('name')
+                    if nm: disabled.add(nm)
+except Exception:
+    pass
+
+ok = sum(1 for n, v in health.items()
+         if v.get('status') == 'ok' and n not in disabled)
+failing = sum(1 for n, v in health.items()
+              if v.get('consecutive_failures', 0) >= 3 and n not in disabled)
+dead = [n for n, v in health.items()
+        if v.get('consecutive_failures', 0) >= 10 and n not in disabled][:5]
 summary = {
     'run_id': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
     'shift': '$SHIFT',
