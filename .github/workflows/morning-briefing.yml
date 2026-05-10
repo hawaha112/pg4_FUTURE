@@ -22,6 +22,10 @@ on:
         description: '出报前重跑此小时数内"LLM 字段全空"文章 (token 失效后用), 0=跳过'
         type: string
         default: '0'
+      silent_tg:
+        description: '手动 dispatch 测试用: 跳过 TG 推送, 避免噪音'
+        type: boolean
+        default: false
   schedule:
     - cron: '0 22 * * *'   # UTC 22:00 = 北京 06:00 早班
     - cron: '0 10 * * *'   # UTC 10:00 = 北京 18:00 晚班
@@ -145,6 +149,7 @@ jobs:
         working-directory: ai-morning-news
         env:
           BRIEFING_SHIFT_OVERRIDE: ${{ steps.shift.outputs.shift }}
+          BRIEFING_SILENT_TG: ${{ github.event.inputs.silent_tg }}
         run: bash run_daily.sh
 
       - name: Push updated state back to briefing-state

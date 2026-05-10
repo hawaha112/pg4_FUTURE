@@ -92,7 +92,12 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 # Telegram 发送函数
+# 当 BRIEFING_SILENT_TG=true 时跳过推送 — 测试 dispatch 时避免轰炸 TG。
 send_tg() {
+    if [ "${BRIEFING_SILENT_TG:-false}" = "true" ]; then
+        echo "  🔇 silent_tg=true, 跳过 TG 推送" >> "$LOG_FILE"
+        return 0
+    fi
     if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
         return 0
     fi
@@ -287,14 +292,23 @@ find "$PROJECT_DIR" -maxdepth 1 -type f \( \
     \) -mtime +7 -delete 2>/dev/null || true
 
 # 异地备份到 iCloud Drive（防本地磁盘事故全丢）— 仅 macOS
+# events.db 是事件主库；dedup.db 丢了重建会让历史去重失效（会出重复卡）；
+# llm_cache.db 丢了重建会重新调 LLM 浪费 token，所以三个都备。
 if [[ "$OSTYPE" == "darwin"* ]]; then
     ICLOUD_BACKUP_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs/AI早报备份"
     if [ -d "$HOME/Library/Mobile Documents/com~apple~CloudDocs" ]; then
         mkdir -p "$ICLOUD_BACKUP_DIR"
-        cp "$PROJECT_DIR/events.db" "$ICLOUD_BACKUP_DIR/events.db.bak.${BACKUP_DATE}" 2>>"$LOG_FILE" || true
-        # iCloud 端只保留 14 份（半月，比本地宽松）
-        find "$ICLOUD_BACKUP_DIR" -maxdepth 1 -name "events.db.bak.*" -mtime +14 -delete 2>/dev/null || true
-        echo "  ☁️  iCloud 备份: events.db.bak.${BACKUP_DATE}" >> "$LOG_FILE"
+        for DB in events.db dedup.db llm_cache.db; do
+            [ -f "$PROJECT_DIR/$DB" ] && \
+                cp "$PROJECT_DIR/$DB" "$ICLOUD_BACKUP_DIR/${DB}.bak.${BACKUP_DATE}" 2>>"$LOG_FILE" || true
+        done
+        # iCloud 端保留 14 份（半月，比本地宽松）
+        find "$ICLOUD_BACKUP_DIR" -maxdepth 1 \( \
+            -name "events.db.bak.*" -o \
+            -name "dedup.db.bak.*" -o \
+            -name "llm_cache.db.bak.*" \
+            \) -mtime +14 -delete 2>/dev/null || true
+        echo "  ☁️  iCloud 备份: events.db / dedup.db / llm_cache.db (.${BACKUP_DATE})" >> "$LOG_FILE"
     fi
 fi
 

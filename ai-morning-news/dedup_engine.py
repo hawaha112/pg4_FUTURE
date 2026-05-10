@@ -16,6 +16,7 @@ dedup_engine.py — 两层去重引擎（v2 — MinHash/LSH 优化版）
 """
 
 import hashlib
+import json
 import math
 import random
 import re
@@ -55,10 +56,52 @@ def _is_mostly_cjk(text: str) -> bool:
     return cjk_count > len(text) * 0.3
 
 
+# ---------------------------------------------------------------------------
+# 同义词归一: 把 "发布/推出/上线" 等同义改写映射到规范形, 提升 MinHash 召回。
+# 加载一次, 全模块共享。文件可不存在 (老安装不一定有)。
+# ---------------------------------------------------------------------------
+_SYNONYM_MAP: dict = {}
+
+
+def _load_synonyms() -> dict:
+    global _SYNONYM_MAP
+    if _SYNONYM_MAP:
+        return _SYNONYM_MAP
+    import os
+    path = os.path.join(os.path.dirname(__file__), 'synonyms.json')
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        return _SYNONYM_MAP
+    for group in data.get('groups', []):
+        if isinstance(group, list) and len(group) >= 2:
+            canonical = group[0]
+            for alias in group[1:]:
+                _SYNONYM_MAP[alias] = canonical
+    return _SYNONYM_MAP
+
+
+def _normalize_synonyms(text: str) -> str:
+    """把文本里的同义词替换成规范形。只对 dedup tokenize 用, 不改原始展示。"""
+    syn = _load_synonyms()
+    if not syn:
+        return text
+    # 按 alias 长度倒序替换 (长词优先, 避免短词覆盖长词)
+    for alias in sorted(syn.keys(), key=len, reverse=True):
+        if alias in text:
+            text = text.replace(alias, syn[alias])
+    return text
+
+
 def tokenize(text: str) -> List[str]:
-    """中英文混合分词：中文按字+双字 n-gram，英文按词"""
+    """中英文混合分词：中文按字+双字 n-gram，英文按词
+    在 tokenize 前应用同义词归一，让 '发布' 和 '推出' 这种同义改写
+    产生相同 token 序列，提升 MinHash 召回率。
+    """
     text = text.lower().strip()
     text = unicodedata.normalize('NFKC', text)
+    text = _normalize_synonyms(text)
     tokens = []
     for word in _SPLIT_RE.findall(text):
         has_cjk = any(_is_cjk(ch) for ch in word)

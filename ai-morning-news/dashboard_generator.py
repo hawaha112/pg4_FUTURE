@@ -455,13 +455,47 @@ def _render_week_entities(script_dir: Path) -> str:
     )
 
 
+def _write_placeholder(out_path: Path, reason: str):
+    """没数据时也输出一个占位仪表盘 — 而不是直接 skip 让 GH Pages
+    上的旧 dashboard 永远停在过去。"""
+    from datetime import datetime
+    now = datetime.now().astimezone().strftime('%Y-%m-%d %H:%M %z')
+    html = f'''<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+<title>跑步仪表盘 · 暂无数据</title>
+<style>
+body {{ background:#0b0b12; color:#e4e4ec; font-family:system-ui;
+       max-width:720px; margin:80px auto; padding:0 20px;
+       font-size:15px; line-height:1.7; }}
+h1 {{ font-size:22px; color:#a8bdff; }}
+.tip {{ background:rgba(255,255,255,0.04); border-left:3px solid #f59e0b;
+       padding:14px 18px; border-radius:6px; margin:20px 0; }}
+code {{ background:rgba(255,255,255,0.06); padding:2px 6px; border-radius:3px; }}
+a {{ color:#a8bdff; }}
+</style></head><body>
+<h1>📊 跑步仪表盘 · 暂无数据</h1>
+<div class="tip">
+<b>原因：</b>{reason}<br>
+<b>当前时间：</b>{now}<br>
+<b>恢复路径：</b>下次 cron 跑（早 06:00 或晚 18:00 北京时间）会重新生成数据。
+若长时间未恢复，请检查 <code>output/run_health.jsonl</code> 是否被部署同步。
+</div>
+<p><a href="../">← 返回早报主页</a></p>
+</body></html>'''
+    with open(out_path, 'w', encoding='utf-8') as f:
+        f.write(html)
+    print(f'📊 dashboard 占位已生成 (no data): {out_path}')
+
+
 def main():
     script_dir = Path(__file__).parent
     jsonl_path = script_dir / 'output' / 'run_health.jsonl'
     out_path = script_dir / 'output' / 'dashboard.html'
 
     if not jsonl_path.exists():
-        print(f'⚠️ no run_health.jsonl at {jsonl_path}, skip')
+        _write_placeholder(out_path, 'run_health.jsonl 不存在（可能首次冷启动）')
         return
 
     runs = []
@@ -476,7 +510,7 @@ def main():
                 continue
 
     if not runs:
-        print('⚠️ run_health.jsonl empty')
+        _write_placeholder(out_path, 'run_health.jsonl 存在但为空（无历史 RUN_SUMMARY）')
         return
 
     runs = runs[-MAX_RUNS:]
