@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 不发 referer：huxiucdn 等中文 CDN 用 referer 防盗链；从 github.io
+     打开页面时浏览器自带的 referer 会被拒 (403)，导致卡片图加载失败
+     留下大块空白。 -->
+<meta name="referrer" content="no-referrer">
 <meta name="description" content="$meta_description">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">

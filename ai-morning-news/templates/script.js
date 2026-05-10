@@ -565,3 +565,20 @@ function _handleEvtHash() {
 }
 window.addEventListener('load', _handleEvtHash);
 window.addEventListener('hashchange', _handleEvtHash);
+
+// ═══ 图加载兜底：CSS background-image 没有 onerror 事件，这里用 Image()
+//    探测每张 .card-img / .featured-img 的 URL，失败就把元素塌陷掉
+//    (display:none)，让卡片不留空白。覆盖 referer 防盗链漏网、CDN 抽风、
+//    源 URL 过期等情况。
+function _hideBrokenImages() {
+    document.querySelectorAll('.card-img, .featured-img').forEach(function(el) {
+        var bg = el.style.backgroundImage || getComputedStyle(el).backgroundImage;
+        var m = bg && bg.match(/url\(["']?([^"')]+)["']?\)/);
+        if (!m) { el.style.display = 'none'; return; }
+        var probe = new Image();
+        probe.referrerPolicy = 'no-referrer';
+        probe.onerror = function() { el.style.display = 'none'; };
+        probe.src = m[1];
+    });
+}
+window.addEventListener('load', _hideBrokenImages);
