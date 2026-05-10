@@ -713,6 +713,24 @@ def main():
             "depth_count": depth_count,
             "entity_count": entity_count,
         }
+        # 合并 renderer 端的 LLM 用量（generate_digest 用了 LLM）
+        try:
+            if 'analyzer' in locals() and analyzer is not None:
+                stats.update(analyzer.usage_stats())
+        except Exception:
+            pass
+        # 合并 collector 阶段的 LLM 用量 — 上一步写了 collector_llm_usage.json
+        # 文件 (collector.py 跑完写)。renderer 阶段读, 累加
+        try:
+            collector_usage_path = script_dir / 'output' / '.collector_llm_usage.json'
+            if collector_usage_path.exists():
+                cu = json.loads(collector_usage_path.read_text(encoding='utf-8'))
+                for k in ('llm_call_count', 'llm_prompt_tokens',
+                          'llm_completion_tokens', 'llm_total_tokens',
+                          'llm_parse_fallback'):
+                    stats[k] = stats.get(k, 0) + int(cu.get(k, 0) or 0)
+        except Exception as e:
+            log.warning("⚠️ 读 collector usage 失败: %s", e)
         with open(stats_path, 'w', encoding='utf-8') as f:
             json.dump(stats, f, ensure_ascii=False, indent=2)
         log.info("📊 stats.json: %d 条", stats["article_count"])

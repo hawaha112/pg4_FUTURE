@@ -88,6 +88,12 @@ def main():
         'dead_sources': dead,
         'deploy_ok': deploy_ok,
         'llm_available': llm_available,
+        # LLM 用量 + 可观测性 (collector + renderer 累加, llm_analyzer.usage_stats)
+        'llm_call_count': stats.get('llm_call_count', 0),
+        'llm_prompt_tokens': stats.get('llm_prompt_tokens', 0),
+        'llm_completion_tokens': stats.get('llm_completion_tokens', 0),
+        'llm_total_tokens': stats.get('llm_total_tokens', 0),
+        'llm_parse_fallback': stats.get('llm_parse_fallback', 0),
     }
     line = json.dumps(summary, ensure_ascii=False)
     print('RUN_SUMMARY ' + line, flush=True)

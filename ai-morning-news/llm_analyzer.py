@@ -266,6 +266,48 @@ class LLMAnalyzer:
             except ImportError:
                 self._ssl_ctx = ssl.create_default_context()
 
+        # 用量 + 解析失败计数器（线程安全, 跨 worker 累加）
+        # 不持久化, 每次 collector / renderer 跑一次共享一个 analyzer 实例,
+        # 跑完取 .usage_stats() 写入 stats.json
+        import threading
+        self._stats_lock = threading.Lock()
+        self._call_count = 0           # 总 LLM 调用次数 (含重试)
+        self._prompt_tokens = 0
+        self._completion_tokens = 0
+        self._total_tokens = 0
+        self._json_parse_fallback = 0  # _extract_json 走完所有兜底仍空的次数
+
+    def _record_usage(self, body: dict) -> None:
+        """从 LLM 响应里抽 usage 字段累加。OpenAI / Anthropic 都用 body.usage。
+        OpenAI: {prompt_tokens, completion_tokens, total_tokens}
+        Anthropic: {input_tokens, output_tokens}
+        都兼容。"""
+        usage = body.get("usage") or {}
+        pt = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
+        ct = usage.get("completion_tokens") or usage.get("output_tokens") or 0
+        tt = usage.get("total_tokens") or (pt + ct)
+        with self._stats_lock:
+            self._call_count += 1
+            self._prompt_tokens += int(pt or 0)
+            self._completion_tokens += int(ct or 0)
+            self._total_tokens += int(tt or 0)
+
+    def _record_parse_fallback(self) -> None:
+        with self._stats_lock:
+            self._json_parse_fallback += 1
+
+    def usage_stats(self) -> dict:
+        """快照当前累计的 LLM 用量与解析失败计数。collector / renderer 跑完
+        后调用一次, 把结果合并进 stats.json 让 RUN_SUMMARY 能看到趋势。"""
+        with self._stats_lock:
+            return {
+                'llm_call_count': self._call_count,
+                'llm_prompt_tokens': self._prompt_tokens,
+                'llm_completion_tokens': self._completion_tokens,
+                'llm_total_tokens': self._total_tokens,
+                'llm_parse_fallback': self._json_parse_fallback,
+            }
+
     # ------------------------------------------------------------------
     # 底层 API 调用
     # ------------------------------------------------------------------
@@ -313,6 +355,8 @@ class LLMAnalyzer:
                 )
                 with opener.open(req, timeout=self.timeout) as resp:
                     body = json.loads(resp.read().decode("utf-8"))
+                    # 累计 token 用量（OpenAI 兼容: body.usage; Anthropic: body.usage 同名）
+                    self._record_usage(body)
                     return self._extract_response_text(body)
 
             except urllib.error.HTTPError as e:
@@ -694,6 +738,7 @@ class LLMAnalyzer:
 
             if not data:
                 need_retry = True
+                self._record_parse_fallback()
                 log.warning("⚠️ JSON 解析失败，重试中... (原始: %s)", response[:100])
             elif not data.get("summary") and data.get("ai_relevant", True):
                 # JSON 解析成功但缺少 summary（截断导致关键字段丢失）

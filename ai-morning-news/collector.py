@@ -47,7 +47,12 @@ from entity_coverage import EntityCoverageMatrix
 # 关键词预过滤 v2
 # ═══════════════════════════════════════════════════════════════════════
 
-_AI_KEYWORDS = re.compile(
+# 拆成两个 regex —— 历史版本把英文+中文混在一个 `\b...\b` 里, 但
+# Python re 的 `\b` 在纯中文文本里从不触发（中文都是 \w 字符）, 所以
+# "清华开源百亿参数大模型" 这种纯中文标题在外层 \b 包围下永远不匹配,
+# 中文关键词层等于摆设. 拆开后英文保留 word-boundary 防止误命中
+# (chip vs ship), 中文用裸子串匹配, 各取所需.
+_AI_KEYWORDS_EN = re.compile(
     r'(?i)\b(?:'
     r'ai|artificial.intelligence|machine.learning|deep.learning|'
     r'neural.net|llm|large.language.model|foundation.model|'
@@ -60,7 +65,7 @@ _AI_KEYWORDS = re.compile(
     r'anthropic|claude|sonnet|opus|haiku|'
     r'gemini|gemma|copilot|cursor|'
     r'midjourney|stable.diffusion|sora|flux|'
-    r'deepseek|mistral|llama|qwen|通义|文心|豆包|kimi|'
+    r'deepseek|mistral|llama|qwen|kimi|'
     r'hugging.?face|pytorch|tensorflow|jax|'
     r'meta.ai|perplexity|cohere|'
     r'chip|gpu|tpu|npu|nvidia|cuda|'
@@ -69,16 +74,49 @@ _AI_KEYWORDS = re.compile(
     r'vibe.?cod|ai.?cod|code.?gen|'
     r'text.to|image.gen|video.gen|voice.clone|'
     r'ai.?search|ai.?agent|mcp|model.context|'
+    # 补遗：开源 / 工程 / 芯片 / 训练范式 / 评测
+    r'open.?source|open.?model|model.?weight|'
+    r'check.?point|model.?card|'
+    r'inference.?engine|vllm|sglang|trt.?llm|tensorrt|'
+    r'rlhf|dpo|ppo|grpo|moe|mixture.of.experts|'
+    r'scaling.?law|emergent|long.?context|context.?window|'
+    r'benchmark|eval|evaluation|leaderboard|'
+    r'dataset|fine.?tuning.dataset|pretraining|'
+    r'multi.?agent|tool.?use|function.?call|'
+    r'prompt.?engineering|in.context|few.?shot|chain.?of.?thought|cot|'
+    r'ai.?safety|red.?team|jailbreak|'
+    r'ai.?startup|ai.?lab|ai.?fund'
+    r')\b'
+)
+
+_AI_KEYWORDS_CN = re.compile(
+    r'(?:'
+    r'通义|文心|豆包|'
     r'人工智能|机器学习|深度学习|大模型|大语言模型|'
     r'神经网络|自然语言|智能体|算力|芯片|'
     r'自动驾驶|具身智能|生成式|训练|推理|'
     r'向量|微调|对齐|多模态|'
     r'AI编程|AI搜索|AI助手|AI应用|'
     r'模型|蒸馏|量化|开源模型|闭源|'
+    r'开源|权重|检查点|预训练|强化学习|'
+    r'基准|评测|榜单|数据集|微调数据|'
+    r'多智能体|工具调用|思维链|长上下文|'
+    r'AI安全|红队|越狱|涌现|缩放定律|'
+    r'AI创业|AI投资|AI融资|'
     r'语音合成|文生图|文生视频|数字人|'
     r'人形机器人|无人驾驶|智能驾驶'
-    r')\b'
+    r')'
 )
+
+
+class _CombinedKwMatcher:
+    """让 collector 端调用方继续 _AI_KEYWORDS.search(text), 内部 OR 两个 regex"""
+    @staticmethod
+    def search(text: str):
+        return _AI_KEYWORDS_EN.search(text) or _AI_KEYWORDS_CN.search(text)
+
+
+_AI_KEYWORDS = _CombinedKwMatcher
 
 # 高权威综合媒体：不做关键词过滤，交给 LLM 判断
 # （这些源的编辑水准高，即使标题不含 AI 关键词也可能报道重要的 AI 相关新闻）
@@ -527,6 +565,22 @@ def main():
         llm_cache.close()
     except Exception as e:
         log.warning("⚠️ LLM 缓存清理失败: %s", e)
+
+    # 把 collector 阶段的 LLM 用量持久化, briefing_renderer 跑完会读这文件
+    # 跟 renderer 自己的 generate_digest 用量加起来写进 stats.json
+    try:
+        if llm_analyzer is not None:
+            usage = llm_analyzer.usage_stats()
+            usage_path = script_dir / 'output' / '.collector_llm_usage.json'
+            usage_path.parent.mkdir(parents=True, exist_ok=True)
+            usage_path.write_text(json.dumps(usage, ensure_ascii=False),
+                                  encoding='utf-8')
+            log.info("📊 collector LLM 用量: calls=%d tokens=%d (in=%d out=%d) parse_fallback=%d",
+                     usage['llm_call_count'], usage['llm_total_tokens'],
+                     usage['llm_prompt_tokens'], usage['llm_completion_tokens'],
+                     usage['llm_parse_fallback'])
+    except Exception as e:
+        log.warning("⚠️ collector LLM 用量持久化失败: %s", e)
 
     # 实体覆盖率检查
     entity_counts = entity_matrix.check_coverage(store, hours=max_age)
