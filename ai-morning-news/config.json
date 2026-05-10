@@ -340,7 +340,9 @@
         "icon": "📡",
         "color": "#DC2626",
         "description": "The Information 付费科技媒体的 RSS（标题 + 摘要）",
-        "ai_only": false
+        "ai_only": false,
+        "enabled": false,
+        "_disabled_reason": "RSS 源连续 9+ 次 HTTP 403, 接近 health_tracker 自动禁用阈值; 该源已对未付费请求关闭 RSS"
       },
       {
         "name": "Intel Newsroom",
@@ -633,11 +635,8 @@
     "36氪 AI搜索": 2,
     "少数派": 2,
     "虎嗅科技": 2,
-    "掘金 AI": 2,
     "知乎热榜": 2,
-    "X-Elon Musk (xAI)": 2,
-    "小红书热门": 1,
-    "机器之心": 4
+    "X-Elon Musk (xAI)": 2
   },
   "dedup": {
     "_comment": "语义去重阈值：英文 0.60 / 中文 0.50（中文同义改写多，阈值更低）。recent_hours 决定与多久内的历史标题做相似度比较。",

@@ -185,8 +185,10 @@ def _fetch_twitter_feed(source, screen_name, max_items, max_age_hours, health_tr
             continue
 
     if not rss_xml:
+        # 单源抓取失败不该走 ERROR — 流水线还在跑、日志不该报"❌"。
+        # health_tracker 累计失败次数会自动禁用真正死的源。
         err_msg = f"所有 Nitter 实例均失败: {last_err}"
-        log.error("❌ %s: %s", name, err_msg)
+        log.warning("⚠️ %s: %s", name, err_msg)
         if health_tracker:
             health_tracker.record_failure(name, RuntimeError(err_msg))
         return []

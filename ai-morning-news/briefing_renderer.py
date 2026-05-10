@@ -324,7 +324,10 @@ def main():
 
     else:
         # ── 回退：传统文章模式 ──
-        log.info("⚠️ 无 canonical events，回退到传统文章模式")
+        # 触发场景：① 事件库还没积累出 canonical_events（冷启动）；
+        # ② 本班次窗口内的 canonical_events 全在早些时候渲染过（再 dispatch
+        # 同班次时去重逻辑过滤掉）。两种情况都不是 bug，只是改走 article 路径。
+        log.info("🔁 canonical events 为空（可能本班已渲染过），改用文章模式")
         events = store.get_events_for_briefing(
             hours=hours, min_importance=0,
             include_unanalyzed_tier0=True,
