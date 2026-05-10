@@ -411,13 +411,34 @@ _DURATION_MIN=$(( _DURATION_SEC / 60 ))
 _DURATION_REM=$(( _DURATION_SEC % 60 ))
 DURATION_LINE="⏱ 用时: ${_DURATION_MIN} 分 ${_DURATION_REM} 秒"
 
-# 源健康度统计
+# 源健康度统计 — 同 SUMMARY_JSON 的 dead/failing 计算思路：排除 config
+# 里 enabled=false 的源（已显式禁用的源不再计入死源/告警）
 HEALTH_JSON="$PROJECT_DIR/source_health.json"
+CONFIG_JSON="$PROJECT_DIR/config.json"
 SRC_OK=0; SRC_FAIL=0; SRC_DEAD=0
 if [ -f "$HEALTH_JSON" ]; then
-    SRC_OK=$("$PYTHON" -c "import json; d=json.load(open('$HEALTH_JSON')); print(sum(1 for v in d.values() if v.get('status')=='ok'))" 2>/dev/null || echo 0)
-    SRC_FAIL=$("$PYTHON" -c "import json; d=json.load(open('$HEALTH_JSON')); print(sum(1 for v in d.values() if v.get('consecutive_failures',0)>=3 and v.get('consecutive_failures',0)<10))" 2>/dev/null || echo 0)
-    SRC_DEAD=$("$PYTHON" -c "import json; d=json.load(open('$HEALTH_JSON')); print(sum(1 for v in d.values() if v.get('consecutive_failures',0)>=10))" 2>/dev/null || echo 0)
+    SRC_STATS=$("$PYTHON" -c "
+import json
+h = json.load(open('$HEALTH_JSON'))
+disabled = set()
+try:
+    cfg = json.load(open('$CONFIG_JSON'))
+    for lst in cfg.get('sources', {}).values():
+        if isinstance(lst, list):
+            for s in lst:
+                if not s.get('enabled', True) or s.get('disabled', False):
+                    nm = s.get('name')
+                    if nm: disabled.add(nm)
+except Exception:
+    pass
+ok = sum(1 for n, v in h.items() if v.get('status')=='ok' and n not in disabled)
+fail = sum(1 for n, v in h.items()
+          if 3 <= v.get('consecutive_failures', 0) < 10 and n not in disabled)
+dead = sum(1 for n, v in h.items()
+           if v.get('consecutive_failures', 0) >= 10 and n not in disabled)
+print(f'{ok} {fail} {dead}')
+" 2>/dev/null || echo "0 0 0")
+    read -r SRC_OK SRC_FAIL SRC_DEAD <<< "$SRC_STATS"
 fi
 SRC_LINE="📡 源健康: ${SRC_OK} OK / ${SRC_FAIL} 告警 / ${SRC_DEAD} 死源"
 
@@ -537,8 +558,13 @@ try:
         f.write(json.dumps(summary, ensure_ascii=False) + '\n')
 except Exception:
     pass
-" 2>/dev/null || echo "RUN_SUMMARY {}")
+" 2>>"$LOG_FILE" || echo "RUN_SUMMARY {}")
 echo "$SUMMARY_JSON" >> "$LOG_FILE"
+# 防御：若 SUMMARY_JSON 因任何原因为空（Python 静默失败、stdout 丢失等），
+# 至少留个标记便于事后诊断
+if [ -z "$SUMMARY_JSON" ]; then
+    echo "RUN_SUMMARY {} (empty - python stdout was empty)" >> "$LOG_FILE"
+fi
 
 # ────────────────────────────────────────────────
 # Dashboard 后置补部署：本次 RUN_SUMMARY 已写入 jsonl，重新生成 dashboard
