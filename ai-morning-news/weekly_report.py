@@ -165,7 +165,8 @@ WEEKLY_INSIGHT_PROMPT = """你是 AI 行业资深分析师。基于本周 {n_eve
 - 标题简洁有力,像头条;body 给出具体证据,**引用本周事件标题**
 - 不要泛泛而谈;不要重复事件本身,要做"判断"和"解读"
 - 下周展望基于本周埋下的种子(融资刚发的、合作刚签的、政策刚出的下一步可能怎么走),不要凭空预测
-- 全部使用简体中文"""
+- 全部使用简体中文
+- **JSON 字符串值内若需嵌套引用,必须使用中文引号「」或『』,严禁使用 ASCII 双引号 " (会破坏 JSON 解析)**"""
 
 
 def build_events_text(events) -> str:
@@ -201,10 +202,30 @@ def generate_insights(events, llm: LLMAnalyzer):
         return None
 
     insights = llm._extract_json(response)
-    if not insights or 'judgement_1' not in insights:
-        log.error("LLM 周报 insight 解析失败,响应前 200 字: %s", response[:200])
+    if insights and 'judgement_1' in insights:
+        return insights
+
+    # 一次性重试: 大概率是值内塞了未转义的 ASCII 双引号导致解析失败,
+    # 在 prompt 末尾追加更强约束再试一次。
+    log.warning("LLM 周报 insight 解析失败,重试中... 响应前 200 字: %s", response[:200])
+    retry_prompt = prompt + (
+        "\n\n⚠️ 上一次返回的 JSON 解析失败。请严格遵守:\n"
+        "1. 直接输出 JSON,不要 markdown 代码块标记 (```json 等)\n"
+        "2. 字符串值内禁止出现 ASCII 双引号 \",嵌套引用一律用「」\n"
+        "3. 不要在字符串值内插入真实换行,需要换行用 \\n"
+    )
+    try:
+        response2 = llm._call_api([{"role": "user", "content": retry_prompt}])
+    except Exception as e:
+        log.error("LLM 重试调用失败: %s", e)
         return None
-    return insights
+
+    insights2 = llm._extract_json(response2)
+    if insights2 and 'judgement_1' in insights2:
+        return insights2
+
+    log.error("LLM 周报 insight 重试仍失败,响应前 200 字: %s", response2[:200])
+    return None
 
 
 # ──────────────────────────────────────────────────────────
