@@ -490,80 +490,22 @@ fi
 
 # ────────────────────────────────────────────────
 # 结构化质量摘要（machine-readable，可被监控脚本 tail -n1 | jq 消费）
+# 抽成独立 _run_summary.py 脚本 — bash heredoc + 多行 Python + 引用嵌套
+# 在云端 runner 上偶发静默失败（stdout 空,无 stderr）。独立脚本最稳。
 # ────────────────────────────────────────────────
-SUMMARY_JSON=$("$PYTHON" -c "
-import json, os
-from datetime import datetime, timezone
-stats_path = '$STATS_FILE'
-health_path = '$PROJECT_DIR/source_health.json'
-stats = {}
-if os.path.exists(stats_path):
-    try:
-        stats = json.load(open(stats_path, 'r', encoding='utf-8'))
-    except Exception:
-        pass
-health = {}
-if os.path.exists(health_path):
-    try:
-        health = json.load(open(health_path, 'r', encoding='utf-8'))
-    except Exception:
-        pass
-
-# 构建 enabled=false 名单, 让 dead/failing 统计排除已被显式禁用的源 —
-# 否则 source_health.json 里历史 consecutive_failures>=10 的失败记录会让
-# dashboard 一直显示"💀 死源 N"，即使该源已 enabled=false 不再被请求。
-config_path = os.path.join(os.path.dirname(stats_path), '..', 'config.json')
-disabled = set()
-try:
-    cfg = json.load(open(config_path, 'r', encoding='utf-8'))
-    for lst in cfg.get('sources', {}).values():
-        if isinstance(lst, list):
-            for s in lst:
-                if not s.get('enabled', True) or s.get('disabled', False):
-                    nm = s.get('name')
-                    if nm: disabled.add(nm)
-except Exception:
-    pass
-
-ok = sum(1 for n, v in health.items()
-         if v.get('status') == 'ok' and n not in disabled)
-failing = sum(1 for n, v in health.items()
-              if v.get('consecutive_failures', 0) >= 3 and n not in disabled)
-dead = [n for n, v in health.items()
-        if v.get('consecutive_failures', 0) >= 10 and n not in disabled][:5]
-summary = {
-    'run_id': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-    'shift': '$SHIFT',
-    'duration_sec': $_DURATION_SEC,
-    'kept': stats.get('article_count', 0),
-    'llm_coverage': stats.get('llm_coverage'),
-    'llm_count': stats.get('llm_count'),
-    'multi_source_count': stats.get('multi_source_count'),
-    'important_count': stats.get('important_count'),
-    'important_events': stats.get('important_events', []),
-    'official_count': stats.get('official_count'),
-    'depth_count': stats.get('depth_count'),
-    'entity_count': stats.get('entity_count'),
-    'sources_healthy': ok,
-    'sources_failing': failing,
-    'dead_sources': dead,
-    'deploy_ok': '$DEPLOY_OK' == 'true',
-    'llm_available': '$NO_LLM' == '',
-}
-print('RUN_SUMMARY ' + json.dumps(summary, ensure_ascii=False))
-# 追加到 run_health.jsonl 供 dashboard / 周报消费
-health_log = os.path.join(os.path.dirname(stats_path), 'run_health.jsonl')
-try:
-    with open(health_log, 'a', encoding='utf-8') as f:
-        f.write(json.dumps(summary, ensure_ascii=False) + '\n')
-except Exception:
-    pass
-" 2>>"$LOG_FILE" || echo "RUN_SUMMARY {}")
+LLM_AVAILABLE_FLAG=$([ -z "$NO_LLM" ] && echo true || echo false)
+SUMMARY_JSON=$("$PYTHON" -u "$PROJECT_DIR/_run_summary.py" \
+    "$STATS_FILE" \
+    "$PROJECT_DIR/source_health.json" \
+    "$PROJECT_DIR/config.json" \
+    "$SHIFT" \
+    "$_DURATION_SEC" \
+    "$DEPLOY_OK" \
+    "$LLM_AVAILABLE_FLAG" \
+    2>>"$LOG_FILE" || echo "RUN_SUMMARY {}")
 echo "$SUMMARY_JSON" >> "$LOG_FILE"
-# 防御：若 SUMMARY_JSON 因任何原因为空（Python 静默失败、stdout 丢失等），
-# 至少留个标记便于事后诊断
 if [ -z "$SUMMARY_JSON" ]; then
-    echo "RUN_SUMMARY {} (empty - python stdout was empty)" >> "$LOG_FILE"
+    echo "RUN_SUMMARY {} (empty - _run_summary.py stdout was empty)" >> "$LOG_FILE"
 fi
 
 # ────────────────────────────────────────────────
