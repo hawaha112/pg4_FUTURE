@@ -162,24 +162,37 @@ else
         # 历史问题：token 失效时 proxy 启动正常，每篇 LLM 调用 401 返 500，
         # 流水线静默跑完 → kept=0 → 跳过部署 → TG 收到的是"部署失败"而非
         # 根因告警，要 download artifact 才能看到 401。改成开跑前先打一发。
+        #
+        # 判定逻辑用白名单：成功响应必含 OpenAI 标准字段 "choices"。
+        # 旧版用 grep '401|invalid|failed' 黑名单，结果命中合法响应里
+        # `chatcmpl-31722be276284010b26f60be` 的 4010 子串导致误杀。
         # ────────────────────────────────────────────────
         echo "  验证 LLM token..." >> "$LOG_FILE"
         PROBE_RESP=$(curl -s --max-time 60 -X POST "${LLM_URL}/chat/completions" \
             -H "Content-Type: application/json" \
             -d '{"model":"claude-sonnet-4","messages":[{"role":"user","content":"ping"}],"max_tokens":4}' 2>&1)
-        if echo "$PROBE_RESP" | grep -qiE '401|invalid auth|failed to authenticate'; then
-            echo "  ❌ LLM token 鉴权失败 (401), 终止流程" >> "$LOG_FILE"
+        if echo "$PROBE_RESP" | grep -q '"choices"'; then
+            echo "  ✅ LLM token 验证通过" >> "$LOG_FILE"
+        else
+            # 没有 choices → 不是正常 chat-completions 响应。区分 token 失败和其他故障
+            if echo "$PROBE_RESP" | grep -qiE 'failed to authenticate|invalid authentication|invalid api key'; then
+                _ERR_TYPE="token"
+                _TG_TEXT="🚨 AI 早报启动失败: <b>CLAUDE_CODE_OAUTH_TOKEN 已失效 (401)</b>\\n\\n本地跑 <code>claude setup-token</code> 重新生成, 然后:\\n<code>gh secret set CLAUDE_CODE_OAUTH_TOKEN -R hawaha112/pg4_FUTURE</code>"
+            else
+                _ERR_TYPE="proxy"
+                _TG_TEXT="🚨 AI 早报启动失败: claude_proxy 探测无 \\\"choices\\\" 响应\\n\\n响应前 200 字: $(echo "$PROBE_RESP" | tr '\n\"' '  ' | cut -c1-200)"
+            fi
+            echo "  ❌ LLM 探测失败 ($_ERR_TYPE), 终止流程" >> "$LOG_FILE"
             echo "  探测响应: $(echo "$PROBE_RESP" | tr '\n' ' ' | cut -c1-300)" >> "$LOG_FILE"
             if [ -n "$TG_BOT_TOKEN" ] && [ -n "$TG_CHAT_ID" ]; then
                 curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
                     -H "Content-Type: application/json" \
-                    -d "{\"chat_id\":\"${TG_CHAT_ID}\",\"text\":\"🚨 AI 早报启动失败: <b>CLAUDE_CODE_OAUTH_TOKEN 已失效 (401)</b>\\n\\n本地跑 <code>claude setup-token</code> 重新生成, 然后:\\n<code>gh secret set CLAUDE_CODE_OAUTH_TOKEN -R hawaha112/pg4_FUTURE</code>\",\"parse_mode\":\"HTML\"}" \
+                    -d "{\"chat_id\":\"${TG_CHAT_ID}\",\"text\":\"${_TG_TEXT}\",\"parse_mode\":\"HTML\"}" \
                     > /dev/null 2>&1 || true
             fi
             kill "$PROXY_PID" 2>/dev/null || true
             exit 1
         fi
-        echo "  ✅ LLM token 验证通过" >> "$LOG_FILE"
     else
         NO_LLM="--no-llm"
     fi
