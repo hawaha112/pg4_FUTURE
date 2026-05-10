@@ -19,6 +19,7 @@ event_cluster.py — 事件聚类引擎：保留证据链，取代 winner-only �
 """
 
 import hashlib
+import re
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -191,6 +192,28 @@ class EventClusterer:
         self.merge_window_hours = merge_window_hours
 
     @staticmethod
+    @staticmethod
+    def _signature_key(item: dict) -> str:
+        """把 LLM 输出的 event_signature 归一成可哈希的"组键"用于强制合并.
+
+        实测 LSH 对 5-8 词的短 signature banding 召回 ~50%, 大量同事件的
+        article 卡在 cluster_size=1. 这里取 signature 做 lowercase + 去标点
+        + 排序 token, 同 key 的视作同事件直接 union (不依赖 MinHash 概率).
+
+        未来 LLM 可能输出不完全一致的 signature, 比如 "OpenAI launch GPT-5"
+        vs "OpenAI release GPT-5", 这种留给 LSH+TFIDF 阶段处理. 这一层只
+        catch 真·完全相同的归一签名.
+        """
+        a = item.get('analysis', {}) if isinstance(item.get('analysis'), dict) else {}
+        sig = (a.get('event_signature') or item.get('event_signature') or '').strip()
+        if not sig or len(sig) < 6:
+            return ''
+        # lowercase + 去标点 + 拆词 + 排序去重
+        cleaned = re.sub(r'[^\w\s一-鿿]', ' ', sig.lower())
+        toks = sorted(set(t for t in cleaned.split() if len(t) > 1))
+        return ' '.join(toks) if len(toks) >= 2 else ''
+
+    @staticmethod
     def _cluster_text(item: dict) -> str:
         """构造用于聚类匹配的文本。
 
@@ -296,6 +319,39 @@ class EventClusterer:
             ra, rb = find(a), find(b)
             if ra != rb:
                 parent[ra] = rb
+
+        # ── 2.5 (预合并): 强制把 normalized signature 完全相同的文章 union ──
+        # 跨语聚类的兜底层. LSH banding 对短 signature (5-8 词) 召回 ~50%,
+        # 同一事件的中英两源、一日内多源报道, 经常 LSH 漏检. 这里按 LLM
+        # 输出的 event_signature 归一后做组键, 同 key 直接 union.
+        # signature 不一致或为空的不动, 留给后面 LSH+TFIDF 阶段.
+        sig_groups: Dict[str, List[int]] = {}
+        for art_idx, art in article_indices:
+            key = self._signature_key(art)
+            if not key:
+                continue
+            sig_groups.setdefault(key, []).append(art_idx)
+        # 对已有 canonical_events 也算 signature key, 让本批次 article 能合到老事件
+        sig_to_existing_event: Dict[str, str] = {}
+        for event in existing_events:
+            key = self._signature_key(event)
+            if key:
+                sig_to_existing_event.setdefault(key, event['event_id'])
+        sig_premerge_count = 0
+        for key, idx_list in sig_groups.items():
+            if len(idx_list) >= 2:
+                base = idx_list[0]
+                for other in idx_list[1:]:
+                    union(base, other)
+                    sig_premerge_count += 1
+            ev_id = sig_to_existing_event.get(key)
+            if ev_id:
+                # 把所有同 signature 的本批次 article 标记到老事件
+                for ai in idx_list:
+                    matched_to_existing[ai] = ev_id
+        if sig_premerge_count or sig_to_existing_event:
+            log.info("🔗 signature 预合并: %d 对 article-article + %d 个 group 命中老事件",
+                     sig_premerge_count, sum(1 for k in sig_groups if k in sig_to_existing_event))
 
         for art_idx, art in article_indices:
             text = self._cluster_text(art)
