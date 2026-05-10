@@ -112,6 +112,9 @@ body {
 .featured-grid {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 12px; margin-bottom: 24px;
+    /* 关键: 让卡片按各自内容高度排列, 不被 grid 默认的 stretch 拉成等高。
+       否则一张有图(160px)就把所有卡片底部拉出 100+ px 空白。 */
+    align-items: start;
 }
 @media (max-width: 1024px) {
     .featured-grid { grid-template-columns: 1fr; }
@@ -134,27 +137,28 @@ body {
 }
 
 .featured-img {
-    width: 100%; height: 160px;
+    width: 100%; height: 130px;
     background-size: cover; background-position: center;
 }
 
 .featured-body {
-    padding: 16px 18px;
-    display: flex; flex-direction: column; gap: 10px;
+    padding: 14px 16px;
+    display: flex; flex-direction: column; gap: 8px;
 }
 
 .featured-title-text {
-    font-family: var(--serif); font-size: 18px; font-weight: 700;
-    line-height: 1.5; color: var(--text-100);
+    font-family: var(--serif); font-size: 17px; font-weight: 700;
+    line-height: 1.45; color: var(--text-100);
 }
 
 .featured-why {
-    font-size: 13px; line-height: 1.6; color: var(--text-70);
+    font-size: 13px; line-height: 1.55; color: var(--text-70);
 }
 
 .featured-source {
     font-size: 11px; color: var(--text-35);
-    padding-top: 10px; border-top: 1px solid var(--border);
+    padding-top: 6px; margin-top: 2px;
+    border-top: 1px dashed var(--border);
 }
 
 /* ═════ "其他资讯" section 标题(跟 .featured-title 对应,起视觉分界作用) ═════ */
