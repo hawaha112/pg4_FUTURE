@@ -88,6 +88,34 @@ jobs:
             sleep 1
           done
 
+      - name: Probe LLM token (fail-fast on 401)
+        shell: bash
+        run: |
+          # 与 morning-briefing run_daily.sh 同样的白名单探测：响应必含 "choices"
+          # 才算 OK。token 失效时 proxy 返 500 + body 含 "Failed to authenticate",
+          # 这里直接发 TG 告警退出, 避免周报 30+ 篇全 401 才发现。
+          PROBE=$(curl -s --max-time 60 -X POST http://localhost:3456/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -d '{"model":"claude-sonnet-4","messages":[{"role":"user","content":"ping"}],"max_tokens":4}' 2>&1)
+          if echo "$PROBE" | grep -q '"choices"'; then
+            echo "✅ LLM token 验证通过"
+          else
+            if echo "$PROBE" | grep -qiE 'failed to authenticate|invalid authentication'; then
+              MSG="🚨 周报启动失败: <b>CLAUDE_CODE_OAUTH_TOKEN 已失效 (401)</b>\\n\\n本地跑 <code>claude setup-token</code> 重新生成, 然后:\\n<code>gh secret set CLAUDE_CODE_OAUTH_TOKEN -R hawaha112/pg4_FUTURE</code>"
+            else
+              SNIP=$(echo "$PROBE" | tr '\n\"' '  ' | cut -c1-200)
+              MSG="🚨 周报启动失败: claude_proxy 探测无 \\\"choices\\\"\\n响应前 200 字: ${SNIP}"
+            fi
+            if [ -n "$TG_BOT_TOKEN" ] && [ -n "$TG_CHAT_ID" ]; then
+              curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+                -H "Content-Type: application/json" \
+                -d "{\"chat_id\":\"${TG_CHAT_ID}\",\"text\":\"${MSG}\",\"parse_mode\":\"HTML\"}" \
+                > /dev/null 2>&1 || true
+            fi
+            echo "::error::LLM token probe failed"
+            exit 1
+          fi
+
       - name: Generate weekly report
         working-directory: ai-morning-news
         shell: bash

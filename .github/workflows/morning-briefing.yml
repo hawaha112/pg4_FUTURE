@@ -173,9 +173,29 @@ jobs:
           ls -la ai-morning-news/
           git add ai-morning-news/
           git commit -q -m "state: $(date -u +%Y-%m-%dT%H:%M:%SZ) shift=${{ steps.shift.outputs.shift }}"
-          git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
-            briefing-state:briefing-state
+          REMOTE="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          # 1. force-push 主 briefing-state 分支（永远 1 commit, 给下次跑用）
+          git push --force "$REMOTE" briefing-state:briefing-state
           echo "✓ state 已推回 briefing-state 分支"
+
+          # 2. 时间戳快照: 同时打一个 tag (snapshot/YYYYMMDD-HHMM-shift),
+          # 留 7 天滚动窗口可回滚. force-push 主分支时若推坏数据,
+          # 找最近的 tag git checkout 出来恢复即可.
+          SNAP_TAG="snapshot/$(date -u +%Y%m%d-%H%M)-${{ steps.shift.outputs.shift }}"
+          git tag "$SNAP_TAG"
+          git push "$REMOTE" "$SNAP_TAG" 2>&1 | tail -3 || echo "tag push failed (non-fatal)"
+          echo "✓ snapshot tag: $SNAP_TAG"
+
+          # 3. 清理 7 天前的快照 tag (远端 + 本地)
+          # 列出所有 snapshot tag, 按时间排序, 删超过 14 个的 (7 天 × 2 班次)
+          OLD_TAGS=$(git ls-remote --tags "$REMOTE" 'refs/tags/snapshot/*' 2>/dev/null \
+            | awk '{print $2}' | sed 's|refs/tags/||' | sort | head -n -14)
+          if [ -n "$OLD_TAGS" ]; then
+            echo "清理过期快照: $OLD_TAGS"
+            for t in $OLD_TAGS; do
+              git push "$REMOTE" ":refs/tags/$t" 2>&1 | tail -1 || true
+            done
+          fi
 
       - name: Upload artifacts (logs + output)
         if: always()
