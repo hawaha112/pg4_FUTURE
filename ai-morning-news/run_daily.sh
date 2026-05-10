@@ -523,32 +523,71 @@ echo "$SUMMARY_JSON" >> "$LOG_FILE"
 # ────────────────────────────────────────────────
 # Dashboard 后置补部署：本次 RUN_SUMMARY 已写入 jsonl，重新生成 dashboard
 # 让"最新跑"立刻可见（不再滞后 1 次）。只 push 单文件，几秒完成。
+#
+# 这里有两条路径 — 主部署阶段已经把 dashboard 推上去了，但那次是 jsonl
+# 写本次记录之前生成的，永远滞后 1 次。所以再来一遍：
+#   · 路径 A（本地 mac）: output/.git 是 clone 过的部署仓 → 直接 commit+push
+#   · 路径 B（GH Actions）: $DEPLOY_TMP 临时仓在主部署后被 rm -rf, 这里
+#     用同样的 REPO_URL 重新 clone 一份
 # ────────────────────────────────────────────────
-if [ "$DEPLOY_OK" = true ] && [ -d "$PROJECT_DIR/output/.git" ]; then
-    # 早报阶段是用 $DEPLOY_TMP 临时仓库 push 的，$PROJECT_DIR/output 此刻已落后于 origin。
-    # 先 fetch + reset --hard 同步到 origin，再生成 dashboard、commit、push，
-    # 避免 non-fast-forward / 文件冲突导致 push 被拒。
-    # 注：output/ 全部内容都是部署产物，本地无原创修改，reset 是安全的。
-    (cd "$PROJECT_DIR/output" && \
-     git fetch origin main 2>>"$LOG_FILE" && \
-     git reset --hard origin/main 2>>"$LOG_FILE" && \
-     git clean -fd \
-         -e 'run_health.jsonl' \
-         -e '.digest_cache.json' \
-         -e 'stats.json.before-*' \
-         2>>"$LOG_FILE") || \
-        echo "  ⚠️ dashboard 同步 origin 失败" >> "$LOG_FILE"
-
+if [ "$DEPLOY_OK" = true ]; then
     "$PYTHON" -u "$PROJECT_DIR/dashboard_generator.py" >> "$LOG_FILE" 2>&1 || true
-    if [ -f "$PROJECT_DIR/output/dashboard.html" ]; then
+
+    if [ ! -f "$PROJECT_DIR/output/dashboard.html" ]; then
+        echo "  ⚠️ dashboard.html 不存在，跳过后置部署" >> "$LOG_FILE"
+    elif [ -d "$PROJECT_DIR/output/.git" ]; then
+        # 路径 A — 本地 mac，output/ 是 clone 过的部署仓
+        # 主部署阶段是用 $DEPLOY_TMP 推的，output/.git 此刻已落后 origin。
+        # 先 fetch+reset 同步，避免 non-fast-forward。
+        # output/ 全部内容都是部署产物，本地无原创修改，reset 安全。
         cp "$PROJECT_DIR/output/dashboard.html" "$PROJECT_DIR/output/archive/dashboard.html"
+        (cd "$PROJECT_DIR/output" && \
+         git fetch origin main 2>>"$LOG_FILE" && \
+         git reset --hard origin/main 2>>"$LOG_FILE" && \
+         git clean -fd \
+             -e 'run_health.jsonl' \
+             -e '.digest_cache.json' \
+             -e 'stats.json.before-*' \
+             2>>"$LOG_FILE") || \
+            echo "  ⚠️ dashboard 同步 origin 失败" >> "$LOG_FILE"
+        # reset 把 dashboard.html 撤回了，重新拷一次
+        cp "$PROJECT_DIR/output/dashboard.html" "$PROJECT_DIR/output/archive/dashboard.html" 2>/dev/null || true
         (cd "$PROJECT_DIR/output" && \
          git add dashboard.html archive/dashboard.html 2>/dev/null && \
          git -c user.email="hawaha113@protonmail.com" -c user.name="hawaha112" \
              commit -m "dashboard: post-run update with latest RUN_SUMMARY" 2>>"$LOG_FILE" && \
          git push origin main 2>>"$LOG_FILE") && \
-            echo "  📊 dashboard 后置部署完成（含本次 RUN_SUMMARY）" >> "$LOG_FILE" || \
-            echo "  ⚠️ dashboard 后置部署失败（不影响主流程）" >> "$LOG_FILE"
+            echo "  📊 dashboard 后置部署完成（含本次 RUN_SUMMARY，路径 A）" >> "$LOG_FILE" || \
+            echo "  ⚠️ dashboard 后置部署失败（路径 A，不影响主流程）" >> "$LOG_FILE"
+    elif [ -n "$REPO_URL" ]; then
+        # 路径 B — GH Actions，重新 clone 部署仓推单文件
+        POST_TMP="/tmp/ai_dash_post_$$"
+        rm -rf "$POST_TMP"
+        if git clone --depth 1 "$REPO_URL" "$POST_TMP" >> "$LOG_FILE" 2>&1; then
+            cp "$PROJECT_DIR/output/dashboard.html" "$POST_TMP/dashboard.html"
+            mkdir -p "$POST_TMP/archive"
+            cp "$PROJECT_DIR/output/dashboard.html" "$POST_TMP/archive/dashboard.html"
+            cd "$POST_TMP"
+            git config user.email "action@github.com"
+            git config user.name "GitHub Action"
+            git add dashboard.html archive/dashboard.html 2>/dev/null
+            if ! git diff --cached --quiet; then
+                if git commit -m "dashboard: post-run update with latest RUN_SUMMARY" >> "$LOG_FILE" 2>&1 \
+                   && git push origin main >> "$LOG_FILE" 2>&1; then
+                    echo "  📊 dashboard 后置部署完成（含本次 RUN_SUMMARY，路径 B）" >> "$LOG_FILE"
+                else
+                    echo "  ⚠️ dashboard 后置部署失败（路径 B，push 失败）" >> "$LOG_FILE"
+                fi
+            else
+                echo "  📊 dashboard 后置：无变化，跳过 commit" >> "$LOG_FILE"
+            fi
+            cd "$PROJECT_DIR"
+        else
+            echo "  ⚠️ dashboard 后置 clone 失败（路径 B）" >> "$LOG_FILE"
+        fi
+        rm -rf "$POST_TMP"
+    else
+        echo "  ⚠️ dashboard 后置部署跳过（无 git 配置）" >> "$LOG_FILE"
     fi
 fi
 
