@@ -213,6 +213,90 @@ class EventClusterer:
         toks = sorted(set(t for t in cleaned.split() if len(t) > 1))
         return ' '.join(toks) if len(toks) >= 2 else ''
 
+    # 动词归类: 同义/近义合并到统一类别, 让 "OpenAI release X" 和 "OpenAI launch X" 算同事件
+    _VERB_CATEGORY = {
+        # 发布/推出
+        'release': 'publish', 'launch': 'publish', 'announce': 'publish',
+        'unveil': 'publish', 'introduce': 'publish', 'reveal': 'publish',
+        'ship': 'publish', 'roll-out': 'publish', 'rollout': 'publish',
+        'debut': 'publish', 'preview': 'publish', 'demo': 'publish',
+        'publish': 'publish', 'upload': 'publish',
+        # 收购/合并
+        'acquire': 'acquisition', 'buy': 'acquisition', 'purchase': 'acquisition',
+        'merge': 'acquisition', 'takeover': 'acquisition',
+        # 融资
+        'fund': 'funding', 'fundraise': 'funding', 'raise': 'funding',
+        'invest': 'funding', 'close': 'funding', 'secure': 'funding',
+        # 合作
+        'partner': 'partnership', 'collaborate': 'partnership',
+        'team-up': 'partnership', 'team': 'partnership',
+        # 开源
+        'open-source': 'opensource', 'open': 'opensource',
+        # 人事
+        'hire': 'hiring', 'appoint': 'hiring', 'join': 'hiring',
+        'leave': 'hiring', 'depart': 'hiring', 'fire': 'hiring', 'resign': 'hiring',
+        # 法务
+        'sue': 'legal', 'settle': 'legal', 'fine': 'legal', 'ban': 'legal',
+        # 战略
+        'pivot': 'strategy', 'restructure': 'strategy',
+    }
+
+    # 实体名归一化: 跨语种/缩写映射到统一形式 (键全小写)
+    _ENTITY_CANONICAL = {
+        'openai': 'openai', 'open-ai': 'openai',
+        'anthropic': 'anthropic',
+        'google': 'google', 'google-deepmind': 'google', 'deepmind': 'google',
+        'alphabet': 'google',
+        'meta': 'meta', 'meta-ai': 'meta', 'facebook': 'meta', 'fair': 'meta',
+        'microsoft': 'microsoft', 'msft': 'microsoft',
+        'apple': 'apple',
+        'nvidia': 'nvidia',
+        'amazon': 'amazon', 'aws': 'amazon',
+        'mistral': 'mistral', 'mistral-ai': 'mistral',
+        'cohere': 'cohere',
+        'huggingface': 'huggingface', 'hugging-face': 'huggingface', 'hf': 'huggingface',
+        'xai': 'xai', 'x-ai': 'xai',
+        'deepseek': 'deepseek', 'deep-seek': 'deepseek',
+        'bytedance': 'bytedance', '字节': 'bytedance', '字节跳动': 'bytedance',
+        'alibaba': 'alibaba', '阿里': 'alibaba', '阿里巴巴': 'alibaba',
+        'baidu': 'baidu', '百度': 'baidu',
+        'tencent': 'tencent', '腾讯': 'tencent',
+        'moonshot': 'moonshot', '月之暗面': 'moonshot',
+        'zhipu': 'zhipu', '智谱': 'zhipu',
+    }
+
+    @classmethod
+    def _entity_action_key(cls, item: dict) -> str:
+        """从 event_signature 解析 (主体实体, 动作类别) 二元组 — 用于不依赖 LSH 候选的强制预合并.
+
+        实测 _signature_key 要求 signature 完全一致才命中, 但 LLM 经常输出
+        "openai release gpt-5" vs "openai launch gpt-5" vs "openai unveil gpt-5"
+        这种近义不同词. 加 verb 归类 + 实体归一后, 这 3 条会被映射到同一个键
+        "openai|publish", 24h 内强制 union.
+
+        返回空字符串表示无法解析, 让后续 LSH 阶段处理.
+        """
+        a = item.get('analysis', {}) if isinstance(item.get('analysis'), dict) else {}
+        sig = (a.get('event_signature') or item.get('event_signature') or '').strip().lower()
+        if not sig:
+            return ''
+        # 提取 token: 字母数字 + 中文 + 连字符
+        tokens = re.findall(r'[\w一-鿿-]+', sig)
+        if len(tokens) < 2:
+            return ''
+        # 第一个 token = 实体, 找到第一个能识别的动词作为动作
+        entity_raw = tokens[0]
+        entity = cls._ENTITY_CANONICAL.get(entity_raw, entity_raw)
+        action = ''
+        for t in tokens[1:5]:
+            if t in cls._VERB_CATEGORY:
+                action = cls._VERB_CATEGORY[t]
+                break
+        if not action:
+            return ''  # 无可识别动词, 不强制合并
+        # 拼成键
+        return f'{entity}|{action}'
+
     @staticmethod
     def _cluster_text(item: dict) -> str:
         """构造用于聚类匹配的文本。
@@ -352,6 +436,40 @@ class EventClusterer:
         if sig_premerge_count or sig_to_existing_event:
             log.info("🔗 signature 预合并: %d 对 article-article + %d 个 group 命中老事件",
                      sig_premerge_count, sum(1 for k in sig_groups if k in sig_to_existing_event))
+
+        # ── 2.6 (entity+action 预合并): 解决 LSH 召回不足导致 multi_source 长期 = 0 ──
+        # 历史 73 次跑 multi_source_count = 0 占 78%, 主因是 LSH banding 对短 signature
+        # 召回低 + signature 完全一致命中率有限. 这里按 (entity, verb_category) 二元组
+        # 做不依赖 LSH 候选的强制合并: "openai release X" 与 "openai launch X" 都映射到
+        # "openai|publish", 24h 内 union.
+        # 注意: 仅当能识别出主体实体 + 可分类动词 时启用, 解析不出的不动.
+        ea_groups: Dict[str, List[int]] = {}
+        for art_idx, art in article_indices:
+            ea_key = self._entity_action_key(art)
+            if not ea_key:
+                continue
+            ea_groups.setdefault(ea_key, []).append(art_idx)
+        ea_to_existing_event: Dict[str, str] = {}
+        for event in existing_events:
+            ea_key = self._entity_action_key(event)
+            if ea_key:
+                ea_to_existing_event.setdefault(ea_key, event['event_id'])
+        ea_premerge_count = 0
+        for key, idx_list in ea_groups.items():
+            if len(idx_list) >= 2:
+                base = idx_list[0]
+                for other in idx_list[1:]:
+                    union(base, other)
+                    ea_premerge_count += 1
+            ev_id = ea_to_existing_event.get(key)
+            if ev_id:
+                for ai in idx_list:
+                    # 别覆盖已被 signature 层精确匹配的 article
+                    if ai not in matched_to_existing:
+                        matched_to_existing[ai] = ev_id
+        if ea_premerge_count or ea_to_existing_event:
+            log.info("🔗 entity+action 预合并: %d 对 article-article + %d 个 group 命中老事件",
+                     ea_premerge_count, sum(1 for k in ea_groups if k in ea_to_existing_event))
 
         for art_idx, art in article_indices:
             text = self._cluster_text(art)
