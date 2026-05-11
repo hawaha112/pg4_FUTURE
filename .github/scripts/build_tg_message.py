@@ -38,7 +38,8 @@ def build_dashboard_snapshot() -> str:
 
     ev = stats.get('event_db_stats', {})
     kept = stats.get('article_count', '?')
-    llm_pct = int(round(stats.get('llm_coverage') or 0) * 100)
+    # 注意运算优先级: 必须先乘 100 再 round, 否则 round(0.5)=0 → 显示 0%
+    llm_pct = int(round((stats.get('llm_coverage') or 0) * 100))
     multi = stats.get('multi_source_count', 0)
     imp = stats.get('important_count', 0)
     official = stats.get('official_count', 0)
