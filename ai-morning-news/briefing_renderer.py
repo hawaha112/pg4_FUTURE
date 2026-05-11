@@ -593,7 +593,20 @@ def main():
                 f"今日共收录 {n_items} 条 AI 资讯"
                 f"（来源含 {', '.join(list(top_sources)[:3])} 等）。"
             )
-        log.info("📝 规则版速览（LLM 速览不可用或失败）")
+        # 区分 4 种触发原因，避免"LLM 失败"假警报误导排查方向：
+        # 1) 全是规则分析 → 没调 LLM
+        # 2) 文章数 < 3 → 主动跳过（参见 520 行阈值）
+        # 3) LLM 调过但 editorial 是空 / 异常
+        # 4) LLM 调过有内容但被 _FALLBACK_PHRASES 拦下
+        if not has_llm_content:
+            _reason = "全是 Level 0 规则分析,无 LLM 深度内容"
+        elif n_items < 3:
+            _reason = f"文章数 {n_items} < 3,样本太少,主动跳过 LLM"
+        elif not editorial:
+            _reason = "LLM 速览未返回内容（调用失败或返回空）"
+        else:
+            _reason = f"LLM 返回内容未通过校验 (len={len(editorial)})"
+        log.info("📝 规则版速览（原因: %s）", _reason)
 
     # ── 计算 LLM 覆盖率（level >= 1 = 来自 LLM 的深度分析）──
     llm_count = sum(
