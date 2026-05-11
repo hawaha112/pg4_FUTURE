@@ -36,7 +36,16 @@
   · 保留原文中的具体数据、人物、机构、技术细节，不要泛泛而谈
   · 不要重复 summary 和 key_details 的原文
 - background：独立的行业背景字段，150字以内，讲此事件之前的行业脉络、历史沿革、相关玩家（与 detailed_content 分工明确：detailed_content 讲事件本身发生了什么，background 讲事件之外的时代背景）
-- deep_analysis：你的独立判断——这件事的深层意义、潜在风险、对行业格局的影响，150字以内
+- deep_analysis：你的独立**判断**（不是事实复述）。150字以内。**严格要求**：
+  · 必须明确回答其中**至少一个**：
+    1) 这件事改变了什么竞争格局?(谁受益/谁受损,具体到公司或玩家类别)
+    2) 它是更大趋势的一部分吗?如果是,指出该趋势及位置(如"这是过去 6 个月第 3 家头部 lab 押注 X")
+    3) 接下来 30-90 天最可能发生什么?(给出可证伪的预测,不是"将继续发展")
+    4) 反向思考:如果这件事不发生 / 失败了,会怎样?谁会乘虚而入?
+  · **严禁**重复 summary 的内容,**严禁**写"这是一个重要的发展"/"值得关注"/"标志着新阶段"这类无信息量空话
+  · **严禁**只罗列事实而不下判断 — deep_analysis 不下判断 = 整次输出作废,需重新生成
+  · 反例(垃圾输出): "OpenAI 此次发布展示了其在 AI 领域的领先地位,值得行业关注" ← 信息量为零
+  · 范例(高质量): "这是 OpenAI 5 周内第 3 个企业级动作,组合拳在围攻 Anthropic 的企业市场护城河;Cursor / Glean 这类垂直 wrappers 接下来 60 天可能被迫站队"
 - importance：1-5分。评分参考：
   · 5=行业格局级（新版旗舰大模型发布如 GPT-5/Claude Opus/Gemini Pro 主版本、巨额收购 ≥$10B、监管法规正式落地、奠基性论文 Transformer/Diffusion 级别）
   · 4=显著进展（重要技术突破、Anthropic/OpenAI/Google/DeepSeek 等头部 lab 重要更新或人事变动、$1B+ 融资、开源里程碑模型发布、大厂战略调整公告、行业大佬深度访谈）
@@ -48,6 +57,22 @@
   · YouTube 大V 深度访谈/解读（Lex Fridman / Dwarkesh Patel / Yannic Kilcher）≥ ★3
   · ArXiv 论文：被 HuggingFace Daily Papers 收录或被多人讨论的 ≥ ★3
   · 大多数 AI 新闻应在 2-4 分之间，不要过度压低分数。
+
+  **目标分布校准（重要！历史数据显示 LLM 评分过于保守）**：
+  · 健康的 importance 分布应当是：约 10-20% 文章 ≥4 分，约 50-70% 在 2-3 分，约 10-20% = 1 分
+  · 如果一组 10+ 文章中 0 条 ≥4 分，大概率是漏判——重新审视高 tier 信源（Tier 0 官方、Tier 1 顶级研究者）的内容
+
+  **常见误判反例（不要踩雷）**：
+  · ❌ "OpenAI 发布 DevDay 重大更新公告" 打 3 → 应 4-5（官方旗舰发布）
+  · ❌ "Karpathy 发布 4000 字技术博客深度复盘" 打 2 → 应 3-4（顶级研究者长文 = 信号）
+  · ❌ "某独角兽融资 5 亿美元 Series C" 打 3 → 应 4（≥1B/$5亿+ 融资 = 资本面重大事件）
+  · ❌ "Anthropic 发布 Claude.ai 网页端 UI 改版" 打 3 → 应 2（UI 改版是产品迭代非战略动作）
+  · ❌ "某 startup 发了一篇博客介绍自己的产品" 打 3 → 应 1-2（内容营销不是行业事件）
+
+  **打分前自问 3 个问题**：
+  1. 这件事 30 天后还有人会引用吗？(否 → ≤2)
+  2. 一线工程师/PM/投资人当中，谁会认为这是必看？(没人 → ≤2; 一类人 → 3; 多类人 → 4+)
+  3. 这是"独立事件"还是"持续动作之一"？(持续动作中的某一步 → 一般 ≤3，除非是关键里程碑)
 - categories：1-2个标签，选自：大模型发布|开源生态|AI政策监管|芯片与算力|产品与应用|安全与对齐|融资与商业|学术研究|AI工具|具身智能|自动驾驶|AI编程|行业观点
 - source_type：paper|news|official|opinion|community|video
 - audience：目标读者（数组，可多选 1-3 个），选自：
@@ -70,5 +95,12 @@
    - key_details（至少2条）
 2. 语言约束（极其重要）：chinese_title / summary / why_it_matters / detailed_content / background / deep_analysis / key_details 必须使用 **简体中文**，不得保留原文整段英文、不得出现"OpenAI released…"这种直译前未翻完的片段。
    允许的英文内容仅限：专有名词（GPT-5、Claude、Anthropic）、代码/命令、缩写（API、SDK、RLHF）、论文题目可中英对照一次。
+
+   **术语翻译统一规则（保证全站一致，违反 = 重新生成）**：
+   · **保留英文不翻译**：所有 AI 公司名（OpenAI / Anthropic / Google DeepMind / Meta / Mistral / Cohere / DeepSeek / Hugging Face / Cursor / Perplexity 等），所有 AI 模型/产品名（GPT-5 / Claude Opus / Gemini Pro / Sora / Llama / Mixtral / Stable Diffusion / FLUX / Veo 等），所有技术缩写（RAG / LLM / VLM / RLHF / MoE / LoRA / MCP / AGI / API / SDK）。**禁止**写成"克劳德"/"羊驼"/"索拉"/"双子座"等音译/意译。
+   · **统一翻译为中文**：微软（Microsoft）/ 苹果（Apple）/ 英伟达（NVIDIA）/ 亚马逊（Amazon）/ 特斯拉（Tesla）/ 谷歌（Google，但 Google DeepMind 整体不译）。
+   · **中国公司用中文**：百度 / 字节跳动 / 阿里巴巴 / 腾讯 / 智谱 / 百川智能 / 月之暗面 / 零一万物 / 通义千问 / 文心一言 / 豆包 / Kimi（这是产品名保留）。
+   · **中文 AI 概念统一**：agent → 智能体（不是"代理"），open-source → 开源（不是"开放源代码"），fine-tuning → 微调，pretraining → 预训练，inference → 推理，alignment → 对齐，embodied → 具身，multimodal → 多模态。
+   · **关键人物首次出现**：Sam Altman / Dario Amodei / Demis Hassabis / Jack Clark / Andrej Karpathy 保留英文；黄仁勋 / 扎克伯格 / 皮查伊 / 纳德拉用中文。
 3. 即使原文信息较少、importance=1或2，也必须基于已有信息合理撰写所有字段。
 4. 输出前自检：逐个检查上述字段是否为空或中英夹杂，若不符则修正后再输出。
