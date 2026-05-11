@@ -199,6 +199,19 @@ def main():
         else:
             window_start = datetime.combine(_today, _dtime(6, 0)).astimezone()
             window_end = datetime.combine(_today, _dtime(18, 0)).astimezone()
+
+        # 防御 GitHub Actions cron 延迟（实测早班晚 30-60 分钟):
+        # 写死的截止时刻（am=06:00 / pm=18:00）若早于实际渲染时刻 _now,
+        # 截止后到渲染前发布的新文章会被错误"窗口外"过滤
+        # （2026-05-11 早班实测 28→3 条,25 条被排除全部是 06:00-06:48 间发布的最新新闻）。
+        # 把终点延展到 _now 以纳入这部分内容。起点不动,避免破坏
+        # _event_in_window 的"严格只放行窗口内首发事件"语义（见 230 行注释）。
+        if _now > window_end:
+            _delay_min = int((_now - window_end).total_seconds() // 60)
+            log.info("⏰ cron 延迟 %d 分钟,窗口截止延展 %s → %s",
+                     _delay_min, window_end.strftime('%H:%M'),
+                     _now.strftime('%H:%M'))
+            window_end = _now
         log.info("🕘 发布时间窗口 [%s]: %s ~ %s",
                  _shift, window_start.strftime('%Y-%m-%d %H:%M'),
                  window_end.strftime('%Y-%m-%d %H:%M'))
