@@ -102,13 +102,12 @@
         "name": "Import AI",
         "tier": 1,
         "category": "researcher",
-        "url": "https://importai.substack.com/feed",
+        "url": "https://jack-clark.net/feed",
         "icon": "📬",
         "color": "#D4A574",
-        "description": "Anthropic Jack Clark 的 AI 行业周刊",
+        "description": "Anthropic Jack Clark 的 AI 行业周刊（jack-clark.net 镜像，含全文）",
         "ai_only": true,
-        "enabled": false,
-        "_disabled_reason": "Substack RSS 长期 HTTP 403, 28+ 次连续失败"
+        "enabled": true
       },
       {
         "name": "Latent Space",
@@ -145,14 +144,13 @@
         "name": "Dwarkesh Patel",
         "tier": 1,
         "category": "researcher",
-        "url": "https://www.dwarkeshpatel.com/feed",
+        "url": "https://www.dwarkesh.com/feed",
         "icon": "🎤",
         "color": "#DC2626",
         "description": "Dwarkesh Patel 深度访谈播客（Zuckerberg/Dario/Demis 等首发长谈）",
         "ai_only": false,
         "vip": true,
-        "enabled": false,
-        "_disabled_reason": "RSS 重定向无限循环 (HTTP 301), 28+ 次连续失败"
+        "enabled": true
       },
       {
         "name": "Hugging Face Daily Papers",
@@ -316,7 +314,7 @@
         "description": "Axios 权威简报（含 AI/科技头条）",
         "ai_only": false,
         "enabled": false,
-        "_disabled_reason": "RSS 长期 HTTP 403 (Cloudflare), 28+ 次连续失败"
+        "_disabled_reason": "Cloudflare 顽固 403 (curl_cffi 也未能突破); 已规划替换为 Stratechery (P1-4)"
       },
       {
         "name": "Bloomberg Technology",
@@ -337,18 +335,6 @@
         "color": "#E11D48",
         "description": "Techmeme 科技头条聚合（多源交叉关键）",
         "ai_only": false
-      },
-      {
-        "name": "The Information",
-        "tier": 2,
-        "category": "media",
-        "url": "https://www.theinformation.com/feed",
-        "icon": "📡",
-        "color": "#DC2626",
-        "description": "The Information 付费科技媒体的 RSS（标题 + 摘要）",
-        "ai_only": false,
-        "enabled": false,
-        "_disabled_reason": "RSS 源连续 9+ 次 HTTP 403, 接近 health_tracker 自动禁用阈值; 该源已对未付费请求关闭 RSS"
       },
       {
         "name": "Intel Newsroom",
@@ -445,6 +431,72 @@
         "color": "#1DA1F2",
         "description": "Elon Musk 推文（xAI 相关）",
         "ai_only": false
+      },
+      {
+        "name": "Stratechery",
+        "tier": 1,
+        "category": "researcher",
+        "url": "https://stratechery.com/feed/",
+        "icon": "🧠",
+        "color": "#E1B12C",
+        "description": "Ben Thompson 顶级科技/商业战略评论(覆盖 AI 但不限)",
+        "ai_only": false,
+        "enabled": true
+      },
+      {
+        "name": "Last Week in AI",
+        "tier": 1,
+        "category": "researcher",
+        "url": "https://lastweekin.ai/feed",
+        "icon": "📅",
+        "color": "#6366F1",
+        "description": "每周 AI 圈精选回顾",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "One Useful Thing",
+        "tier": 1,
+        "category": "researcher",
+        "url": "https://www.oneusefulthing.org/feed",
+        "icon": "🛠️",
+        "color": "#7C3AED",
+        "description": "Wharton 教授 Ethan Mollick 的 AI 实战评论",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "vLLM Releases",
+        "tier": 1,
+        "category": "research",
+        "url": "https://github.com/vllm-project/vllm/releases.atom",
+        "icon": "⚡",
+        "color": "#FF6B6B",
+        "description": "推理引擎 vLLM 新版本(模型支持/性能信号)",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "Transformers Releases",
+        "tier": 1,
+        "category": "research",
+        "url": "https://github.com/huggingface/transformers/releases.atom",
+        "icon": "🤗",
+        "color": "#FFD21E",
+        "description": "HuggingFace transformers 新版本(新模型支持先行指标)",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "LangChain Releases",
+        "tier": 1,
+        "category": "research",
+        "url": "https://github.com/langchain-ai/langchain/releases.atom",
+        "icon": "⛓️",
+        "color": "#1C3D5A",
+        "description": "LangChain 框架新版本(Agent/RAG 生态信号)",
+        "ai_only": true,
+        "enabled": true
       }
     ],
     "chinese": [
