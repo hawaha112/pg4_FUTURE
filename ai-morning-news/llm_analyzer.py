@@ -938,13 +938,22 @@ class LLMAnalyzer:
 
     def generate_digest(self, analyses: List[dict]) -> dict:
         """
-        从所有文章分析中生成"今日 3 分钟速览"。
+        从所有文章分析中生成"今日 3 个判断"+ 兜底 editorial.
 
-        Args:
-            analyses: 带 analysis 字段的文章列表
+        新输出结构 (v2):
+        {
+          "headline": "今日主旋律 一句话",
+          "judgments": [
+              {"emoji": "🏢", "title": "...", "body": "...", "evidence_ids": [0, 5]},
+              ...
+          ],
+          "outro": "收束观点 (可选)",
+          "editorial": "纯文本兜底版 (judgments 缺失时用)",
+          "top_stories": []
+        }
 
-        Returns:
-            dict with keys: editorial, top_stories
+        renderer 优先用 judgments 渲染卡片;
+        当 LLM 调用失败或 JSON 解析失败时,会有 editorial 兜底.
         """
         # 构建摘要列表供 LLM 综合
         summaries_text = ""
@@ -957,8 +966,15 @@ class LLMAnalyzer:
             source = item.get("source_name", "")
             summaries_text += f"[{i}] ({source}, 重要性{importance}) {summary}\n"
 
+        empty_result = {
+            "headline": "",
+            "judgments": [],
+            "outro": "",
+            "editorial": "今天暂无重要 AI 新闻。",
+            "top_stories": [],
+        }
         if not summaries_text.strip():
-            return {"editorial": "今天暂无重要 AI 新闻。", "top_stories": []}
+            return empty_result
 
         user_msg = DIGEST_USER_TEMPLATE.format(
             count=len([a for a in analyses if a.get("analysis", {}).get("ai_relevant", True)]),
@@ -966,35 +982,79 @@ class LLMAnalyzer:
         )
 
         try:
-            # digest 不再走 JSON schema — LLM 写多段中文 editorial 时常在 JSON
-            # 字符串值里塞未转义的换行/引号（中文场景尤甚），_extract_json 救不回。
-            # 直接拿纯文本/Markdown 当 editorial，渲染端自己拆段+加粗。
+            # 调 LLM 拿 JSON 结构化 3 个判断 (v2)
             response = self._call_api(
                 [
                     {"role": "system", "content": DIGEST_SYSTEM_PROMPT},
                     {"role": "user", "content": user_msg},
                 ],
             )
-            editorial = (response or '').strip()
-            # 兜底剥代码块标记 (LLM 偶尔仍会包 ```markdown ... ```)
-            editorial = re.sub(r'^```(?:\w+)?\s*', '', editorial)
-            editorial = re.sub(r'\s*```\s*$', '', editorial).strip()
-            # 兜底剥 JSON 包装 (LLM 偶尔仍按旧习惯返 {"editorial": "..."})
-            if editorial.startswith('{') and '"editorial"' in editorial:
-                data = self._extract_json(editorial)
-                if data and data.get('editorial'):
-                    editorial = str(data['editorial']).strip()
+            raw = (response or '').strip()
+            # 剥代码块标记
+            raw = re.sub(r'^```(?:\w+)?\s*', '', raw)
+            raw = re.sub(r'\s*```\s*$', '', raw).strip()
 
-            if len(editorial) < 20:
-                log.warning("digest 响应太短（%d 字）: %r",
-                            len(editorial), editorial[:200])
-                return {"editorial": "速览生成失败。", "top_stories": []}
+            # 解析 JSON
+            data = self._extract_json(raw)
+            judgments = data.get('judgments') if isinstance(data, dict) else None
 
-            return {"editorial": editorial[:1500], "top_stories": []}
+            if isinstance(judgments, list) and len(judgments) >= 1:
+                # 校验 + 清洗每个 judgment
+                clean_judgments = []
+                for j in judgments[:3]:
+                    if not isinstance(j, dict):
+                        continue
+                    title = str(j.get('title', '')).strip()
+                    body = str(j.get('body', '')).strip()
+                    emoji = str(j.get('emoji', '🔹')).strip()[:4] or '🔹'
+                    if not title or len(title) < 5 or not body or len(body) < 20:
+                        continue
+                    evidence = j.get('evidence_ids') or []
+                    if not isinstance(evidence, list):
+                        evidence = []
+                    clean_judgments.append({
+                        'emoji': emoji,
+                        'title': title[:60],
+                        'body': body[:400],
+                        'evidence_ids': [int(x) for x in evidence if isinstance(x, (int, str)) and str(x).isdigit()][:5],
+                    })
+
+                if clean_judgments:
+                    headline = str(data.get('headline', '')).strip()[:60]
+                    outro = str(data.get('outro', '')).strip()[:120]
+                    # 兜底 editorial: 把 judgments 串成纯文本, 防止下游模板要 editorial 时崩
+                    fallback_text_parts = []
+                    if headline:
+                        fallback_text_parts.append(headline)
+                    for j in clean_judgments:
+                        fallback_text_parts.append(f"{j['emoji']} **{j['title']}**\n{j['body']}")
+                    if outro:
+                        fallback_text_parts.append(outro)
+                    log.info("✓ 速览(v2): %d 个判断, headline=%r", len(clean_judgments), headline[:30])
+                    return {
+                        'headline': headline,
+                        'judgments': clean_judgments,
+                        'outro': outro,
+                        'editorial': '\n\n'.join(fallback_text_parts)[:1500],
+                        'top_stories': [],
+                    }
+
+            # JSON 解析失败 / judgments 全部不合规
+            # → 退到旧版纯文本 editorial (LLM 把 raw 当 markdown 用)
+            log.warning("digest JSON 解析失败或 judgments 不合规, 退到纯文本兜底 (raw 前 200 字: %r)", raw[:200])
+            if len(raw) >= 20:
+                return {
+                    'headline': '',
+                    'judgments': [],
+                    'outro': '',
+                    'editorial': raw[:1500],
+                    'top_stories': [],
+                }
+            return empty_result
 
         except Exception as e:
             log.error("❌ 速览生成失败: %s", e)
-            return {"editorial": "速览生成失败。", "top_stories": []}
+            return {**empty_result, 'editorial': "速览生成失败。"}
 
     # ------------------------------------------------------------------
     # 批量分析

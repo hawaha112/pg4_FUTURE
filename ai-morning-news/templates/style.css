@@ -101,6 +101,72 @@ body {
     color: var(--text-100); font-weight: 600;
 }
 
+/* ═════ 今日 N 个判断 (v2 — 产品定位升级:从罗列到判断) ═════ */
+.briefing .br-headline {
+    max-width: 1120px;
+    font-family: var(--serif);
+    font-size: 17px; font-weight: 600; line-height: 1.55;
+    color: var(--text-100);
+    margin: 4px 0 18px;
+    letter-spacing: 0.2px;
+}
+.judgments-grid {
+    max-width: 1120px;
+    display: grid; gap: 14px;
+    margin: 0 0 14px;
+}
+.judgments-grid.jcg-1 { grid-template-columns: minmax(0, 1fr); }
+.judgments-grid.jcg-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.judgments-grid.jcg-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.judgment-card {
+    background: var(--bg-card, rgba(255,255,255,0.04));
+    border: 1px solid var(--border, rgba(255,255,255,0.10));
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 16px 18px;
+    display: flex; flex-direction: column;
+    transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.judgment-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+.jc-emoji {
+    font-size: 22px; line-height: 1; margin-bottom: 8px;
+}
+.jc-title {
+    font-family: var(--serif);
+    font-size: 15px; font-weight: 700; line-height: 1.4;
+    color: var(--text-100);
+    margin: 0 0 10px;
+    letter-spacing: 0.1px;
+}
+.jc-body {
+    font-size: 13px; line-height: 1.65;
+    color: var(--text-70);
+    margin: 0;
+}
+.jc-body .jc-bold {
+    color: var(--text-100); font-weight: 600;
+}
+.briefing .br-outro {
+    max-width: 1120px;
+    font-style: italic;
+    font-size: 13px; line-height: 1.6;
+    color: var(--text-50);
+    margin: 6px 0 14px;
+    padding-left: 14px;
+    border-left: 2px dashed var(--border);
+}
+@media (max-width: 860px) {
+    .judgments-grid.jcg-2,
+    .judgments-grid.jcg-3 { grid-template-columns: minmax(0, 1fr); }
+    .briefing .br-headline { font-size: 15px; }
+    .jc-title { font-size: 14px; }
+    .jc-body { font-size: 12.5px; }
+}
+
 /* ═════ Featured Section (Importance >= 4) ═════ */
 .featured-section {
     max-width: 1120px; margin: 28px auto 0; padding: 0 20px;

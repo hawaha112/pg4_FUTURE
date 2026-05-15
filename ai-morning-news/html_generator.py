@@ -654,9 +654,43 @@ def generate_html(all_items, config, digest=None, meta=None):
             '</section>'
         )
 
-    # 今日速览
+    # 今日速览 — v2 优先渲染 3 个判断卡片, 没有则回退到旧版 editorial
     briefing_html = ""
-    if digest and digest.get('editorial'):
+    judgments = (digest or {}).get('judgments') or []
+    if judgments:
+        # v2: 3 个判断卡 (产品定位升级: 从"罗列"到"判断")
+        headline = _safe_escape((digest.get('headline') or '').strip())
+        outro = _safe_escape((digest.get('outro') or '').strip())
+
+        # 注意: 用 j_cards_html 而非 cards_html, 避免与外层"文章卡片列表"的同名变量冲突
+        j_cards_html = ''
+        for j in judgments[:3]:
+            j_emoji = _safe_escape(str(j.get('emoji', '🔹')))
+            j_title = _safe_escape(str(j.get('title', '')).strip())
+            j_body = _safe_escape(str(j.get('body', '')).strip())
+            # 允许 body 内嵌 ** 加粗
+            j_body = re.sub(r'\*\*([^*\n]+?)\*\*',
+                            r'<strong class="jc-bold">\1</strong>', j_body)
+            j_cards_html += (
+                '<article class="judgment-card">'
+                f'<div class="jc-emoji">{j_emoji}</div>'
+                f'<h3 class="jc-title">{j_title}</h3>'
+                f'<p class="jc-body">{j_body}</p>'
+                '</article>'
+            )
+
+        headline_html = f'<p class="br-headline">{headline}</p>' if headline else ''
+        outro_html = f'<p class="br-outro">{outro}</p>' if outro else ''
+        n_judgments = len(judgments[:3])
+        briefing_html = f'''
+    <section class="briefing">
+        <h2 class="br-title">📌 今日 {n_judgments} 个判断</h2>
+        {headline_html}
+        <div class="judgments-grid jcg-{n_judgments}">{j_cards_html}</div>
+        {outro_html}
+    </section>'''
+    elif digest and digest.get('editorial'):
+        # 兼容兜底: judgments 缺失时仍渲染旧版 editorial 文本
         editorial_html = _render_editorial(digest.get('editorial', ''))
         if editorial_html:
             briefing_html = f'''
