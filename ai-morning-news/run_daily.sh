@@ -388,6 +388,11 @@ if [ -n "$REPO_URL" ] && [ -f "$PROJECT_DIR/output/index.html" ]; then
             mkdir -p "$DEPLOY_TMP/archive"
             cp -r "$PROJECT_DIR/output/archive/"* "$DEPLOY_TMP/archive/" 2>/dev/null || true
         fi
+        # P1: 实体时间线页 (entities/{entity}-30d.html) 也要推
+        if [ -d "$PROJECT_DIR/output/entities" ]; then
+            mkdir -p "$DEPLOY_TMP/entities"
+            cp -r "$PROJECT_DIR/output/entities/"* "$DEPLOY_TMP/entities/" 2>/dev/null || true
+        fi
         cd "$DEPLOY_TMP"
         git config user.email "hawaha113@protonmail.com"
         git config user.name "hawaha112"
