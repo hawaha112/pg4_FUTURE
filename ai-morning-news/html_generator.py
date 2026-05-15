@@ -752,6 +752,27 @@ def generate_html(all_items, config, digest=None, meta=None):
                 '</div>'
             )
 
+    # 实体追踪入口 (P1): 30 天实体动态时间线 chips
+    entity_tracker_html = ""
+    entity_timelines = (meta or {}).get('entity_timelines') or []
+    if entity_timelines:
+        chips = []
+        for et in entity_timelines:
+            chips.append(
+                f'<a class="et-chip" href="{_safe_escape(et.get("html_path", "#"))}">'
+                f'<span class="et-icon">{_safe_escape(et.get("icon", "🏢"))}</span>'
+                f'<span class="et-name">{_safe_escape(et.get("name", ""))}</span>'
+                f'<span class="et-count">{int(et.get("count", 0))}</span>'
+                f'</a>'
+            )
+        entity_tracker_html = (
+            '<section class="entity-tracker">'
+            '<h2 class="et-title">📍 实体追踪 · 过去 30 天动态</h2>'
+            '<p class="et-hint">点击进入该公司/人物的 30 天演进时间线</p>'
+            '<div class="et-chips">' + ''.join(chips) + '</div>'
+            '</section>'
+        )
+
     # ── 大V 动态区块：X-*/YouTube 等社交媒体大V，importance 通常<4 达不到 featured
     # 但仍值得独立展示（观点/访谈/短视频解读）。排除已进 featured 的，避免重复 ──
     # VIP 名单 = config.json 里 "vip": true 的源 + 所有 X-* 推特源 + source_type==video
@@ -842,6 +863,7 @@ def generate_html(all_items, config, digest=None, meta=None):
         top3_html=top3_html,
         llm_banner_html=llm_banner_html,
         briefing_html=briefing_html,
+        entity_tracker_html=entity_tracker_html,
         featured_html=featured_html,
         cards_html=cards_html,
         css_content=css_content,

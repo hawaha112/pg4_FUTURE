@@ -676,6 +676,23 @@ def main():
         'entity_count': entity_count,
     }
 
+    # ── 生成实体时间线 (P1, 不阻塞主流程) ──
+    # 为每个核心实体 (OpenAI/Anthropic/...) 生成"过去 30 天动态"独立页,
+    # 输出到 output/entities/{entity_id}-30d.html, 主早报顶部加入口链接.
+    try:
+        from entity_timeline_generator import generate_entity_timelines
+        entity_timelines = generate_entity_timelines(
+            db_path=Path(event_db_path),
+            output_dir=script_dir / 'output',
+            days=30,
+            min_events=3,
+            top_n_entities=12,
+        )
+        meta['entity_timelines'] = entity_timelines
+    except Exception as e:
+        log.warning("⚠️ 实体时间线生成失败 (不阻塞): %s", e)
+        meta['entity_timelines'] = []
+
     # ── 生成 HTML ──
     log.info("🎨 生成页面（%d 条）...", len(all_items))
     html, modal_js = generate_html(all_items, config, digest, meta=meta)
