@@ -107,6 +107,8 @@ def _enrich_item_with_event_info(item: dict, event: dict) -> dict:
     item['_cluster_size'] = event.get('cluster_size', 1)
     item['_canonical_event_id'] = event.get('event_id', '')
     item['_entities'] = event.get('entity_tags', []) or []
+    # 外部热度信号 (P2): 关联到的 HN / Reddit / HF / GitHub
+    item['_external_signals'] = event.get('external_signals', {})
 
     # 证据链
     evidence_chain = event.get('evidence_chain', [])
@@ -281,6 +283,24 @@ def main():
     if use_canonical:
         log.info("📦 从事件库读取 %d 个 canonical events（最近 %d 小时）",
                  len(canonical_events), hours)
+
+        # ── 关联外部热度信号 (HN/Reddit/HF/GitHub) + boost importance ──
+        # collector 跑完会生成 output/hot_signals.json. 这里加载 + 匹配事件.
+        # 匹配上的事件: 加 external_signals 字段 + 可能提升 effective_importance.
+        try:
+            from external_signal_matcher import load_hot_signals, enrich_events_with_signals
+            hot_signals_path = script_dir / 'output' / 'hot_signals.json'
+            hot_signals = load_hot_signals(hot_signals_path)
+            canonical_events, signal_stats = enrich_events_with_signals(
+                canonical_events, hot_signals
+            )
+            # 把 effective_importance 写回 importance 字段, 让下游 ranker 用到
+            for ev in canonical_events:
+                eff = ev.get('effective_importance')
+                if eff is not None and eff > (ev.get('importance') or 0):
+                    ev['importance'] = eff
+        except Exception as e:
+            log.warning("⚠️ 外部信号关联失败 (不阻塞): %s", e)
 
         # 质量过滤（Tier 0 / official 状态豁免）
         before_quality = len(canonical_events)

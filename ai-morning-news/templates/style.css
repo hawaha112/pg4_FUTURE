@@ -167,6 +167,34 @@ body {
     .jc-body { font-size: 12.5px; }
 }
 
+/* ═════ 外部热度信号标签 (P2) ═════ */
+.hot-pills {
+    display: flex; flex-wrap: wrap; gap: 5px;
+    margin: 6px 0 4px;
+}
+.hot-pill {
+    display: inline-flex; align-items: center;
+    padding: 2px 7px; border-radius: 10px;
+    font-size: 10px; font-weight: 600;
+    text-decoration: none;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    color: var(--text-70, #b6bdcb);
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.hot-pill:hover {
+    transform: translateY(-1px);
+    background: rgba(255,255,255,0.08);
+}
+.hp-hn { color: #ff7a00; border-color: rgba(255,122,0,0.25); }
+.hp-hn:hover { background: rgba(255,122,0,0.10); border-color: rgba(255,122,0,0.45); }
+.hp-reddit { color: #ff4500; border-color: rgba(255,69,0,0.25); }
+.hp-reddit:hover { background: rgba(255,69,0,0.10); border-color: rgba(255,69,0,0.45); }
+.hp-hf { color: #ffd21e; border-color: rgba(255,210,30,0.25); }
+.hp-hf:hover { background: rgba(255,210,30,0.10); border-color: rgba(255,210,30,0.45); }
+.hp-gh { color: #aaa; border-color: rgba(255,255,255,0.12); }
+.hp-gh:hover { background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.28); }
+
 /* ═════ Featured Section (Importance >= 4) ═════ */
 .featured-section {
     max-width: 1120px; margin: 28px auto 0; padding: 0 20px;

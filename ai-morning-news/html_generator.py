@@ -497,6 +497,43 @@ def generate_html(all_items, config, digest=None, meta=None):
             n = max(cluster_size, report_count)
             multi_pill = f'<span class="src-pill" title="共 {n} 个来源报道同一事件">📡 {n} 源</span>'
 
+        # 外部热度信号 pill (P2): HN/Reddit/HF/GitHub 关联结果
+        ext_signals = item.get('_external_signals') or {}
+        hot_pills_html = ''
+        if ext_signals:
+            pill_parts = []
+            if 'hn' in ext_signals:
+                pts = int(ext_signals['hn'].get('points') or 0)
+                hn_url = _safe_escape(ext_signals['hn'].get('url') or '#')
+                pill_parts.append(
+                    f'<a class="hot-pill hp-hn" target="_blank" rel="noopener" '
+                    f'href="{hn_url}" title="HN {pts} 分">🔥 HN {pts}</a>'
+                )
+            if 'reddit' in ext_signals:
+                sub = _safe_escape(ext_signals['reddit'].get('subreddit') or 'reddit')
+                r_url = _safe_escape(ext_signals['reddit'].get('url') or '#')
+                pill_parts.append(
+                    f'<a class="hot-pill hp-reddit" target="_blank" rel="noopener" '
+                    f'href="{r_url}" title="r/{sub} hot">💬 r/{sub}</a>'
+                )
+            if 'hf' in ext_signals:
+                likes = int(ext_signals['hf'].get('likes') or 0)
+                hf_url = _safe_escape(ext_signals['hf'].get('url') or '#')
+                pill_parts.append(
+                    f'<a class="hot-pill hp-hf" target="_blank" rel="noopener" '
+                    f'href="{hf_url}" title="HuggingFace {likes} 个 likes">⭐ HF {likes}</a>'
+                )
+            if 'github' in ext_signals:
+                stars = int(ext_signals['github'].get('stars') or 0)
+                stars_disp = f'{stars // 1000}K' if stars >= 1000 else str(stars)
+                gh_url = _safe_escape(ext_signals['github'].get('url') or '#')
+                pill_parts.append(
+                    f'<a class="hot-pill hp-gh" target="_blank" rel="noopener" '
+                    f'href="{gh_url}" title="GitHub {stars} stars">🐙 {stars_disp}</a>'
+                )
+            if pill_parts:
+                hot_pills_html = '<div class="hot-pills">' + ''.join(pill_parts) + '</div>'
+
         # data-audience 属性
         aud_list = analysis.get('audience', []) or ['general']
         aud_data = '|'.join(a for a in aud_list if a in AUDIENCE_LABELS) or 'general'
@@ -511,6 +548,7 @@ def generate_html(all_items, config, digest=None, meta=None):
                 {z1_html}
                 {title_html}
                 {z3_html}
+                {hot_pills_html}
                 {z5_html}
             </div>
         </div>'''

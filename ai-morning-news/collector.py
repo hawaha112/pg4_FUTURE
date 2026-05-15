@@ -605,6 +605,16 @@ def main():
 
     store.close()
 
+    # ── 抓取外部热度信号 (HN / Reddit / HF / GitHub) ──
+    # 信号会持久化到 output/hot_signals.json, 供 renderer 加载做 importance boost
+    # 注意: 失败不阻塞 collector 流水线 (函数内部已捕获所有异常)
+    try:
+        from extractors.hot_signals import fetch_all_hot_signals
+        hot_signals_path = Path(__file__).parent / 'output' / 'hot_signals.json'
+        fetch_all_hot_signals(save_path=hot_signals_path)
+    except Exception as e:
+        log.warning("⚠️ 热度信号抓取异常 (不阻塞): %s", e)
+
     log.info("=" * 55)
     log.info("✅ 采集完成: 抓取 %d, 新增 %d, 分析 %d, "
              "事件新建 %d / 更新 %d",
