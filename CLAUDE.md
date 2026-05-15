@@ -1,13 +1,13 @@
 # 项目部署与运维快照
 
-> 给后续 Claude session 看的"项目当前状态备忘"。最后更新：2026-05-11。
+> 给后续 Claude session 看的"项目当前状态备忘"。最后更新：2026-05-15。
 > 业务/代码细节看 [ai-morning-news/README.md](ai-morning-news/README.md) 和 [ai-morning-news/ARCHITECTURE.md](ai-morning-news/ARCHITECTURE.md)。
 
 ---
 
 ## 🎯 当前部署架构（一句话）
 
-**仅云端运行**：GitHub Actions cron 是唯一的定时触发源；本地 macOS launchd 任务已 `unload`，但 plist 文件**保留**（随时可挂回）。
+**云端 + Anthropic Routine 触发**：早晚班的定时触发改由 [Anthropic Routine](https://claude.ai/code/routines)（remote agent）调用 GitHub workflow_dispatch API 触发；GitHub Actions schedule 已禁用以避免双触发。本地 macOS launchd 已 `unload`（plist 文件保留）。
 
 笔记本合上/关机/睡眠都不影响每日早报、晚报、周报的生成与推送。
 
@@ -15,14 +15,18 @@
 
 ## 📅 自动调度时刻表
 
-| Workflow | Cron (UTC) | 北京时间 | 文件 |
+| 触发 | 北京时间 | 触发源 | 备注 |
 |---|---|---|---|
-| AI Morning Briefing (早班) | `0 22 * * *` | 06:00 | [.github/workflows/morning-briefing.yml](.github/workflows/morning-briefing.yml) |
-| AI Morning Briefing (晚班) | `0 10 * * *` | 18:00 | 同上 |
-| AI Weekly Report | `0 10 * * 0` | 周日 18:00 | [.github/workflows/weekly-report.yml](.github/workflows/weekly-report.yml) |
+| AI Morning Briefing (早班) | 06:00 ± 5-12 分钟 | **Anthropic Routine** `trig_011wSBtNNApn5X4aWEeFUmFq` | 调 workflow_dispatch API |
+| AI Morning Briefing (晚班) | 18:00 ± 5-12 分钟 | **Anthropic Routine** `trig_01XkWy5x1jWvE3yNaEWbb1AP` | 调 workflow_dispatch API |
+| AI Weekly Report | 周日 18:00 | GitHub Actions cron `0 10 * * 0` | 仍走 GH 原生 schedule |
 | Dispatch TG | 手动 | — | [.github/workflows/dispatch-tg.yml](.github/workflows/dispatch-tg.yml) |
 
-⚠️ **GitHub Actions cron 是 best-effort**，实测会延迟 30 分钟到几小时不等。已在 [briefing_renderer.py](ai-morning-news/briefing_renderer.py) 内加了"窗口截止时间自动延展到渲染时刻"的保护（commit `2a9e02c`）。
+**实测准时性**：Anthropic Routine 早班 5/13/14/15 都在 06:05-06:12 触发（精度 5-12 分钟），对比之前 GH Actions schedule 的 30-90 分钟延迟改善显著。
+
+⚠️ Routine 内部用 fine-grained PAT 调 GH API（PAT `claude-routine-pg4future-trigger`，权限 Actions: read/write，scope pg4_FUTURE，**30 天过期** — 6/14/2026 需续期）。
+
+⚠️ **GitHub Actions schedule 已注释**（[morning-briefing.yml:29-35](.github/workflows/morning-briefing.yml)），原因避免双触发。但 [briefing_renderer.py](ai-morning-news/briefing_renderer.py) 的"窗口截止时间自动延展"（commit `2a9e02c`）保留作为兜底防御 — 如果未来某天 routine 也延迟，仍能正确处理。
 
 ---
 
@@ -45,6 +49,24 @@ gh secret set CLAUDE_CODE_OAUTH_TOKEN -R hawaha112/pg4_FUTURE             # 更�
 ```
 
 run_daily.sh 启动时会跑 `Probe LLM token (fail-fast on 401)`，token 失效会立刻发 TG 告警。
+
+### 🔁 Anthropic Routine 用的 GitHub PAT（独立于上面 5 个 secret）
+
+Routine 调 `workflow_dispatch` API 需要的 PAT **嵌入在 routine prompt 里**（不是 GH secret）：
+
+| 字段 | 值 |
+|---|---|
+| 名称 | `claude-routine-pg4future-trigger` |
+| 类型 | Fine-grained PAT |
+| 权限 | Actions: Read and write + Metadata: Read-only |
+| 仓库 scope | hawaha112/pg4_FUTURE |
+| 过期 | 2026-06-14（30 天，**到期前需续期**） |
+| 管理位置 | https://github.com/settings/personal-access-tokens |
+
+**续期流程**：
+1. 在 https://github.com/settings/personal-access-tokens 找到 `claude-routine-pg4future-trigger`
+2. Regenerate（或新建一个同样配置的 PAT）
+3. 在 https://claude.ai/code/routines 编辑两个 routine 的 prompt，把里面的 `Authorization: Bearer github_pat_...` 替换为新 PAT
 
 ---
 
