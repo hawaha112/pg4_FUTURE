@@ -394,13 +394,18 @@ def _render_week_entities(script_dir: Path) -> str:
         return ''
 
     entities = registry.get('entities', [])
-    patterns = []  # [(name, compiled_pattern)]
+    patterns = []  # [(id, name, icon, compiled_pattern)]
     for e in entities:
         kws = e.get('keywords') or []
         if not kws:
             continue
         pat = _re.compile('|'.join(_re.escape(k) for k in kws), _re.IGNORECASE)
-        patterns.append((e.get('name') or e.get('id'), pat))
+        patterns.append((
+            e.get('id') or e.get('name', '').lower().replace(' ', '_'),
+            e.get('name') or e.get('id'),
+            e.get('icon') or '🏢',
+            pat,
+        ))
 
     if not patterns:
         return ''
@@ -422,35 +427,48 @@ def _render_week_entities(script_dir: Path) -> str:
     if not rows:
         return ''
 
+    # counts 形式: {id: {'name': ..., 'icon': ..., 'count': N}}
     counts = {}
     for title, ct, sm in rows:
         text = ' '.join(filter(None, [title, ct, sm]))
         if not text:
             continue
-        for name, pat in patterns:
+        for eid, name, icon, pat in patterns:
             if pat.search(text):
-                counts[name] = counts.get(name, 0) + 1
+                if eid not in counts:
+                    counts[eid] = {'name': name, 'icon': icon, 'count': 0}
+                counts[eid]['count'] += 1
 
     if not counts:
         return ''
 
-    sorted_e = sorted(counts.items(), key=lambda x: -x[1])[:12]
-    max_n = sorted_e[0][1]
+    sorted_e = sorted(counts.items(), key=lambda x: -x[1]['count'])[:12]
+    max_n = sorted_e[0][1]['count']
 
+    # P1: 每个 chip 是 entities/{id}-30d.html 时间线链接
+    # 主流量从 archive/dashboard.html 进入 → 用 ../entities/ 相对路径
     chips = []
-    for name, n in sorted_e:
-        # 字号 13–22 px，亮度 0.55–1.0
+    for eid, info in sorted_e:
+        name = info['name']
+        icon = info['icon']
+        n = info['count']
         size = 13 + int(round((n / max_n) * 9))
         intensity = 0.55 + (n / max_n) * 0.45
         chips.append(
-            f'<span class="ent-chip" style="font-size:{size}px;opacity:{intensity:.2f}">'
-            f'{escape(name)}<span class="ent-count">×{n}</span>'
-            f'</span>'
+            f'<a class="ent-chip ent-chip-link" '
+            f'href="../entities/{escape(eid)}-30d.html" '
+            f'title="打开 {escape(name)} 30 天动态时间线" '
+            f'style="font-size:{size}px;opacity:{intensity:.2f}">'
+            f'<span class="ec-icon">{escape(icon)}</span>'
+            f'{escape(name)}'
+            f'<span class="ent-count">×{n}</span>'
+            f'</a>'
         )
 
     total_articles = len(rows)
     return (
         f'<div class="section-title">🏷️ 本周焦点实体 · {total_articles} 篇文章累积</div>'
+        f'<div class="section-hint">点击进入该实体的 30 天动态时间线</div>'
         f'<div class="ent-chips">{" ".join(chips)}</div>'
     )
 
@@ -1082,9 +1100,20 @@ def main():
     background: rgba(120,200,255,0.08);
     border: 1px solid rgba(120,200,255,0.18);
     color: var(--text-100); font-weight: 500;
-    transition: background 0.15s;
+    transition: background 0.15s, border-color 0.15s, transform 0.12s;
   }}
   .ent-chip:hover {{ background: rgba(120,200,255,0.16); }}
+  /* P1 chip 升级为 link, 加 icon + hover 上浮提示可点 */
+  a.ent-chip-link {{
+    display: inline-flex; align-items: center; gap: 5px;
+    text-decoration: none; cursor: pointer;
+  }}
+  a.ent-chip-link:hover {{
+    transform: translateY(-1px);
+    border-color: var(--accent, #66c0ff);
+    background: rgba(102,192,255,0.16);
+  }}
+  .ec-icon {{ font-size: 0.95em; line-height: 1; }}
   .ent-count {{
     margin-left: 5px; font-size: 0.78em;
     color: var(--text-50); font-weight: 400;

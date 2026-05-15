@@ -251,9 +251,15 @@ echo "  页面渲染完成" >> "$LOG_FILE"
 "$PYTHON" -u "$PROJECT_DIR/dashboard_generator.py" >> "$LOG_FILE" 2>&1 || \
     echo "  ⚠️ dashboard 生成失败，跳过" >> "$LOG_FILE"
 # 同时放一份到 output/archive/（走 workflow 白名单 archive/** 部署，避免改 deploy.yml）
+# dashboard 默认实体链接是 ../entities/ (适配 archive/dashboard.html 视角).
+# 根目录 dashboard.html 视角下要去掉 .. — sed 替换 ../entities/ → entities/.
 if [ -f "$PROJECT_DIR/output/dashboard.html" ]; then
     mkdir -p "$PROJECT_DIR/output/archive"
+    # archive 版: 默认相对路径正确, 直接 cp
     cp "$PROJECT_DIR/output/dashboard.html" "$PROJECT_DIR/output/archive/dashboard.html"
+    # 根目录版: 修正实体链接 ../entities/ → entities/
+    sed -i.bak 's|href="\.\./entities/|href="entities/|g' "$PROJECT_DIR/output/dashboard.html"
+    rm -f "$PROJECT_DIR/output/dashboard.html.bak"
 fi
 
 # ────────────────────────────────────────────────
