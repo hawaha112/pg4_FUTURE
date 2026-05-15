@@ -319,11 +319,13 @@ if [ -f "$STATS_FILE" ]; then
     LLM_COVERAGE=$("$PYTHON" -c "import json; print(json.load(open('$STATS_FILE')).get('llm_coverage', ''))" 2>/dev/null || echo "")
     LLM_COUNT=$("$PYTHON" -c "import json; print(json.load(open('$STATS_FILE')).get('llm_count', ''))" 2>/dev/null || echo "")
     MULTI_SRC_COUNT=$("$PYTHON" -c "import json; print(json.load(open('$STATS_FILE')).get('multi_source_count', ''))" 2>/dev/null || echo "")
+    IMP_COUNT=$("$PYTHON" -c "import json; print(json.load(open('$STATS_FILE')).get('important_count', 0))" 2>/dev/null || echo "0")
 else
     ARTICLE_COUNT="?"
     LLM_COVERAGE=""
     LLM_COUNT=""
     MULTI_SRC_COUNT=""
+    IMP_COUNT="0"
 fi
 
 HEALTH_WARNING=""
@@ -457,33 +459,39 @@ fi
 SRC_LINE="📡 源健康: ${SRC_OK} OK / ${SRC_FAIL} 告警 / ${SRC_DEAD} 死源"
 
 if [ "$DEPLOY_OK" = true ]; then
-    # 消息 1：早报主体（内容摘要 + 阅读/归档链接）
-    send_tg "<b>AI 早报 · ${TODAY} · ${SHIFT_LABEL}</b>
+    # 单条精简推送: 核心指标一行 + 一个仪表盘入口
+    # (用户从仪表盘的"今日早班/晚班"卡进当天早报/晚报, 不再分两条 TG 消息)
+    LLM_PCT_INLINE=""
+    if [ -n "$LLM_COVERAGE" ]; then
+        LLM_PCT_INLINE=" · 🧠 LLM $("$PYTHON" -c "print(round(float('$LLM_COVERAGE')*100))" 2>/dev/null || echo '?')%"
+    fi
+    MULTI_INLINE=""
+    if [ -n "$MULTI_SRC_COUNT" ] && [ "$MULTI_SRC_COUNT" != "0" ]; then
+        MULTI_INLINE=" · 🔗 多源 <b>${MULTI_SRC_COUNT}</b>"
+    fi
+    IMP_INLINE=""
+    if [ -n "$IMP_COUNT" ] && [ "$IMP_COUNT" != "0" ]; then
+        IMP_INLINE=" · ⭐ 重要 <b>${IMP_COUNT}</b>"
+    fi
+    WARN_BLOCK=""
+    if [ -n "$NO_LLM" ] || [ -n "$LLM_COVERAGE_WARNING" ] || [ -n "$HEALTH_WARNING" ]; then
+        WARN_BLOCK=$'\n'
+        [ -n "$NO_LLM" ] && WARN_BLOCK="${WARN_BLOCK}⚠️ LLM 服务不可用,本次跳过深度分析"$'\n'
+        [ -n "$LLM_COVERAGE_WARNING" ] && WARN_BLOCK="${WARN_BLOCK}${LLM_COVERAGE_WARNING}"$'\n'
+        [ -n "$HEALTH_WARNING" ] && WARN_BLOCK="${WARN_BLOCK}⚠️ ${HEALTH_WARNING}"$'\n'
+    fi
 
-📊 本班次共收录 <b>${ARTICLE_COUNT}</b> 条 AI 资讯（近 12h）
-${LLM_COVERAGE_LINE:+🧠 ${LLM_COVERAGE_LINE}
-}${MULTI_SRC_COUNT:+🔗 多源交叉确认: <b>${MULTI_SRC_COUNT}</b> 个事件
-}${NO_LLM:+⚠️ LLM 服务不可用，本次跳过了深度分析
-}${LLM_COVERAGE_WARNING:+${LLM_COVERAGE_WARNING}
-}${HEALTH_WARNING:+⚠️ ${HEALTH_WARNING}
-}
-<a href=\"${BRIEFING_URL}\">📖 阅读最新早报</a>
-<a href=\"${ARCHIVE_URL}\">📂 本班次归档</a>"
+    send_tg "<b>${SHIFT_LABEL} · ${TODAY}</b>
 
-    # 消息 2：跑步仪表盘（独立推送，健康指标 + 趋势链接）
-    send_tg "<b>📊 跑步仪表盘 · ${TODAY}</b>
-
-本次运行 ✅ 正常
-${SRC_LINE}
-${DURATION_LINE}
-
-<a href=\"${BRIEFING_URL%/}/archive/dashboard.html\">📈 查看完整趋势仪表盘</a>"
+📊 收录 <b>${ARTICLE_COUNT}</b> 条${IMP_INLINE}${MULTI_INLINE}${LLM_PCT_INLINE}
+${SRC_LINE}${WARN_BLOCK}
+<a href=\"${BRIEFING_URL%/}/archive/dashboard.html\">📈 打开仪表盘 → 早报 / 晚报 / 历史</a>"
 else
-    send_tg "<b>AI 早报 · ${TODAY} · ${SHIFT_LABEL}</b>
+    send_tg "<b>${SHIFT_LABEL} · ${TODAY}</b>
 
-已渲染 ${ARTICLE_COUNT} 条资讯，但 <b>部署失败</b>
-${DURATION_LINE}
+⚠️ 已渲染 ${ARTICLE_COUNT} 条但 <b>部署失败</b>
 ${SRC_LINE}
+${DURATION_LINE}
 
 请检查 git 配置 / 日志"
 fi
