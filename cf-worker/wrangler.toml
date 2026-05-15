@@ -1,0 +1,24 @@
+name = "pg4-future-cron-trigger"
+main = "src/index.js"
+compatibility_date = "2026-05-12"
+
+# 工作流: CF Worker 自家 cron 精准触发, 调 GH workflow_dispatch API.
+# 写 UTC, 不写北京时间.
+# 0 22 * * *  = UTC 22:00 = 北京 06:00 (早班)
+# 0 10 * * *  = UTC 10:00 = 北京 18:00 (晚班)
+#
+# CF Worker cron 触发延迟通常 < 30 秒(对比 GH Actions 整点 cron 延迟 30-90 分钟).
+[triggers]
+crons = ["0 22 * * *", "0 10 * * *"]
+
+# 不需要绑定其他资源(KV/D1/R2 等), worker 只做 outbound HTTP 调用.
+# Secrets 用 `wrangler secret put` 注入(见 SETUP.md):
+#   - GITHUB_PAT       (必须, fine-grained PAT 权限 Actions: write)
+#   - TG_BOT_TOKEN     (可选, 触发失败时告警)
+#   - TG_CHAT_ID       (可选, 同上)
+#   - TRIGGER_TOKEN    (可选, 给 fetch handler 加 Bearer 鉴权, 防公网滥用)
+
+# 免费层限制(均远超本项目用量):
+# - 100k 次请求/天 (我们: 2 次 cron + 偶尔手动 = ~3 次/天)
+# - 单次 CPU 30s (我们: 1 次 HTTP 调用 < 500ms)
+# - 3 个 cron trigger (我们: 2 个 ✓)
