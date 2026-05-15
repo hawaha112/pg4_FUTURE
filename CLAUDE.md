@@ -19,7 +19,7 @@
 |---|---|---|---|
 | AI Morning Briefing (早班) | 06:00 ± 5-12 分钟 | **Anthropic Routine** `trig_011wSBtNNApn5X4aWEeFUmFq` | 调 workflow_dispatch API |
 | AI Morning Briefing (晚班) | 18:00 ± 5-12 分钟 | **Anthropic Routine** `trig_01XkWy5x1jWvE3yNaEWbb1AP` | 调 workflow_dispatch API |
-| AI Weekly Report | 周日 18:00 | GitHub Actions cron `0 10 * * 0` | 仍走 GH 原生 schedule |
+| AI Weekly Report | 周日 18:00 ± 5-12 分钟 | **Anthropic Routine** `trig_011CqZKH3cDC55G5CRcyijU7` | 调 workflow_dispatch API |
 | Dispatch TG | 手动 | — | [.github/workflows/dispatch-tg.yml](.github/workflows/dispatch-tg.yml) |
 
 **实测准时性**：Anthropic Routine 早班 5/13/14/15 都在 06:05-06:12 触发（精度 5-12 分钟），对比之前 GH Actions schedule 的 30-90 分钟延迟改善显著。

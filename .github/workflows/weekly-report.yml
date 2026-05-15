@@ -13,8 +13,11 @@ on:
         description: 'Number of days to look back (default 7)'
         type: string
         default: '7'
-  schedule:
-    - cron: '0 10 * * 0'   # 北京周日 18:00
+  # ⚠️ GH Actions schedule 已禁用 (2026-05-15). 触发改由 Anthropic Routine 走
+  # workflow_dispatch — 同 morning-briefing 一致 (Routine 触发 + GH Runner 执行).
+  # Routine ID: trig_011CqZKH3cDC55G5CRcyijU7. 详情见 CLAUDE.md.
+  # schedule:
+  #   - cron: '0 10 * * 0'   # 北京周日 18:00
 
 concurrency:
   group: ai-weekly-report
