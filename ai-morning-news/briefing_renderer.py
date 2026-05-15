@@ -399,6 +399,23 @@ def main():
             log.info("🧹 质量过滤移除 %d 条（Tier 0 豁免）", quality_dropped)
         events = filtered_events
 
+        # ── 关联外部热度信号 (fallback 文章模式也跑, 之前只在 canonical 分支生效) ──
+        try:
+            from external_signal_matcher import load_hot_signals, enrich_events_with_signals
+            # matcher 期望字段叫 canonical_url, article 用 url, 加 alias
+            for ev in events:
+                if 'canonical_url' not in ev:
+                    ev['canonical_url'] = ev.get('url', '')
+            hot_signals = load_hot_signals(script_dir / 'output' / 'hot_signals.json')
+            events, _signal_stats = enrich_events_with_signals(events, hot_signals)
+            # 把 boost 后的 importance 写回
+            for ev in events:
+                eff = ev.get('effective_importance')
+                if eff is not None and eff > (ev.get('importance') or 0):
+                    ev['importance'] = eff
+        except Exception as e:
+            log.warning("⚠️ 外部信号关联失败 (fallback 模式, 不阻塞): %s", e)
+
         all_items = []
         for event in events:
             item = {
@@ -417,6 +434,8 @@ def main():
                 'analysis': event.get('analysis', {}),
                 '_is_new': True,
                 '_event_id': event.get('id', ''),
+                # 把外部热度信号传给 UI 渲染
+                '_external_signals': event.get('external_signals', {}),
             }
             all_items.append(item)
 
