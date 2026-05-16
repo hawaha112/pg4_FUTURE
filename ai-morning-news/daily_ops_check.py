@@ -125,7 +125,10 @@ def check_pat_expiry() -> list[str]:
             if days_left <= PAT_EXPIRY_WARN_DAYS:
                 return [f"🔑 <b>PAT 剩 {days_left} 天过期</b> ({exp_dt.strftime('%Y-%m-%d')}) — 须 <a href='https://github.com/settings/personal-access-tokens'>续期</a>"]
     except (urllib.error.URLError, urllib.error.HTTPError, ValueError) as e:
-        return [f"⚠️ PAT 自检失败: {str(e)[:60]}"]
+        # 自检失败不当作问题告警 (避免日复一日噪音):
+        # - GH Actions 默认 GITHUB_TOKEN 没 user.read 权限, /user 返回 403
+        # - 如果未来想真正自检 PAT 过期, 需要单独配 PAT (例如 GH_PAT_FOR_OPS secret)
+        log.info("PAT 自检跳过 (token 无 user 权限或异常): %s", str(e)[:80])
     return []
 
 
