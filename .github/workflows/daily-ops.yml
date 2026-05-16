@@ -29,7 +29,11 @@ jobs:
       TZ: Asia/Shanghai
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
       TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-      # GITHUB_TOKEN 是 GH Actions 默认的, 用于检查 briefing-state freshness
+      # 给 Python 脚本: 链式触发 auto-fix workflow + briefing-state freshness 检查
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # 给 gh CLI 用 (gh 自动认 GH_TOKEN)
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # 兼容旧名 (PAT 自检)
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
 
     steps:

@@ -183,20 +183,32 @@ def _trigger_auto_fix_workflow() -> bool:
 
 
 def _open_issue(title: str, body: str, labels: list[str]) -> bool:
-    """用 gh CLI 开 issue (workflow 内 gh CLI 已认证)."""
+    """用 gh CLI 开 issue (workflow 内 gh CLI 用 GH_TOKEN env 认证).
+
+    label 不存在时降级到不带 label 重试 (避免因为 repo 没建过 label 就失败).
+    """
     import subprocess
-    try:
-        subprocess.run(
-            ['gh', 'issue', 'create',
-             '--repo', 'hawaha112/pg4_FUTURE',
-             '--title', title, '--body', body,
-             '--label', ','.join(labels)],
-            check=True, capture_output=True
+    base_args = [
+        'gh', 'issue', 'create',
+        '--repo', 'hawaha112/pg4_FUTURE',
+        '--title', title, '--body', body,
+    ]
+    # 第 1 次: 带 label
+    if labels:
+        result = subprocess.run(
+            base_args + ['--label', ','.join(labels)],
+            capture_output=True, text=True
         )
+        if result.returncode == 0:
+            return True
+        log.info("带 label 开 issue 失败 (label 可能不存在), 降级重试无 label: %s",
+                 (result.stderr or '')[:120])
+    # 第 2 次: 无 label
+    result = subprocess.run(base_args, capture_output=True, text=True)
+    if result.returncode == 0:
         return True
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        log.warning("开 issue 失败: %s", e)
-        return False
+    log.warning("开 issue 失败 (无 label 也失败): %s", (result.stderr or '')[:200])
+    return False
 
 
 def main():
