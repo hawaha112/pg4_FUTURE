@@ -31,10 +31,12 @@ jobs:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
+      - uses: actions/checkout@v4    # main 代码到默认 . (含 daily_ops_check.py)
+
       - uses: actions/checkout@v4
         with:
-          ref: briefing-state    # 直接 checkout 状态分支, 拿最新 events.db
-          path: state
+          ref: briefing-state         # 状态分支到 _state/ 子目录
+          path: _state
 
       - uses: actions/setup-python@v5
         with:
@@ -42,10 +44,12 @@ jobs:
 
       - name: Run daily ops check
         run: |
-          # 把 state 分支的 events.db 复制到 main 代码的预期路径
-          if [ -f state/ai-morning-news/events.db ]; then
-            cp state/ai-morning-news/events.db ai-morning-news/events.db
+          # 把 state 分支的 events.db 拷到主代码预期路径
+          if [ -f _state/ai-morning-news/events.db ]; then
+            cp _state/ai-morning-news/events.db ai-morning-news/events.db
             echo "✓ 加载 events.db ($(du -h ai-morning-news/events.db | cut -f1))"
+          else
+            echo "⚠️ briefing-state 上没找到 events.db, 跳过 source_health 检查"
           fi
           cd ai-morning-news
           python3 daily_ops_check.py
