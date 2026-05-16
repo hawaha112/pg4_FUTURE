@@ -55,26 +55,68 @@ TG_CHAT_ID = os.environ.get('TG_CHAT_ID', '')
 BRIEFING_URL = (os.environ.get('BRIEFING_URL', '') or '').rstrip('/')
 
 
+def _get_state_store():
+    """懒初始化 StateStore (events.db 优先, 共享 SOT)."""
+    from state_store import StateStore
+    db_path = SCRIPT_DIR / 'events.db'
+    return StateStore(db_path)
+
+
 def _load_pushed() -> dict:
-    """加载去重历史 + 清理 TTL 之外的条目."""
-    if not PUSHED_PATH.exists():
-        return {}
+    """加载去重历史 (DB 主 + JSON fallback 兼容旧版).
+
+    SOT 升级 (2026-05-16): 主存 events.db.pushed_breaking. JSON 仅在 DB 空时
+    一次性回迁历史数据.
+    """
     try:
-        data = json.loads(PUSHED_PATH.read_text(encoding='utf-8'))
-        if not isinstance(data, dict):
-            return {}
-        cutoff = (
-            datetime.now(timezone.utc) - timedelta(hours=DEDUP_TTL_HOURS)
-        ).isoformat()
-        return {
-            k: v for k, v in data.items()
-            if isinstance(v, dict) and v.get('pushed_at', '') >= cutoff
-        }
-    except (json.JSONDecodeError, OSError):
-        return {}
+        store = _get_state_store()
+        db_data = store.load_pushed_breaking(ttl_hours=DEDUP_TTL_HOURS)
+        if db_data:
+            return db_data
+    except Exception as e:
+        log.warning("⚠️ DB load pushed_breaking 失败 (回退 JSON): %s", e)
+
+    # DB 空 → 兼容回退 JSON
+    if PUSHED_PATH.exists():
+        try:
+            data = json.loads(PUSHED_PATH.read_text(encoding='utf-8'))
+            if not isinstance(data, dict):
+                return {}
+            cutoff = (
+                datetime.now(timezone.utc) - timedelta(hours=DEDUP_TTL_HOURS)
+            ).isoformat()
+            valid = {
+                k: v for k, v in data.items()
+                if isinstance(v, dict) and v.get('pushed_at', '') >= cutoff
+            }
+            # 顺手迁到 DB
+            if valid:
+                try:
+                    store = _get_state_store()
+                    for sid, info in valid.items():
+                        store.mark_breaking_pushed(
+                            sig_id=sid,
+                            source=info.get('source', 'unknown'),
+                            title=info.get('title', ''),
+                            url=info.get('url', ''),
+                            score=info.get('score', 0),
+                        )
+                    log.info("✓ 首次升级: 已迁 %d 条突发去重历史从 JSON → DB",
+                             len(valid))
+                except Exception as e:
+                    log.warning("⚠️ JSON→DB 迁移失败: %s", e)
+            return valid
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
 
 
 def _save_pushed(pushed: dict) -> None:
+    """主写 DB, 兼容写 JSON (旧 reader 保留一段时间).
+
+    注意: 这个函数被调用时 pushed 已包含本次新推 + 历史. 为了避免 DB 重复 upsert
+    所有历史 (浪费), 改为 caller 通过 _mark_pushed_one() 增量写, 这里只保 JSON 兼容.
+    """
     PUSHED_PATH.parent.mkdir(parents=True, exist_ok=True)
     try:
         PUSHED_PATH.write_text(
@@ -82,7 +124,15 @@ def _save_pushed(pushed: dict) -> None:
             encoding='utf-8'
         )
     except OSError as e:
-        log.warning("⚠️ 保存 pushed_breaking.json 失败: %s", e)
+        log.warning("⚠️ 保存 pushed_breaking.json 失败 (DB 已更新, 可忽略): %s", e)
+
+
+def _mark_pushed_one(sig_id: str, source: str, title: str, url: str, score: int) -> None:
+    """单条推送后立即写 DB (主路径)."""
+    try:
+        _get_state_store().mark_breaking_pushed(sig_id, source, title, url, score)
+    except Exception as e:
+        log.warning("⚠️ DB mark_breaking_pushed 失败: %s", e)
 
 
 def _detect_breaking() -> list:
@@ -210,18 +260,27 @@ def main() -> int:
         if not msg:
             continue
         if _send_tg(msg):
+            score_val = (
+                sig.get('points')
+                or sig.get('likes')
+                or sig.get('stars')
+                or 0
+            )
             pushed[sid] = {
                 'pushed_at': datetime.now(timezone.utc).isoformat(),
                 'source': sig.get('_source'),
                 'title': sig.get('title', '')[:120],
                 'url': sig.get('url', ''),
-                'score': (
-                    sig.get('points')
-                    or sig.get('likes')
-                    or sig.get('stars')
-                    or 0
-                ),
+                'score': score_val,
             }
+            # 主路径: 立即写 DB (SOT)
+            _mark_pushed_one(
+                sig_id=sid,
+                source=sig.get('_source', 'unknown'),
+                title=sig.get('title', ''),
+                url=sig.get('url', ''),
+                score=score_val,
+            )
             new_pushes.append(sid)
             log.info("  ✅ 已推送: %s", sig.get('title', '')[:60])
 

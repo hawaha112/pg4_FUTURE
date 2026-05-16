@@ -12,6 +12,7 @@ import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 from logger import get_logger
 
@@ -19,30 +20,73 @@ log = get_logger('health_tracker')
 
 
 class SourceHealthTracker:
-    """跟踪每个源的抓取健康状态，含响应时间、成功率等指标，连续失败超过阈值时报警"""
+    """跟踪每个源的抓取健康状态，含响应时间、成功率等指标，连续失败超过阈值时报警.
 
-    def __init__(self, health_path: str, alert_threshold: int = 3):
+    SOT 升级 (2026-05-16): 数据从 source_health.json 迁入 events.db.source_health 表.
+    - 写入: 同时写 DB (主) + JSON (兼容旧 reader, 一段时间后可删).
+    - 读取: 优先 DB; DB 空时回退 JSON (帮助首次升级时不丢历史).
+    """
+
+    def __init__(self, health_path: str, alert_threshold: int = 3,
+                 db_path: Optional[str] = None):
         self.health_path = Path(health_path)
         self.alert_threshold = alert_threshold
+        # SOT: events.db (与 EventStore 共用)
+        if db_path is None:
+            # 默认: source_health.json 同目录的 events.db
+            db_path = str(self.health_path.parent / 'events.db')
+        self.db_path = db_path
+        self._store = None  # 懒加载, 避免 import 循环
         self.data = self._load()
         # 运行时计时器
         self._timers: dict = {}
 
+    def _get_store(self):
+        """懒初始化 StateStore (避免 import 时 sqlite 表自动创建副作用)."""
+        if self._store is None:
+            from state_store import StateStore
+            self._store = StateStore(self.db_path)
+        return self._store
+
     def _load(self) -> dict:
+        """优先从 DB 读, DB 空 (首次升级) 时回退 JSON 一次以保留历史."""
+        try:
+            db_data = self._get_store().load_source_health()
+            if db_data:
+                return db_data
+        except Exception as e:
+            log.warning("⚠️ DB load source_health 失败 (回退 JSON): %s", e)
+
+        # DB 空 → 回退 JSON (兼容旧版升级路径)
         if self.health_path.exists():
             try:
                 with open(self.health_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    json_data = json.load(f)
+                # 顺手把 JSON 数据迁到 DB (一次性)
+                if json_data:
+                    try:
+                        self._get_store().save_source_health_bulk(json_data)
+                        log.info("✓ 首次升级: 已迁 %d 条信源健康从 JSON → DB",
+                                 len(json_data))
+                    except Exception as e:
+                        log.warning("⚠️ JSON→DB 迁移失败: %s", e)
+                return json_data
             except (json.JSONDecodeError, OSError):
                 pass
         return {}
 
     def save(self):
+        # 主写: DB
+        try:
+            self._get_store().save_source_health_bulk(self.data)
+        except Exception as e:
+            log.warning("⚠️ DB 保存信源健康失败: %s", e)
+        # 兼容写: JSON (一段时间后可删, 给老代码读)
         try:
             with open(self.health_path, 'w', encoding='utf-8') as f:
                 json.dump(self.data, f, ensure_ascii=False, indent=2)
         except OSError as e:
-            log.warning("⚠️ 健康度数据保存失败: %s", e)
+            log.warning("⚠️ JSON 兼容写入失败 (DB 已写, 可忽略): %s", e)
 
     def start_timer(self, source_name: str):
         """开始计时（在 fetch 之前调用）"""
