@@ -574,7 +574,7 @@
         "name": "36氪",
         "tier": 2,
         "category": "industry",
-        "url": "https://36kr.com/feed",
+        "url": "http://36kr.com/feed",
         "icon": "💼",
         "color": "#0066FF",
         "description": "36氪官方 feed (科技产业与创投)",
