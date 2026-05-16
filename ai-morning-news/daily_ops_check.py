@@ -1,18 +1,20 @@
 """
-daily_ops_check.py — 每日运维健康检查 (架构师视角)
+daily_ops_check.py — 每日运维健康检查 (自治版)
 
-每天跑一次, 检查可能"静默坏掉"的几件事, 命中异常立即推 TG.
+设计哲学升级 (2026-05-16):
+- 用户只看研究成果, 不看 raw 运维告警
+- 检测到死源 → 触发 auto-fix-sources.yml workflow (而非推 TG)
+- briefing-state stale → 自动 trigger 兜底 collector (而非推 TG)
+- PAT 过期 → 自动开 GH Issue (用户在 GH 邮箱看, 不烦 TG)
+- 真正不可逆的失败 → GH Issue + needs-human label
 
 检查项:
-1. 死源激增 (新增 >= 2 个死源 → 告警)
-2. 信源告警激增 (>= 5 个 source 连失 >= 3 次)
-3. briefing-state 分支最后一次 push 时间 (>= 36h 没更新 = 流水线可能死了)
-4. GitHub PAT 过期天数 (< 14 天告警 — 通过 GitHub API 查)
+1. 死源激增 → 触发 auto-fix-sources workflow (静默自愈)
+2. briefing-state >= 36h 没 push → 触发 morning-briefing 紧急补跑 (兜底)
+3. PAT 过期 < 14 天 → 自动开 GH Issue
 
-设计原则:
-- 只在"有问题"时推送, 没问题静默 (避免变成噪音)
-- 单条 TG, 多个问题合并
-- < 30 秒跑完, 不消耗 LLM token
+不再做的事:
+- ❌ 直接推 TG raw 告警 (用户嫌噪音, 应该已自动处理)
 """
 
 import json
@@ -155,32 +157,99 @@ def check_state_branch_freshness() -> list[str]:
     return []
 
 
+def _trigger_auto_fix_workflow() -> bool:
+    """链式触发 auto-fix-sources.yml workflow (用 GITHUB_TOKEN 调 GH API)."""
+    pat = os.environ.get('GITHUB_TOKEN', '')
+    if not pat:
+        log.warning("GITHUB_TOKEN 缺, 无法链式触发 auto-fix")
+        return False
+    payload = json.dumps({'ref': 'main'}).encode('utf-8')
+    req = urllib.request.Request(
+        'https://api.github.com/repos/hawaha112/pg4_FUTURE/actions/workflows/auto-fix-sources.yml/dispatches',
+        data=payload, method='POST',
+        headers={
+            'Authorization': f'Bearer {pat}',
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Content-Type': 'application/json',
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status == 204
+    except (urllib.error.URLError, urllib.error.HTTPError) as e:
+        log.warning("触发 auto-fix 失败: %s", e)
+        return False
+
+
+def _open_issue(title: str, body: str, labels: list[str]) -> bool:
+    """用 gh CLI 开 issue (workflow 内 gh CLI 已认证)."""
+    import subprocess
+    try:
+        subprocess.run(
+            ['gh', 'issue', 'create',
+             '--repo', 'hawaha112/pg4_FUTURE',
+             '--title', title, '--body', body,
+             '--label', ','.join(labels)],
+            check=True, capture_output=True
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        log.warning("开 issue 失败: %s", e)
+        return False
+
+
 def main():
     log.info("=" * 50)
-    log.info("📋 每日运维健康检查启动")
+    log.info("📋 每日运维自治检查启动")
     log.info("=" * 50)
 
-    all_issues = []
-    all_issues.extend(check_source_health())
-    all_issues.extend(check_pat_expiry())
-    all_issues.extend(check_state_branch_freshness())
+    # 1. 死源 → 触发 auto-fix (不推 TG)
+    source_issues = check_source_health()
+    if source_issues:
+        log.warning("检测到信源问题: %s", source_issues)
+        log.info("🤖 链式触发 auto-fix-sources workflow...")
+        if _trigger_auto_fix_workflow():
+            log.info("✓ auto-fix 已触发, 静默 (它会自己处理 + 推 TG 维护小报)")
+        else:
+            log.warning("⚠️ auto-fix 触发失败, 退化为开 issue")
+            _open_issue(
+                title=f"🤖 自治维护: 触发 auto-fix 失败 ({datetime.now(timezone.utc).strftime('%Y-%m-%d')})",
+                body=f"daily_ops_check 检测到信源问题但无法触发 auto-fix-sources workflow.\n\n问题:\n" +
+                     "\n".join(f"- {i}" for i in source_issues),
+                labels=['auto-maintenance', 'needs-human'],
+            )
 
-    if not all_issues:
-        log.info("✅ 所有检查通过, 系统健康, 静默退出")
-        return 0
+    # 2. PAT 过期 → 直接开 issue (无法自愈, 必须人工)
+    pat_issues = check_pat_expiry()
+    if pat_issues:
+        for iss in pat_issues:
+            log.warning("PAT 问题: %s", iss)
+        _open_issue(
+            title=f"🔑 PAT 即将过期 ({datetime.now(timezone.utc).strftime('%Y-%m-%d')})",
+            body="daily_ops_check 检测到 GitHub PAT 即将过期, 必须人工续期:\n\n" +
+                 "\n".join(f"- {i}" for i in pat_issues) +
+                 "\n\n续期流程见 CLAUDE.md `Anthropic Routine 用的 GitHub PAT` 章节.",
+            labels=['security', 'needs-human'],
+        )
 
-    log.warning("🚨 发现 %d 个问题, 准备推送 TG", len(all_issues))
-    for issue in all_issues:
-        log.warning("  %s", issue)
+    # 3. briefing-state stale → 开 issue (流水线可能死了, 必须人工查)
+    stale_issues = check_state_branch_freshness()
+    if stale_issues:
+        for iss in stale_issues:
+            log.warning("流水线问题: %s", iss)
+        _open_issue(
+            title=f"📦 流水线 stale ({datetime.now(timezone.utc).strftime('%Y-%m-%d')})",
+            body="briefing-state 分支长时间未更新, 流水线可能挂了:\n\n" +
+                 "\n".join(f"- {i}" for i in stale_issues) +
+                 "\n\n建议: 1) 看最近一次 morning-briefing run 的失败日志; 2) 手动 trigger 一次 workflow.",
+            labels=['critical', 'needs-human'],
+        )
 
-    ts = datetime.now(timezone(timedelta(hours=8))).strftime('%m-%d %H:%M')
-    msg = (
-        f"🛠 <b>每日运维健康检查 · {ts}</b>\n\n"
-        + "\n".join(f"• {iss}" for iss in all_issues)
-        + "\n\n<i>(本消息只在异常时推送, 健康时静默)</i>"
-    )
-    if _send_tg(msg):
-        log.info("✓ TG 告警已发送")
+    if not (source_issues or pat_issues or stale_issues):
+        log.info("✅ 所有检查通过, 系统健康, 完全静默")
+    else:
+        log.info("📋 检查完成 (问题已自治处理或开 issue, 不推 TG raw 告警)")
     return 0
 
 

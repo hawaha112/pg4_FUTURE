@@ -18,6 +18,8 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write   # 链式触发 auto-fix-sources workflow
+  issues: write    # 不可自愈的问题自动开 issue
 
 jobs:
   check:

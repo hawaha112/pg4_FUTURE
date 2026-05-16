@@ -1,0 +1,166 @@
+name: 自治 · 修复死源
+# 用户不看 raw 告警, 系统自己处理. 流程:
+#   daily-ops.yml 检测到死源 → 触发本 workflow
+#   → auto_fix_sources.py 尝试候选 URL → 修好就 commit/push
+#   → 修不好就开 GitHub Issue (用户在 GH 邮箱看, 不烦 TG)
+#   → 修好的话推一条简短 TG 维护小报 (不每天都推, 静默优先)
+#
+# 触发: workflow_dispatch (由 daily-ops 链式触发)
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: auto-fix-sources
+  cancel-in-progress: false
+
+permissions:
+  contents: write    # commit config.json + push
+  issues: write      # 修不了的开 issue
+  actions: read
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      TZ: Asia/Shanghai
+      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          ref: briefing-state
+          path: _state
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install minimal deps
+        run: pip install --quiet certifi
+
+      - name: Sync events.db from state branch
+        run: |
+          if [ -f _state/ai-morning-news/events.db ]; then
+            cp _state/ai-morning-news/events.db ai-morning-news/events.db
+            echo "✓ events.db 加载"
+          else
+            echo "⚠️ briefing-state 上无 events.db, 无源可修, 静默退出"
+            exit 0
+          fi
+
+      - name: Run auto-fix
+        id: fix
+        run: |
+          cd ai-morning-news
+          python3 auto_fix_sources.py
+          # 暴露 report 给后续 step
+          if [ -f output/maintenance_report.json ]; then
+            cp output/maintenance_report.json /tmp/maintenance_report.json
+            echo "report_exists=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Compose TG maintenance digest (only if anything changed)
+        id: digest
+        if: steps.fix.outputs.report_exists == 'true'
+        run: |
+          python3 << 'PYEOF'
+          import json, os
+          r = json.load(open('/tmp/maintenance_report.json'))
+          replaced = r.get('replaced', [])
+          disabled = r.get('disabled', [])
+          no_cand = r.get('no_candidates', [])
+          # 只在真有事时推 TG
+          if not (replaced or disabled or no_cand):
+              print('::notice::系统健康, 不推维护小报')
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write('should_send=false\n')
+                  f.write('should_open_issue=false\n')
+              exit(0)
+          lines = ['🤖 <b>自治维护 · 今日小报</b>', '']
+          if replaced:
+              lines.append(f'✅ 自动修复 <b>{len(replaced)}</b> 个信源:')
+              for r in replaced:
+                  lines.append(f'  · {r["name"]}: {r["matched_via"]}')
+          if disabled:
+              lines.append('')
+              lines.append(f'⏸️ 自动停用 <b>{len(disabled)}</b> 个 (候选全死):')
+              for d in disabled:
+                  lines.append(f'  · {d["name"]}')
+          if no_cand:
+              lines.append('')
+              lines.append(f'⚠️ <b>{len(no_cand)}</b> 个无候选可试 (将开 GH Issue):')
+              for c in no_cand:
+                  lines.append(f'  · {c["name"]}')
+          lines.append('')
+          lines.append('<i>(系统自治处理, 你不必操作)</i>')
+          msg = '\n'.join(lines)
+          # 写到 outputs 给下一 step
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('should_send=true\n')
+              f.write(f'should_open_issue={"true" if no_cand else "false"}\n')
+          # 写到文件供 curl 用
+          import urllib.parse
+          with open('/tmp/tg_msg.txt', 'w') as f:
+              f.write(msg)
+          PYEOF
+
+      - name: Send TG digest
+        if: steps.digest.outputs.should_send == 'true'
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          MSG=$(cat /tmp/tg_msg.txt)
+          PAYLOAD=$(python3 -c "import json,sys; m=open('/tmp/tg_msg.txt').read(); print(json.dumps({'chat_id':'${TG_CHAT_ID}','text':m,'parse_mode':'HTML','disable_web_page_preview':True}))")
+          curl -sS -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'TG: ok={d.get(\"ok\")}')"
+
+      - name: Open GH Issue for unfixable sources
+        if: steps.digest.outputs.should_open_issue == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPORT=$(cat /tmp/maintenance_report.json)
+          BODY=$(python3 << 'PYEOF'
+          import json
+          r = json.load(open('/tmp/maintenance_report.json'))
+          no_cand = r.get('no_candidates', [])
+          lines = [
+              '## 自治维护无法处理的死源',
+              '',
+              '`auto_fix_sources.py` 已尝试候选 URL 但全部失败. 这些源可能需要:',
+              '- 完全替换为不同的源',
+              '- 接受永久失效, 从 config 删除',
+              '- 调整抓取策略 (如加 curl_cffi for CF-protected)',
+              '',
+              '### 死源清单',
+              '',
+          ]
+          for c in no_cand:
+              lines.append(f'- **{c["name"]}**: {c.get("old_url", "(unknown URL)")}')
+          lines.append('')
+          lines.append('### 建议人工调查')
+          lines.append('1. 登录该源官网看是否还活着 / 是否改了 RSS endpoint')
+          lines.append('2. 如果死了, 在 config.json 删除该 source')
+          lines.append('3. 如果还活着但 protect, 加 curl_cffi 或换 mirror')
+          lines.append('')
+          lines.append('---')
+          lines.append('*自动开 issue · 由 .github/workflows/auto-fix-sources.yml 触发*')
+          print('\n'.join(lines))
+          PYEOF
+          )
+          gh issue create \
+            --repo hawaha112/pg4_FUTURE \
+            --title "🤖 自治维护: 死源无法自动修复 ($(date '+%Y-%m-%d'))" \
+            --body "$BODY" \
+            --label "auto-maintenance,needs-human" 2>&1 || echo "issue 创建失败 (可能 label 不存在)"
