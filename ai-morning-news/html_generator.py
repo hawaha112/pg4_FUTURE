@@ -709,9 +709,46 @@ def generate_html(all_items, config, digest=None, meta=None):
             # 允许 body 内嵌 ** 加粗
             j_body = re.sub(r'\*\*([^*\n]+?)\*\*',
                             r'<strong class="jc-bold">\1</strong>', j_body)
+
+            # 三道工序徽章: 编辑改过 / 校对结果
+            badges_html = ''
+            if j.get('_was_rewritten'):
+                badges_html += '<span class="jc-badge jc-badge-edited" title="编辑改写过, 提升立场">✎ 编辑改写</span>'
+            fc = j.get('fact_check') or {}
+            if fc:
+                conf = fc.get('confidence', 'medium')
+                vc = int(fc.get('verified_count', 0) or 0)
+                uc = int(fc.get('unverified_count', 0) or 0)
+                cc = int(fc.get('contradicted_count', 0) or 0)
+                if cc > 0:
+                    badge_cls = 'jc-badge-warn'
+                    badge_icon = '⚠'
+                    badge_text = f'{cc} 处事实有疑'
+                elif conf == 'high' and vc > 0:
+                    badge_cls = 'jc-badge-verified'
+                    badge_icon = '✓'
+                    badge_text = f'{vc} 处事实已核对'
+                elif conf == 'low':
+                    badge_cls = 'jc-badge-warn'
+                    badge_icon = '⚠'
+                    badge_text = f'{uc} 处未核'
+                elif vc > 0:
+                    badge_cls = 'jc-badge-medium'
+                    badge_icon = '✓'
+                    badge_text = f'{vc} 处已核 / {uc} 处未核'
+                else:
+                    badge_cls = None
+                    badge_icon = None
+                if badge_cls:
+                    title_attr = _safe_escape(' · '.join(fc.get('warnings', [])) or '')
+                    badges_html += (
+                        f'<span class="jc-badge {badge_cls}" title="{title_attr}">'
+                        f'{badge_icon} {badge_text}</span>'
+                    )
+
             j_cards_html += (
                 '<article class="judgment-card">'
-                f'<div class="jc-emoji">{j_emoji}</div>'
+                f'<div class="jc-header"><span class="jc-emoji">{j_emoji}</span>{badges_html}</div>'
                 f'<h3 class="jc-title">{j_title}</h3>'
                 f'<p class="jc-body">{j_body}</p>'
                 '</article>'

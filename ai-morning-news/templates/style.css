@@ -132,8 +132,41 @@ body {
     transform: translateY(-1px);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
 }
+.jc-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 8px; flex-wrap: wrap;
+}
 .jc-emoji {
-    font-size: 22px; line-height: 1; margin-bottom: 8px;
+    font-size: 22px; line-height: 1;
+}
+/* 三道工序徽章 */
+.jc-badge {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px; border-radius: 10px;
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.2px;
+    border: 1px solid;
+    cursor: help;
+}
+.jc-badge-verified {
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.30);
+    background: rgba(52, 211, 153, 0.08);
+}
+.jc-badge-medium {
+    color: #a0aab8;
+    border-color: rgba(160, 170, 184, 0.25);
+    background: rgba(160, 170, 184, 0.06);
+}
+.jc-badge-warn {
+    color: #fbbf24;
+    border-color: rgba(251, 191, 36, 0.30);
+    background: rgba(251, 191, 36, 0.10);
+}
+.jc-badge-edited {
+    color: #66c0ff;
+    border-color: rgba(102, 192, 255, 0.30);
+    background: rgba(102, 192, 255, 0.08);
 }
 .jc-title {
     font-family: var(--serif);

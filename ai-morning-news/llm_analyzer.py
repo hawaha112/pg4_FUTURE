@@ -156,6 +156,13 @@ DIGEST_USER_TEMPLATE = _loaded_digest_user if _loaded_digest_user else """以下
 
 {summaries}"""
 
+# 三道工序流水线: 编辑 + 校对 agent (主编 prompt 仍是 digest_system)
+_loaded_editor = _load_prompt('digest_editor')
+DIGEST_EDITOR_PROMPT = _loaded_editor if _loaded_editor else """你是编辑, 审主编草稿."""
+
+_loaded_fact_check = _load_prompt('digest_fact_check')
+DIGEST_FACT_CHECK_PROMPT = _loaded_fact_check if _loaded_fact_check else """你是校对员."""
+
 _loaded_user = _load_prompt('user')
 USER_PROMPT_TEMPLATE = _loaded_user if _loaded_user else """分析以下文章：
 
@@ -938,22 +945,51 @@ class LLMAnalyzer:
 
     def generate_digest(self, analyses: List[dict]) -> dict:
         """
-        从所有文章分析中生成"今日 3 个判断"+ 兜底 editorial.
+        从所有文章分析中生成"今日 3 个判断", 走 **3 道工序流水线** (v3).
 
-        新输出结构 (v2):
+        Pipeline:
+            Stage A (主编): 从事件中提炼 3 判断 draft (digest_system prompt)
+                ↓
+            Stage B (编辑): 找最弱的, 逼重写到更狠 (digest_editor prompt)
+                ↓
+            Stage C (校对): 提取事实声明, 对照 events 验证 (digest_fact_check prompt)
+                ↓
+            合并 → 最终 judgments (含 fact_check 字段)
+
+        失败降级:
+        - Stage B 失败 → 用 Stage A draft (跳过 editor 加 _skipped_editor 标)
+        - Stage C 失败 → 用 Stage B 输出但 fact_check 空 (UI 不显示徽章)
+        - Stage A 失败 → 走旧的 fallback editorial 文本
+
+        新输出结构 (v3):
         {
           "headline": "今日主旋律 一句话",
           "judgments": [
-              {"emoji": "🏢", "title": "...", "body": "...", "evidence_ids": [0, 5]},
+              {
+                  "emoji": "🏢", "title": "...", "body": "...",
+                  "evidence_ids": [0, 5],
+                  "fact_check": {  # 新增 (Stage C 输出)
+                      "verified_count": 3,
+                      "unverified_count": 1,
+                      "contradicted_count": 0,
+                      "confidence": "high",  # high/medium/low
+                      "warnings": [],
+                      "claims": [...]
+                  },
+                  "_was_rewritten": true/false  # 来自 Stage B
+              },
               ...
           ],
           "outro": "收束观点 (可选)",
           "editorial": "纯文本兜底版 (judgments 缺失时用)",
+          "_pipeline_stages": {  # 调试用, dashboard 不显示
+              "editor_ran": true,
+              "editor_rewrote": 1,
+              "fact_check_ran": true,
+              "total_tokens_estimated": 100000
+          },
           "top_stories": []
         }
-
-        renderer 优先用 judgments 渲染卡片;
-        当 LLM 调用失败或 JSON 解析失败时,会有 editorial 兜底.
         """
         # 构建摘要列表供 LLM 综合
         summaries_text = ""
@@ -972,89 +1008,221 @@ class LLMAnalyzer:
             "outro": "",
             "editorial": "今天暂无重要 AI 新闻。",
             "top_stories": [],
+            "_pipeline_stages": {},
         }
         if not summaries_text.strip():
             return empty_result
 
-        user_msg = DIGEST_USER_TEMPLATE.format(
-            count=len([a for a in analyses if a.get("analysis", {}).get("ai_relevant", True)]),
-            summaries=summaries_text,
-        )
+        count = len([a for a in analyses if a.get("analysis", {}).get("ai_relevant", True)])
+        user_msg = DIGEST_USER_TEMPLATE.format(count=count, summaries=summaries_text)
 
+        # ═══ Stage A: 主编生成 draft ═══
+        draft_data = self._digest_stage_a_chief(user_msg)
+        if not draft_data or not draft_data.get('judgments'):
+            log.warning("digest Stage A 失败, 退回旧版纯文本 editorial")
+            return self._digest_legacy_fallback(user_msg, empty_result)
+
+        clean_draft = self._clean_judgments(draft_data.get('judgments') or [])
+        if not clean_draft:
+            return self._digest_legacy_fallback(user_msg, empty_result)
+
+        headline = str(draft_data.get('headline', '')).strip()[:60]
+        outro = str(draft_data.get('outro', '')).strip()[:120]
+
+        # ═══ Stage B: 编辑审稿 ═══
+        edited_judgments, editor_meta = self._digest_stage_b_editor(
+            clean_draft, summaries_text, count
+        )
+        if edited_judgments:
+            final_judgments = edited_judgments
+        else:
+            log.warning("digest Stage B 失败, 使用 Stage A draft")
+            final_judgments = clean_draft
+            editor_meta = {'editor_ran': False}
+
+        # ═══ Stage C: 校对事实 ═══
+        fact_checks, fact_meta = self._digest_stage_c_fact_check(
+            final_judgments, summaries_text, count
+        )
+        if fact_checks:
+            for j, fc in zip(final_judgments, fact_checks):
+                j['fact_check'] = fc
+
+        # 拼兜底 editorial
+        fallback_parts = []
+        if headline:
+            fallback_parts.append(headline)
+        for j in final_judgments:
+            fallback_parts.append(f"{j['emoji']} **{j['title']}**\n{j['body']}")
+        if outro:
+            fallback_parts.append(outro)
+
+        log.info("✓ 速览(v3 三道工序): %d 判断, 编辑改了 %d 条, 校对 %s",
+                 len(final_judgments),
+                 editor_meta.get('editor_rewrote', 0),
+                 '已跑' if fact_meta.get('fact_check_ran') else '跳过')
+
+        return {
+            'headline': headline,
+            'judgments': final_judgments,
+            'outro': outro,
+            'editorial': '\n\n'.join(fallback_parts)[:1500],
+            'top_stories': [],
+            '_pipeline_stages': {**editor_meta, **fact_meta},
+        }
+
+    # ═════════════════════════════════════════════════════
+    # Stage A: 主编 (现有 digest_system prompt)
+    # ═════════════════════════════════════════════════════
+    def _digest_stage_a_chief(self, user_msg: str) -> Optional[dict]:
+        """主编 agent: 从事件出 3 判断 draft."""
         try:
-            # 调 LLM 拿 JSON 结构化 3 个判断 (v2)
-            response = self._call_api(
-                [
-                    {"role": "system", "content": DIGEST_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_msg},
-                ],
-            )
+            response = self._call_api([
+                {"role": "system", "content": DIGEST_SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ])
             raw = (response or '').strip()
-            # 剥代码块标记
             raw = re.sub(r'^```(?:\w+)?\s*', '', raw)
             raw = re.sub(r'\s*```\s*$', '', raw).strip()
-
-            # 解析 JSON
-            data = self._extract_json(raw)
-            judgments = data.get('judgments') if isinstance(data, dict) else None
-
-            if isinstance(judgments, list) and len(judgments) >= 1:
-                # 校验 + 清洗每个 judgment
-                clean_judgments = []
-                for j in judgments[:3]:
-                    if not isinstance(j, dict):
-                        continue
-                    title = str(j.get('title', '')).strip()
-                    body = str(j.get('body', '')).strip()
-                    emoji = str(j.get('emoji', '🔹')).strip()[:4] or '🔹'
-                    if not title or len(title) < 5 or not body or len(body) < 20:
-                        continue
-                    evidence = j.get('evidence_ids') or []
-                    if not isinstance(evidence, list):
-                        evidence = []
-                    clean_judgments.append({
-                        'emoji': emoji,
-                        'title': title[:60],
-                        'body': body[:400],
-                        'evidence_ids': [int(x) for x in evidence if isinstance(x, (int, str)) and str(x).isdigit()][:5],
-                    })
-
-                if clean_judgments:
-                    headline = str(data.get('headline', '')).strip()[:60]
-                    outro = str(data.get('outro', '')).strip()[:120]
-                    # 兜底 editorial: 把 judgments 串成纯文本, 防止下游模板要 editorial 时崩
-                    fallback_text_parts = []
-                    if headline:
-                        fallback_text_parts.append(headline)
-                    for j in clean_judgments:
-                        fallback_text_parts.append(f"{j['emoji']} **{j['title']}**\n{j['body']}")
-                    if outro:
-                        fallback_text_parts.append(outro)
-                    log.info("✓ 速览(v2): %d 个判断, headline=%r", len(clean_judgments), headline[:30])
-                    return {
-                        'headline': headline,
-                        'judgments': clean_judgments,
-                        'outro': outro,
-                        'editorial': '\n\n'.join(fallback_text_parts)[:1500],
-                        'top_stories': [],
-                    }
-
-            # JSON 解析失败 / judgments 全部不合规
-            # → 退到旧版纯文本 editorial (LLM 把 raw 当 markdown 用)
-            log.warning("digest JSON 解析失败或 judgments 不合规, 退到纯文本兜底 (raw 前 200 字: %r)", raw[:200])
-            if len(raw) >= 20:
-                return {
-                    'headline': '',
-                    'judgments': [],
-                    'outro': '',
-                    'editorial': raw[:1500],
-                    'top_stories': [],
-                }
-            return empty_result
-
+            return self._extract_json(raw)
         except Exception as e:
-            log.error("❌ 速览生成失败: %s", e)
-            return {**empty_result, 'editorial': "速览生成失败。"}
+            log.error("❌ Stage A (主编) 失败: %s", e)
+            return None
+
+    def _clean_judgments(self, judgments: list) -> list:
+        """清洗 + 校验 judgments 数组."""
+        clean = []
+        for j in judgments[:3]:
+            if not isinstance(j, dict):
+                continue
+            title = str(j.get('title', '')).strip()
+            body = str(j.get('body', '')).strip()
+            emoji = str(j.get('emoji', '🔹')).strip()[:4] or '🔹'
+            if not title or len(title) < 5 or not body or len(body) < 20:
+                continue
+            evidence = j.get('evidence_ids') or []
+            if not isinstance(evidence, list):
+                evidence = []
+            clean.append({
+                'emoji': emoji,
+                'title': title[:60],
+                'body': body[:400],
+                'evidence_ids': [int(x) for x in evidence
+                                 if isinstance(x, (int, str)) and str(x).isdigit()][:5],
+                '_was_rewritten': bool(j.get('_was_rewritten', False)),
+            })
+        return clean
+
+    # ═════════════════════════════════════════════════════
+    # Stage B: 编辑 (审稿 + 找最弱 + 重写)
+    # ═════════════════════════════════════════════════════
+    def _digest_stage_b_editor(self, draft: list, summaries: str,
+                               count: int) -> tuple:
+        """编辑 agent: 审 draft, 重写最弱条目."""
+        try:
+            draft_json = json.dumps(draft, ensure_ascii=False, indent=2)
+            user_msg = DIGEST_EDITOR_PROMPT.format(
+                draft_judgments=draft_json,
+                events_summary=summaries,
+                count=count,
+            )
+            # editor prompt 既是 system 又是 user — 整体作为 user
+            response = self._call_api([
+                {"role": "user", "content": user_msg},
+            ])
+            raw = (response or '').strip()
+            raw = re.sub(r'^```(?:\w+)?\s*', '', raw)
+            raw = re.sub(r'\s*```\s*$', '', raw).strip()
+            data = self._extract_json(raw)
+            revised = data.get('revised_judgments') if isinstance(data, dict) else None
+            if not isinstance(revised, list):
+                return None, {'editor_ran': False, 'editor_rewrote': 0}
+            cleaned = self._clean_judgments(revised)
+            if not cleaned:
+                return None, {'editor_ran': False, 'editor_rewrote': 0}
+            rewrote = sum(1 for j in cleaned if j.get('_was_rewritten'))
+            return cleaned, {
+                'editor_ran': True,
+                'editor_rewrote': rewrote,
+                'editor_notes': data.get('editor_notes', '')[:200],
+            }
+        except Exception as e:
+            log.warning("⚠️ Stage B (编辑) 失败, 跳过: %s", e)
+            return None, {'editor_ran': False, 'editor_rewrote': 0}
+
+    # ═════════════════════════════════════════════════════
+    # Stage C: 校对 (事实核对)
+    # ═════════════════════════════════════════════════════
+    def _digest_stage_c_fact_check(self, judgments: list, summaries: str,
+                                   count: int) -> tuple:
+        """校对 agent: 抽取事实声明 + 对照 events 验证."""
+        try:
+            judgments_json = json.dumps(
+                [{'idx': i, 'title': j['title'], 'body': j['body']}
+                 for i, j in enumerate(judgments)],
+                ensure_ascii=False, indent=2
+            )
+            user_msg = DIGEST_FACT_CHECK_PROMPT.format(
+                judgments_json=judgments_json,
+                events_summary=summaries,
+                count=count,
+            )
+            response = self._call_api([
+                {"role": "user", "content": user_msg},
+            ])
+            raw = (response or '').strip()
+            raw = re.sub(r'^```(?:\w+)?\s*', '', raw)
+            raw = re.sub(r'\s*```\s*$', '', raw).strip()
+            data = self._extract_json(raw)
+            fact_checks = data.get('fact_checks') if isinstance(data, dict) else None
+            if not isinstance(fact_checks, list):
+                return None, {'fact_check_ran': False}
+            # 按 idx 对齐到 judgments 顺序
+            result = [None] * len(judgments)
+            for fc in fact_checks:
+                if not isinstance(fc, dict):
+                    continue
+                idx = fc.get('idx')
+                if isinstance(idx, int) and 0 <= idx < len(judgments):
+                    result[idx] = {
+                        'verified_count': int(fc.get('verified_count', 0) or 0),
+                        'unverified_count': int(fc.get('unverified_count', 0) or 0),
+                        'contradicted_count': int(fc.get('contradicted_count', 0) or 0),
+                        'confidence': str(fc.get('confidence', 'medium'))[:10],
+                        'warnings': (fc.get('warnings') or [])[:3],
+                        'claims': (fc.get('claims_found') or [])[:6],
+                    }
+            # 缺位置用默认 medium 填充
+            for i in range(len(result)):
+                if result[i] is None:
+                    result[i] = {
+                        'verified_count': 0, 'unverified_count': 0,
+                        'contradicted_count': 0, 'confidence': 'medium',
+                        'warnings': [], 'claims': [],
+                    }
+            return result, {'fact_check_ran': True}
+        except Exception as e:
+            log.warning("⚠️ Stage C (校对) 失败, 跳过: %s", e)
+            return None, {'fact_check_ran': False}
+
+    # ═════════════════════════════════════════════════════
+    # Legacy fallback
+    # ═════════════════════════════════════════════════════
+    def _digest_legacy_fallback(self, user_msg: str, empty_result: dict) -> dict:
+        """3 阶段都崩了 → 退到旧版纯文本 editorial."""
+        try:
+            response = self._call_api([
+                {"role": "system", "content": DIGEST_SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ])
+            raw = (response or '').strip()
+            raw = re.sub(r'^```(?:\w+)?\s*', '', raw)
+            raw = re.sub(r'\s*```\s*$', '', raw).strip()
+            if len(raw) >= 20:
+                return {**empty_result, 'editorial': raw[:1500]}
+        except Exception as e:
+            log.error("❌ legacy fallback 也崩了: %s", e)
+        return {**empty_result, 'editorial': "速览生成失败。"}
 
     # ------------------------------------------------------------------
     # 批量分析
