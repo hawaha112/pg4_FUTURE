@@ -1,0 +1,81 @@
+name: AI 突发热点检测
+# P1: 24 小时突发推送
+# 每小时扫一次外部热度源 (HN/HF/GitHub), 命中阈值即推 TG.
+# 不依赖 events.db / 不跑 collector — 只消费 hot_signals, 跑得快 (< 30s).
+#
+# 触发:
+#   - workflow_dispatch (手动 / Anthropic Routine 调)
+#   - schedule cron (兜底, 万一 routine 失效仍然有保护)
+#
+# 状态文件 output/pushed_breaking.json 通过 GH Actions Cache 持久化,
+# 实现 24h 去重 (同事件不重复推).
+
+on:
+  workflow_dispatch: {}
+  # 兜底 cron — 主触发由 Anthropic Routine 提供 (更准时)
+  # 这条 cron 只在 routine 长期失效时拯救; 平时大概率被 routine 抢先执行
+  schedule:
+    - cron: '15 * * * *'   # 每小时第 15 分钟 (避开整点拥堵)
+
+concurrency:
+  group: breaking-news
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write   # GH Actions Cache 需要
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TZ: Asia/Shanghai
+      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      BRIEFING_URL: ${{ secrets.BRIEFING_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # ── 加载去重历史 (Actions Cache, 24h 滚动) ──
+      - name: Restore dedup state
+        id: cache-dedup
+        uses: actions/cache@v4
+        with:
+          path: ai-morning-news/output/pushed_breaking.json
+          # key 含日期, 自动滚动; restore-keys 让今天可以读昨天的
+          key: pushed-breaking-${{ github.run_id }}
+          restore-keys: |
+            pushed-breaking-
+
+      - name: Install minimal deps
+        run: |
+          # detector 只用标准库 + 可选 certifi (项目其他地方也用)
+          python3 -m pip install --quiet certifi
+
+      - name: Run breaking news detector
+        run: |
+          mkdir -p ai-morning-news/output
+          cd ai-morning-news
+          python3 breaking_news_detector.py
+
+      # ── 持久化更新后的去重状态 (cache 自动 save) ──
+      # actions/cache 在 post-action 阶段自动保存 path 内容
+      # (这里 run_id 唯一, restore-keys 让下一次跑能拿到)
+
+      - name: Show dedup summary
+        if: always()
+        run: |
+          if [ -f ai-morning-news/output/pushed_breaking.json ]; then
+            echo "Pushed history (last 24h):"
+            python3 -c "
+          import json
+          d = json.load(open('ai-morning-news/output/pushed_breaking.json'))
+          for k, v in list(d.items())[:10]:
+              print(f'  [{v.get(\"source\", \"?\")}] score={v.get(\"score\", 0)} pushed={v.get(\"pushed_at\", \"\")[:16]} {v.get(\"title\", \"\")[:50]}')"
+          fi
