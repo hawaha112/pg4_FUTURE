@@ -574,21 +574,11 @@
         "name": "36氪",
         "tier": 2,
         "category": "industry",
-        "url": "https://rsshub.rssforever.com/36kr/newsflashes",
+        "url": "https://36kr.com/feed",
         "icon": "💼",
         "color": "#0066FF",
-        "description": "科技产业与创投",
+        "description": "36氪官方 feed (科技产业与创投)",
         "ai_only": false
-      },
-      {
-        "name": "36氪 AI搜索",
-        "tier": 2,
-        "category": "media",
-        "url": "https://rsshub.rssforever.com/36kr/search/articles/AI",
-        "icon": "🔎",
-        "color": "#0066FF",
-        "description": "36氪 AI 相关文章搜索",
-        "ai_only": true
       },
       {
         "name": "虎嗅科技",

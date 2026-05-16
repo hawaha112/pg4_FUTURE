@@ -1,0 +1,51 @@
+name: 每日运维健康检查
+# 每天跑一次, 检测可能"静默坏掉"的系统问题:
+# - 死源激增 / 信源告警
+# - briefing-state 分支 >= 36h 没 push (流水线可能死了)
+# - GitHub PAT 剩余 < 14 天告警
+#
+# 只在有问题时推 TG (健康时静默), 不变成噪音.
+# < 30 秒跑完, 不消耗 LLM token, 不依赖业务流水线.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '30 1 * * *'   # UTC 01:30 = 北京 09:30 (上班后, 你能立即响应)
+
+concurrency:
+  group: daily-ops
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      TZ: Asia/Shanghai
+      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      # GITHUB_TOKEN 是 GH Actions 默认的, 用于检查 briefing-state freshness
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: briefing-state    # 直接 checkout 状态分支, 拿最新 events.db
+          path: state
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run daily ops check
+        run: |
+          # 把 state 分支的 events.db 复制到 main 代码的预期路径
+          if [ -f state/ai-morning-news/events.db ]; then
+            cp state/ai-morning-news/events.db ai-morning-news/events.db
+            echo "✓ 加载 events.db ($(du -h ai-morning-news/events.db | cut -f1))"
+          fi
+          cd ai-morning-news
+          python3 daily_ops_check.py
