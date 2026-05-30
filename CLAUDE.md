@@ -1,6 +1,6 @@
 # 项目部署与运维快照
 
-> 给后续 Claude session 看的"项目当前状态备忘"。最后更新：2026-05-15。
+> 给后续 Claude session 看的"项目当前状态备忘"。最后更新：2026-05-30。
 > 业务/代码细节看 [ai-morning-news/README.md](ai-morning-news/README.md) 和 [ai-morning-news/ARCHITECTURE.md](ai-morning-news/ARCHITECTURE.md)。
 
 ---
@@ -20,9 +20,13 @@
 | AI Morning Briefing (早班) | 06:00 ± 5-12 分钟 | **Anthropic Routine** `trig_011wSBtNNApn5X4aWEeFUmFq` | 调 workflow_dispatch API |
 | AI Morning Briefing (晚班) | 18:00 ± 5-12 分钟 | **Anthropic Routine** `trig_01XkWy5x1jWvE3yNaEWbb1AP` | 调 workflow_dispatch API |
 | AI Weekly Report | 周日 18:00 ± 5-12 分钟 | **Anthropic Routine** `trig_011CqZKH3cDC55G5CRcyijU7` | 调 workflow_dispatch API |
+| AI 突发热点检测 | 每小时 (:15) | **GitHub Actions cron** | [breaking-news.yml](.github/workflows/breaking-news.yml) — 纯 stdlib 扫 HN/HF, 零 Claude token, **不要挂 routine** |
+| Daily Ops 自检 | 每日 09:30 | GitHub Actions cron | [daily-ops.yml](.github/workflows/daily-ops.yml) → 链式触发 auto-fix-sources |
 | Dispatch TG | 手动 | — | [.github/workflows/dispatch-tg.yml](.github/workflows/dispatch-tg.yml) |
 
 **实测准时性**：Anthropic Routine 早班 5/13/14/15 都在 06:05-06:12 触发（精度 5-12 分钟），对比之前 GH Actions schedule 的 30-90 分钟延迟改善显著。
+
+⚠️ **Routine 只给"需要精准时间"的早班/晚班/周报用**（一天 ~2 次）。突发检测、daily-ops 一律走 GitHub Actions cron —— **cron 不消耗 Claude routine 配额**。曾经有个**每 2h 触发 breaking-news 的 routine**（一天 12 次 → routine 用量超标），2026-05-30 确认应删除：breaking-news.yml 自带每小时 cron 兜底，detector 纯 stdlib 不烧 token，根本不需要 routine。**新增"扫描类"workflow 默认用 cron，不要随手挂 routine。**
 
 ⚠️ Routine 内部用 fine-grained PAT 调 GH API（PAT `claude-routine-pg4future-trigger`，权限 Actions: read/write，scope pg4_FUTURE，**30 天过期** — 6/14/2026 需续期）。
 
@@ -162,6 +166,14 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 
 修复：`if _now > window_end: window_end = _now`。起点不动，避免破坏 230 行注释保护的"严格只放行窗口内首发事件"语义（旧 bug：04-28 文章混进 04-29 晚报）。
 
+### 修复 3: TG 早报"单条更新"防堆积（commit `538066e`, 2026-05-30）
+
+旧逻辑每班 `sendMessage` 新发一条、从不删旧 → TG 窗口里早报越堆越多（用户反馈"消息爆炸 / 链接不更新"）。改成 [run_daily.sh](ai-morning-news/run_daily.sh) 每班**先 `deleteMessage` 上一条、再发新的**，message_id 存 `tg_state.json`（经 briefing-state 分支跨班次持久化，restore 的 `*.json` 已覆盖、push-back 列表已加）。窗口里只保留一条早报、每班刷新；部署失败时**不删**上一条可用早报、单独告警。`send_tg_capture` 的 curl 加了 `|| resp=""` 兜底（`set -e` 下网络失败不致整脚本在已部署后崩退）。
+
+### 修复 4: 突发检测阈值校准 — 旧值永不触发（commit `538066e`, 2026-05-30）
+
+[breaking_news_detector.py](ai-morning-news/breaking_news_detector.py) 旧阈值 `HN≥800 分 / 只看最近 2h` 实测**永不触发**：HN 故事要 6-12h 才攒够分，最近 2h 内 AI 故事常 0 条（workflow 日志每次"HN 抓到 0 条 → 无突发"）。用户"从没收到突发"即此因。改成 **24h 窗口 + HN≥300 / HF≥2000**，加单次上限 5 + 去重 48h，全部 env 可调：`BREAKING_HN_POINTS` / `BREAKING_HN_HOURS` / `BREAKING_HF_LIKES` / `BREAKING_DEDUP_TTL_HOURS` / `BREAKING_MAX_PER_RUN`。嫌吵调高 `BREAKING_HN_POINTS`，嫌少调低。
+
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）
 - **Cloudflare / Nitter 反爬**：[content_fetcher.py](ai-morning-news/content_fetcher.py) 对 X(Twitter) 走 Nitter 实例，经常 429。健康度由 [health_tracker.py](ai-morning-news/health_tracker.py) 跟踪，10+ 连续失败自动停用
@@ -183,6 +195,7 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 │   ├── dedup_engine.py           MinHash/LSH 去重（中英分阈值）
 │   ├── event_cluster.py          确定性签名预合并 + LSH 聚类
 │   ├── weekly_report.py          周日周报
+│   ├── breaking_news_detector.py 突发热点检测（扫 HN/HF 热度, 纯 stdlib, 每小时 cron）
 │   ├── run_daily.sh              主入口（本地+云端共用）
 │   ├── run_collect.sh            仅采集阶段
 │   ├── config.json               40 个 RSS 源 + LLM 配置 + 去重阈值
