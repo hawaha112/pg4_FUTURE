@@ -38,12 +38,19 @@ from extractors.hot_signals import (
 
 log = get_logger('breaking')
 
-# ── 阈值 ──
-HN_POINTS_THRESHOLD = 800
-HF_LIKES_THRESHOLD = 2500
+# ── 阈值 (env 可调; 2026-05-30 重新校准) ──
+# 旧值 HN>=800 / 2h 窗口实测永不触发: HN 故事要 6-12h 才攒够分, 最近 2h 内 AI 故事
+# 常为 0 条 (见 breaking-news workflow 日志 "HN 抓到 0 条")。改成 24h 窗口看"当前
+# 热榜爆款", 阈值降到 300 (实测 24h 内 AI top 故事约 300-720 分, 每天 0-3 条真命中)。
+HN_POINTS_THRESHOLD = int(os.environ.get('BREAKING_HN_POINTS', '300'))
+HN_WINDOW_HOURS = int(os.environ.get('BREAKING_HN_HOURS', '24'))
+HF_LIKES_THRESHOLD = int(os.environ.get('BREAKING_HF_LIKES', '2000'))
 
-# ── 去重窗口 ──
-DEDUP_TTL_HOURS = 24
+# 单次最多推几条 (防冷启动 / 大新闻日一次性轰炸)
+MAX_PUSH_PER_RUN = int(os.environ.get('BREAKING_MAX_PER_RUN', '5'))
+
+# ── 去重窗口 ── (48h: HF trending 模型常持续多天热, 24h TTL 会让同一爆款天天重推)
+DEDUP_TTL_HOURS = int(os.environ.get('BREAKING_DEDUP_TTL_HOURS', '48'))
 
 # ── 路径 ──
 SCRIPT_DIR = Path(__file__).parent
@@ -139,10 +146,10 @@ def _detect_breaking() -> list:
     """扫 4 个源, 返回命中突发阈值的 signals (含 _source 和 _id)."""
     breaking = []
 
-    # HN — 只看最近 2 小时, 阈值高
-    log.info("🔍 检查 HN top stories...")
+    # HN — 看最近 HN_WINDOW_HOURS 小时内的 AI 热榜, 取高分爆款
+    log.info("🔍 检查 HN top stories (近 %dh)...", HN_WINDOW_HOURS)
     try:
-        hn_signals = fetch_hn_top(limit=15, hours=2)
+        hn_signals = fetch_hn_top(limit=20, hours=HN_WINDOW_HOURS)
         for sig in hn_signals:
             pts = int(sig.get('points') or 0)
             if pts >= HN_POINTS_THRESHOLD:
@@ -250,11 +257,17 @@ def main() -> int:
         log.info("✅ 无突发, 退出")
         return 0
 
+    # 按分数降序, 大新闻优先; 单次最多 MAX_PUSH_PER_RUN 条 (防冷启动/大新闻日轰炸)
+    breaking.sort(key=lambda s: int(s.get('points') or s.get('likes') or 0), reverse=True)
+
     new_pushes = []
     for sig in breaking:
+        if len(new_pushes) >= MAX_PUSH_PER_RUN:
+            log.info("  ⏸️ 已达单次上限 %d 条, 余下留待下轮", MAX_PUSH_PER_RUN)
+            break
         sid = sig['_id']
         if sid in pushed:
-            log.info("  ⏭️ 已推过 (24h): %s", sid)
+            log.info("  ⏭️ 已推过 (%dh): %s", DEDUP_TTL_HOURS, sid)
             continue
         msg = _format_breaking_msg(sig)
         if not msg:

@@ -29,6 +29,9 @@ ai-morning-news/*.db.*
 ai-morning-news/daily_run.log.*
 ai-morning-news/*.pid
 
+# TG"单条更新"状态（云端经 briefing-state 分支持久化，不入 main）
+ai-morning-news/tg_state.json
+
 # Node.js（代理项目）
 node_modules/
 ai-morning-news/claude-max-api-proxy/

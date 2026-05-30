@@ -167,7 +167,7 @@ jobs:
           git config user.name "GitHub Action"
           mkdir -p ai-morning-news ai-morning-news/output
           cd "$GITHUB_WORKSPACE/ai-morning-news"
-          for f in events.db dedup.db llm_cache.db source_health.json history.json; do
+          for f in events.db dedup.db llm_cache.db source_health.json history.json tg_state.json; do
             [ -f "$f" ] && cp "$f" "$STATE_DIR/ai-morning-news/" || true
           done
           # output/run_health.jsonl: dashboard 历史趋势 + dashboard_generator 必读

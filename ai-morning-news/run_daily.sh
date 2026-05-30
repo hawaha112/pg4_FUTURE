@@ -108,6 +108,46 @@ send_tg() {
         > /dev/null 2>&1 || true
 }
 
+# 早报"单条更新"状态文件：存上一条早报消息的 message_id，云端跑由 briefing-state 持久化。
+TG_STATE_FILE="$PROJECT_DIR/tg_state.json"
+
+# 删除一条历史 TG 消息（best-effort）。Telegram 允许 bot 删自己 <48h 的消息，
+# 早报每 12h 一班、上一条始终在窗口内，删得掉。删失败不致命（|| true）。
+tg_delete() {
+    local msg_id="$1"
+    [ -z "$msg_id" ] && return 0
+    [ "${BRIEFING_SILENT_TG:-false}" = "true" ] && return 0
+    { [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; } && return 0
+    curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/deleteMessage" \
+        -H "Content-Type: application/json" \
+        -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"message_id\": ${msg_id}}" \
+        > /dev/null 2>&1 || true
+}
+
+# 发送一条消息并把新的 message_id 打到 stdout（失败/silent 时输出空）。
+# 用于"早报单条更新"：拿到 id 才能在下一班删掉它。
+send_tg_capture() {
+    if [ "${BRIEFING_SILENT_TG:-false}" = "true" ]; then
+        echo "  🔇 silent_tg=true, 跳过 TG 推送" >> "$LOG_FILE"
+        return 0
+    fi
+    if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
+        return 0
+    fi
+    local message="$1"
+    local resp
+    # || resp="" 兜底: set -e 下 curl 网络失败会让赋值返回非零 → 整脚本在已部署后崩退
+    resp=$(curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+        -H "Content-Type: application/json" \
+        -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": $(printf '%s' "$message" | "$PYTHON" -c 'import sys,json; print(json.dumps(sys.stdin.read()))'), \"parse_mode\": \"HTML\", \"disable_web_page_preview\": false}" \
+        2>/dev/null) || resp=""
+    printf '%s' "$resp" | "$PYTHON" -c 'import sys,json
+try:
+    d=json.load(sys.stdin); print(d.get("result",{}).get("message_id","") if d.get("ok") else "")
+except Exception:
+    print("")' 2>/dev/null || true
+}
+
 {
     echo ""
     echo "========================================"
@@ -469,6 +509,12 @@ print(f'{ok} {fail} {dead}')
 fi
 SRC_LINE="📡 源健康: ${SRC_OK} OK / ${SRC_FAIL} 告警 / ${SRC_DEAD} 死源"
 
+# 读取上一条早报消息 id（云端跑由 briefing-state 持久化），用于"删旧推新"单条更新
+PREV_MSG_ID=""
+if [ -f "$TG_STATE_FILE" ]; then
+    PREV_MSG_ID=$("$PYTHON" -c "import json;print(json.load(open('$TG_STATE_FILE')).get('briefing_msg_id',''))" 2>/dev/null || echo "")
+fi
+
 if [ "$DEPLOY_OK" = true ]; then
     # 单条精简推送: 核心指标一行 + 一个仪表盘入口
     # (用户从仪表盘的"今日早班/晚班"卡进当天早报/晚报, 不再分两条 TG 消息)
@@ -492,15 +538,27 @@ if [ "$DEPLOY_OK" = true ]; then
         [ -n "$HEALTH_WARNING" ] && WARN_BLOCK="${WARN_BLOCK}⚠️ ${HEALTH_WARNING}"$'\n'
     fi
 
-    send_tg "<b>${SHIFT_LABEL} · ${TODAY}</b>
+    # 窗口里只保留一条早报: 先删上一条 (best-effort), 再推新的并记下新 id,
+    # 下一班继续"删旧→推新" —— 不再每班堆一条新消息。
+    BRIEFING_MSG="<b>${SHIFT_LABEL} · ${TODAY}</b>
 
 📊 收录 <b>${ARTICLE_COUNT}</b> 条${IMP_INLINE}${MULTI_INLINE}${LLM_PCT_INLINE}
 ${SRC_LINE}${WARN_BLOCK}
 <a href=\"${BRIEFING_URL%/}/archive/dashboard.html\">📈 打开仪表盘 → 早报 / 晚报 / 历史</a>"
+    tg_delete "$PREV_MSG_ID"
+    NEW_MSG_ID=$(send_tg_capture "$BRIEFING_MSG")
+    if [ -n "$NEW_MSG_ID" ]; then
+        printf '{"briefing_msg_id": %s, "updated_at": "%s"}\n' \
+            "$NEW_MSG_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$TG_STATE_FILE"
+        echo "  📌 早报单条更新: 删旧(${PREV_MSG_ID:-无}) → 新 msg_id=${NEW_MSG_ID}" >> "$LOG_FILE"
+    else
+        echo "  ⚠️ 未取到新 msg_id（silent 或发送失败），保留旧 id 不变" >> "$LOG_FILE"
+    fi
 else
-    send_tg "<b>${SHIFT_LABEL} · ${TODAY}</b>
+    # 部署失败：不删上一条"可用早报"（保留最后一条好链接），单独发告警。
+    send_tg "<b>⚠️ ${SHIFT_LABEL} · ${TODAY}</b>
 
-⚠️ 已渲染 ${ARTICLE_COUNT} 条但 <b>部署失败</b>
+⚠️ 已渲染 ${ARTICLE_COUNT} 条但 <b>部署失败</b>，窗口里仍保留上一条可用早报。
 ${SRC_LINE}
 ${DURATION_LINE}
 
