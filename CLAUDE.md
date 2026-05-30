@@ -172,7 +172,9 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 
 ### 修复 4: 突发检测阈值校准 — 旧值永不触发（commit `538066e`, 2026-05-30）
 
-[breaking_news_detector.py](ai-morning-news/breaking_news_detector.py) 旧阈值 `HN≥800 分 / 只看最近 2h` 实测**永不触发**：HN 故事要 6-12h 才攒够分，最近 2h 内 AI 故事常 0 条（workflow 日志每次"HN 抓到 0 条 → 无突发"）。用户"从没收到突发"即此因。改成 **24h 窗口 + HN≥300 / HF≥2000**，加单次上限 5 + 去重 48h，全部 env 可调：`BREAKING_HN_POINTS` / `BREAKING_HN_HOURS` / `BREAKING_HF_LIKES` / `BREAKING_DEDUP_TTL_HOURS` / `BREAKING_MAX_PER_RUN`。嫌吵调高 `BREAKING_HN_POINTS`，嫌少调低。
+[breaking_news_detector.py](ai-morning-news/breaking_news_detector.py) 旧阈值 `HN≥800 分 / 只看最近 2h` 实测**永不触发**：HN 故事要 6-12h 才攒够分，最近 2h 内 AI 故事常 0 条（workflow 日志每次"HN 抓到 0 条 → 无突发"）。用户"从没收到突发"即此因。改成 **24h 窗口 + HN≥300 / HF≥2000**，加单次上限 5 + 去重 48h，全部 env 可调：`BREAKING_HN_POINTS` / `BREAKING_HN_HOURS` / `BREAKING_HF_LIKES` / `BREAKING_DEDUP_TTL_HOURS` / `BREAKING_MAX_PER_RUN`。
+
+**"只要大事"事件过滤（同 commit 续）**：实测发现 HN 高分 ≠ 大事（观点帖"Please Use AI" 724 分也上榜）。给 HN 加了一道**新闻事件标题过滤** `_HN_EVENT_RE`（只放行发布/融资/收购/事故/带版本号型号，滤掉观点/讨论/提问帖），由 `BREAKING_HN_EVENT_ONLY`(默认 true) 控制；设 false 退回"所有热门 HN 都推"。HF trending 本身就是真模型发布，不过此闸。
 
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）

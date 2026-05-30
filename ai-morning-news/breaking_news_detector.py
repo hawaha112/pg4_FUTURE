@@ -22,6 +22,7 @@ breaking_news_detector.py — 24 小时突发热点推送 (P1)
 
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -48,6 +49,26 @@ HF_LIKES_THRESHOLD = int(os.environ.get('BREAKING_HF_LIKES', '2000'))
 
 # 单次最多推几条 (防冷启动 / 大新闻日一次性轰炸)
 MAX_PUSH_PER_RUN = int(os.environ.get('BREAKING_MAX_PER_RUN', '5'))
+
+# "只要大事": HN 高分 != 大事 (观点帖"Please Use AI"也能上 700 分)。只放行标题像
+# 真新闻事件的 (发布/融资/收购/事故/带版本号的型号), 滤掉爆火的观点/讨论/提问帖。
+# 想退回"所有热门 HN 都推"就设 BREAKING_HN_EVENT_ONLY=false。
+HN_EVENT_ONLY = os.environ.get('BREAKING_HN_EVENT_ONLY', 'true').lower() == 'true'
+_HN_EVENT_RE = re.compile(
+    r'(?i)('
+    # 动作: 发布 / 融资 / 收购 / 事故
+    r'launch|releas|announc|unveil|introduc|debut|ships?\b|shipped|rolls?\s?out|'
+    r'open[\s-]?sourc|now available|general availability|'
+    r'raise[sd]?\b|raising|funding|\$\d|valuation|acqui|merger|\bipo\b|'
+    r'shuts?\s?down|outage|\bdown\b|breach|hacked|\bleak|lawsuit|sue[sd]?\b|'
+    r'\bbans?\b|banned|lay[s]?\s?off|layoffs?|fired|resign|'
+    # 带版本号的型号 (GPT-5 / Claude 4 / Gemini 3 / Llama 4 / o3 ...)
+    r'GPT-?\d|Claude\s?(?:Opus|Sonnet|Haiku|\d)|Gemini\s?\d|Llama\s?\d|'
+    r'DeepSeek[-\s]?[RV]?\d|Grok\s?\d|Qwen\s?\d|\bo[1-9]\b|'
+    # 中文
+    r'发布|开源|推出|上线|融资|收购|宕机|崩溃|泄露|诉讼|封禁|裁员|下架'
+    r')'
+)
 
 # ── 去重窗口 ── (48h: HF trending 模型常持续多天热, 24h TTL 会让同一爆款天天重推)
 DEDUP_TTL_HOURS = int(os.environ.get('BREAKING_DEDUP_TTL_HOURS', '48'))
@@ -152,11 +173,17 @@ def _detect_breaking() -> list:
         hn_signals = fetch_hn_top(limit=20, hours=HN_WINDOW_HOURS)
         for sig in hn_signals:
             pts = int(sig.get('points') or 0)
-            if pts >= HN_POINTS_THRESHOLD:
-                sig['_source'] = 'hn'
-                sig['_id'] = f"hn:{sig.get('hn_id') or sig.get('url', '')}"
-                breaking.append(sig)
-                log.info("  🚨 HN 命中: %d 分 — %s", pts, sig.get('title', '')[:60])
+            if pts < HN_POINTS_THRESHOLD:
+                continue
+            title = sig.get('title', '')
+            # 只要"大事": 标题须像真新闻事件, 滤掉爆火的观点/讨论/提问帖
+            if HN_EVENT_ONLY and not _HN_EVENT_RE.search(title):
+                log.info("  ⏭️ HN 跳过(非事件类, %d 分): %s", pts, title[:50])
+                continue
+            sig['_source'] = 'hn'
+            sig['_id'] = f"hn:{sig.get('hn_id') or sig.get('url', '')}"
+            breaking.append(sig)
+            log.info("  🚨 HN 命中: %d 分 — %s", pts, title[:60])
     except Exception as e:
         log.warning("HN 抓取异常: %s", e)
 
