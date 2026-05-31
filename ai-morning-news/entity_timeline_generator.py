@@ -168,10 +168,13 @@ def _render_timeline_html(entity_meta: Dict, events: List[Dict],
     important_html = ''.join(render_event_row(e, i) for i, e in enumerate(important))
     others_html = ''.join(render_event_row(e, i) for i, e in enumerate(others))
 
+    # 智能返回：实体页同时被主早报(根 index.html)和归档页(archive/*.html)链接，
+    # 单一静态链接无法知道来路。优先 history.back() 回到真实来路(主页或归档页都对)，
+    # 无 referrer / 直接打开 时回退到根 index.html。JS 关掉也能用(href 兜底)。
     back_link = (
-        f'<a href="../index.html" class="tl-back">← 返回早报</a>'
-        if briefing_url else
-        f'<a href="../index.html" class="tl-back">← 返回早报</a>'
+        '<a href="../index.html" class="tl-back" '
+        'onclick="if(document.referrer&&history.length>1){history.back();return false;}">'
+        '← 返回早报</a>'
     )
 
     return f'''<!DOCTYPE html>
