@@ -158,8 +158,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 print(f"     stderr: {stderr[:300]}")
             if stdout:
                 print(f"     stdout: {stdout[:300]}")
+            # CLI 的报错可能落在 stderr 或 stdout —— 401 "Failed to authenticate" 走的是
+            # stdout。两个都带上, 否则下游(run_daily.sh / weekly-report 的 token 探测)拿到
+            # 的只有 "Claude CLI error (code 1): "(空), 无法区分 token 失效 vs 其它故障,
+            # 会把 401 误报成笼统的 "proxy 探测无 choices"。
+            detail = " ".join(p for p in (stderr, stdout) if p) or "(no output)"
             self._send_json(500, {"error": {
-                "message": f"Claude CLI error (code {result.returncode}): {stderr}",
+                "message": f"Claude CLI error (code {result.returncode}): {detail}",
                 "type": "server_error",
             }})
             return
