@@ -314,8 +314,11 @@ if [ -f "$PROJECT_DIR/output/index.html" ]; then
     # 同时把仪表盘链接 'archive/dashboard.html' 改回 'dashboard.html' —
     # 主页用前者（GitHub Pages workflow 的白名单不含根目录 dashboard.html），
     # 归档页本身就在 archive/ 里，链接直接相对到同目录的 dashboard.html 即可。
+    # 实体追踪 chip 的 href="entities/..." 是相对主页（根目录）的；归档页在 archive/ 下，
+    # 同样的相对链接会解析成 archive/entities/... → 404。改写成 ../entities/... 回到根目录。
     sed -e "s|s\.src = 'modal_data\.js'|s.src = '${TODAY_DATE}-${SHIFT}_modal.js'|" \
         -e 's|href="archive/dashboard\.html"|href="dashboard.html"|g' \
+        -e 's|href="entities/|href="../entities/|g' \
         "$PROJECT_DIR/output/index.html" > "$ARCHIVE_DIR/${TODAY_DATE}-${SHIFT}.html"
     cp "$PROJECT_DIR/output/modal_data.js" "$ARCHIVE_DIR/${TODAY_DATE}-${SHIFT}_modal.js" 2>/dev/null || true
     echo "  已归档: archive/${TODAY_DATE}-${SHIFT}.html" >> "$LOG_FILE"
