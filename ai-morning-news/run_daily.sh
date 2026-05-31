@@ -519,35 +519,19 @@ if [ -f "$TG_STATE_FILE" ]; then
 fi
 
 if [ "$DEPLOY_OK" = true ]; then
-    # 单条精简推送: 核心指标一行 + 一个仪表盘入口
-    # (用户从仪表盘的"今日早班/晚班"卡进当天早报/晚报, 不再分两条 TG 消息)
-    LLM_PCT_INLINE=""
-    if [ -n "$LLM_COVERAGE" ]; then
-        LLM_PCT_INLINE=" · 🧠 LLM $("$PYTHON" -c "print(round(float('$LLM_COVERAGE')*100))" 2>/dev/null || echo '?')%"
-    fi
-    MULTI_INLINE=""
-    if [ -n "$MULTI_SRC_COUNT" ] && [ "$MULTI_SRC_COUNT" != "0" ]; then
-        MULTI_INLINE=" · 🔗 多源 <b>${MULTI_SRC_COUNT}</b>"
-    fi
-    IMP_INLINE=""
-    if [ -n "$IMP_COUNT" ] && [ "$IMP_COUNT" != "0" ]; then
-        IMP_INLINE=" · ⭐ 重要 <b>${IMP_COUNT}</b>"
-    fi
-    WARN_BLOCK=""
-    if [ -n "$NO_LLM" ] || [ -n "$LLM_COVERAGE_WARNING" ] || [ -n "$HEALTH_WARNING" ]; then
-        WARN_BLOCK=$'\n'
-        [ -n "$NO_LLM" ] && WARN_BLOCK="${WARN_BLOCK}⚠️ LLM 服务不可用,本次跳过深度分析"$'\n'
-        [ -n "$LLM_COVERAGE_WARNING" ] && WARN_BLOCK="${WARN_BLOCK}${LLM_COVERAGE_WARNING}"$'\n'
-        [ -n "$HEALTH_WARNING" ] && WARN_BLOCK="${WARN_BLOCK}⚠️ ${HEALTH_WARNING}"$'\n'
-    fi
-
-    # 窗口里只保留一条早报: 先删上一条 (best-effort), 再推新的并记下新 id,
-    # 下一班继续"删旧→推新" —— 不再每班堆一条新消息。
-    BRIEFING_MSG="<b>${SHIFT_LABEL} · ${TODAY}</b>
-
-📊 收录 <b>${ARTICLE_COUNT}</b> 条${IMP_INLINE}${MULTI_INLINE}${LLM_PCT_INLINE}
-${SRC_LINE}${WARN_BLOCK}
-<a href=\"${BRIEFING_URL%/}/archive/dashboard.html\">📈 打开仪表盘 → 早报 / 晚报 / 历史</a>"
+    # 内容优先(P0): 前置 important_events 头条, 让你在 TG 一眼看到"发生了什么"、不必点进去。
+    # 砍掉 LLM 覆盖率/源健康/用时等流水线诊断(那些进仪表盘, 不进每日推送)。
+    # 窗口里只保留这一条, 每班"删旧→推新"刷新。
+    if [ "$SHIFT" = "am" ]; then RPT="早报"; SHORT_SHIFT="早班"; else RPT="晚报"; SHORT_SHIFT="晚班"; fi
+    HEADLINES=""
+    [ -f "$STATS_FILE" ] && HEADLINES=$("$PYTHON" "$PROJECT_DIR/_tg_headlines.py" "$STATS_FILE" 3 2>/dev/null || echo "")
+    WARN_LINE=""
+    [ -n "$NO_LLM" ] && WARN_LINE=$'\n'"⚠️ LLM 暂不可用，本班为规则兜底内容"
+    BRIEFING_MSG="<b>📰 AI ${RPT} · $(date '+%m-%d') ${SHORT_SHIFT}</b>
+${HEADLINES:+
+${HEADLINES}
+}
+共 <b>${ARTICLE_COUNT}</b> 条 · <a href=\"${BRIEFING_URL}\">📖 阅读全文 →</a>${WARN_LINE}"
     tg_delete "$PREV_MSG_ID"
     NEW_MSG_ID=$(send_tg_capture "$BRIEFING_MSG")
     if [ -n "$NEW_MSG_ID" ]; then

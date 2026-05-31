@@ -182,6 +182,12 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 
 **配套 UX (同批)**：实体页「← 返回早报」原来写死 `../index.html`（总回最新主早报，不是来路）。改成 `history.back()` 智能返回——来自归档页就回那张归档页、来自主页就回主页，无 referrer/直接打开 时回退 `../index.html`，JS 关掉有 href 兜底（[entity_timeline_generator.py](ai-morning-news/entity_timeline_generator.py)）。12 个已部署实体页同批注入 onclick。
 
+### 改进 6: TG 推送内容优先 + 页面信息重排（2026-05-31，产品审查）
+
+1. **TG 早报消息内容优先**：原来推的是「收录 N 条 · LLM% · 源健康」纯流水线诊断、链接还跳仪表盘（撞用户"只要内容不要诊断"的偏好）。改成**前置 important_events 头条（最多 3 条，第一条带 ⭐）+ 共 N 条 + 直达全文链接**；砍掉覆盖率/源健康/用时（那些进仪表盘）。头条由 [_tg_headlines.py](ai-morning-news/_tg_headlines.py) 从 stats.json 提取（独立脚本，避免内联 heredoc 在云端静默失败）。安静日无 importance≥4 事件时优雅退化为「📰 标题 / 共 N 条 · 阅读全文」。仅保留 `NO_LLM` 一条降级告警。
+2. **页面信息重排**：[templates/page.html](ai-morning-news/templates/page.html) 把"实体追踪"12-chip 从『判断与必读之间』挪到**所有新闻下方**（二级导航不挤占头部）。新顺序：今日判断 → 今日必读 → 其他资讯 → 大V → 实体追踪。
+3. 突发消息的"命中信号"（HN 分 / HF 赞）**本就已在** [breaking_news_detector.py](ai-morning-news/breaking_news_detector.py) 的消息里，无需改。
+
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）
 - **Cloudflare / Nitter 反爬**：[content_fetcher.py](ai-morning-news/content_fetcher.py) 对 X(Twitter) 走 Nitter 实例，经常 429。健康度由 [health_tracker.py](ai-morning-news/health_tracker.py) 跟踪，10+ 连续失败自动停用
