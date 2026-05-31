@@ -178,7 +178,9 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 
 ### 修复 5: 归档页"实体追踪"chip 404（2026-05-31）
 
-实体追踪 chip 的 href 是相对**主页根目录**的 `entities/{id}-30d.html`（[html_generator.py:799](ai-morning-news/html_generator.py)）。主页点正常（实测 200），但归档页在 `archive/` 子目录下，同样的相对链接解析成 `archive/entities/...` → **404**——从 TG「本班次归档」进去再点实体追踪就打不开。根因同 dashboard 链接：归档页是 index.html 的 sed 副本，dashboard 链接当初改对了、entity chip 漏了。修复：[run_daily.sh](ai-morning-news/run_daily.sh) 归档 sed 增加 `href="entities/` → `href="../entities/"`。**仅对新生成的归档页生效**，已部署的旧归档页仍是坏链（历史页，不回填）。
+实体追踪 chip 的 href 是相对**主页根目录**的 `entities/{id}-30d.html`（[html_generator.py:799](ai-morning-news/html_generator.py)）。主页点正常（实测 200），但归档页在 `archive/` 子目录下，同样的相对链接解析成 `archive/entities/...` → **404**——从 TG「本班次归档」进去再点实体追踪就打不开。根因同 dashboard 链接：归档页是 index.html 的 sed 副本，dashboard 链接当初改对了、entity chip 漏了。修复：[run_daily.sh](ai-morning-news/run_daily.sh) 归档 sed 增加 `href="entities/` → `href="../entities/"`（管新归档页）；**已部署的 29 个旧归档页一次性回填**（部署仓 commit `244257e`，perl 同款改写，幂等）。
+
+**配套 UX (同批)**：实体页「← 返回早报」原来写死 `../index.html`（总回最新主早报，不是来路）。改成 `history.back()` 智能返回——来自归档页就回那张归档页、来自主页就回主页，无 referrer/直接打开 时回退 `../index.html`，JS 关掉有 href 兜底（[entity_timeline_generator.py](ai-morning-news/entity_timeline_generator.py)）。12 个已部署实体页同批注入 onclick。
 
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）
