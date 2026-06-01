@@ -557,6 +557,9 @@ def main():
         try:
             analyzer = create_analyzer_from_config(config)
             if analyzer and len(all_items) >= 3:
+                # 渲染前语义去重: 合并同一事件的多条(表层相似度抓不住, 用 LLM 判同)。
+                # 失败原样返回。去重后的 all_items 同时供 digest 和 generate_html 使用。
+                all_items = analyzer.dedupe_same_event(all_items)
                 log.info("📝 生成今日速览...")
                 digest = analyzer.generate_digest(all_items)
                 # 缓存成功的速览，避免重渲染丢失

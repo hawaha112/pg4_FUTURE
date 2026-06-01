@@ -940,6 +940,77 @@ class LLMAnalyzer:
         }
 
     # ------------------------------------------------------------------
+    # 渲染前语义去重（同一事件不同来源/措辞 → 合并成一条）
+    # ------------------------------------------------------------------
+
+    def dedupe_same_event(self, items: List[dict]) -> List[dict]:
+        """LLM 语义去重：把指向【同一真实事件】的 item 合并成一条（保留最优）。
+
+        为什么不用表层相似度：实测同事件不同措辞的真重复 minhash 仅 0.28，
+        调阈值必然漏判或误合并。这里用 LLM 按语义判同（每次出报 1 次小调用）。
+
+        安全：LLM 报错 / 解析空 / 编号越界 → 原样返回，绝不丢条目。
+        """
+        if not items or len(items) < 3:
+            return items
+        lines = []
+        for i, it in enumerate(items):
+            a = it.get('analysis', {}) or {}
+            t = (a.get('chinese_title') or it.get('title') or '').strip().replace('\n', ' ')
+            lines.append(f'[{i}] {t[:60]}')
+        sys_msg = "你是新闻去重助手。只判断哪些标题指向同一真实事件，不做别的。"
+        user_msg = (
+            "下面是今天的 AI 新闻标题(带编号)。把指向【同一真实事件】的编号分到一组："
+            "同一事件 = 同一主体 + 同一动作(哪怕来源/措辞/语言不同)；不同事件不要合并；"
+            "泛主题汇总贴(如 newsletter 综述)不算与某条具体新闻同事件。\n"
+            '只输出 JSON，不要解释：{"groups": [[同事件编号,…], …]}，只列含 ≥2 个编号的组。\n\n'
+            + '\n'.join(lines)
+        )
+        try:
+            resp = self._call_api([
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": user_msg},
+            ])
+            groups = (self._extract_json(resp) or {}).get('groups') or []
+        except Exception as e:
+            log.warning("⚠️ 语义去重调用失败(原样返回): %s", e)
+            return items
+        if not isinstance(groups, list):
+            return items
+
+        n = len(items)
+
+        def _score(idx: int):
+            it = items[idx]
+            a = it.get('analysis', {}) or {}
+            return (int(a.get('importance', 0) or 0),
+                    int(it.get('cluster_size', 1) or 1), -idx)
+
+        drop = set()
+        for g in groups:
+            if not isinstance(g, list):
+                continue
+            ids = []
+            for x in g:
+                if isinstance(x, bool):
+                    continue
+                if isinstance(x, int) or (isinstance(x, str) and x.strip().isdigit()):
+                    xi = int(x)
+                    if 0 <= xi < n:
+                        ids.append(xi)
+            ids = list(dict.fromkeys(ids))   # 去重保序
+            if len(ids) < 2:
+                continue
+            keep = max(ids, key=_score)
+            for x in ids:
+                if x != keep:
+                    drop.add(x)
+        if not drop:
+            return items
+        log.info("🧠 语义去重：合并 %d 条同事件重复（%d → %d）",
+                 len(drop), n, n - len(drop))
+        return [it for i, it in enumerate(items) if i not in drop]
+
     # 今日速览（全局综合）
     # ------------------------------------------------------------------
 
