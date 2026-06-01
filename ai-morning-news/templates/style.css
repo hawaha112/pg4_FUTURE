@@ -196,6 +196,33 @@ body {
     text-decoration: none;
 }
 .jc-src:hover { text-decoration: underline; }
+/* 今日口播稿区块 (C) — 60-90 秒口语稿, 供音频/视频取用 */
+.broadcast {
+    max-width: 1120px; margin: 28px auto 0; padding: 18px 20px;
+    background: var(--bg-card, rgba(255,255,255,0.04));
+    border: 1px solid var(--border, rgba(255,255,255,0.10));
+    border-radius: 10px;
+}
+.bc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bc-title { font-family: var(--serif); font-size: 17px; font-weight: 700; margin: 0; color: var(--text-100, #ecf0f5); }
+.bc-copy {
+    font-size: 12px; padding: 5px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap;
+    color: var(--accent, #66c0ff); background: rgba(102, 192, 255, 0.08);
+    border: 1px solid rgba(102, 192, 255, 0.30);
+}
+.bc-copy:hover { background: rgba(102, 192, 255, 0.16); }
+.bc-hint { font-size: 11px; color: var(--text-50, #8a93a6); margin: 4px 0 10px; }
+.bc-text {
+    white-space: pre-wrap; word-break: break-word;
+    font-family: var(--serif, 'Noto Serif SC', serif);
+    font-size: 14.5px; line-height: 1.9;
+    color: var(--text-70, #b6bdcb);
+    margin: 0; background: transparent; border: none; padding: 0;
+}
+@media (max-width: 640px) {
+    .broadcast { margin: 20px 12px 0; padding: 14px; }
+    .bc-text { font-size: 14px; }
+}
 .briefing .br-outro {
     max-width: 1120px;
     font-style: italic;

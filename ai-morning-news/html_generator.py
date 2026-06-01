@@ -888,7 +888,23 @@ def generate_html(all_items, config, digest=None, meta=None):
     js_content = _load_template('script.js')
     page_template = Template(_load_template('page.html'))
 
+    # 口播稿区块 (C): meta['broadcast_script'] 有值时渲染一个可复制区块, 供音频/视频取用
+    broadcast_html = ''
+    _bc = ((meta or {}).get('broadcast_script') or '').strip()
+    if _bc:
+        broadcast_html = (
+            '<section class="broadcast">'
+            '<div class="bc-head"><h2 class="bc-title">🎙 今日口播稿</h2>'
+            '<button class="bc-copy" type="button" '
+            "onclick=\"navigator.clipboard.writeText(document.getElementById('bcText').innerText)"
+            ".then(()=>{this.textContent='已复制 ✓'})\">复制全文</button></div>"
+            '<p class="bc-hint">~60–90 秒口语稿 · 可直接念或喂 TTS</p>'
+            f'<pre class="bc-text" id="bcText">{_safe_escape(_bc)}</pre>'
+            '</section>'
+        )
+
     html = page_template.safe_substitute(
+        broadcast_html=broadcast_html,
         vip_html=vip_html,
         date_str=date_str,
         weekday=weekday,

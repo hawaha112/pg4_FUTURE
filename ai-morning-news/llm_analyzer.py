@@ -1011,6 +1011,46 @@ class LLMAnalyzer:
                  len(drop), n, n - len(drop))
         return [it for i, it in enumerate(items) if i not in drop]
 
+    def generate_broadcast_script(self, digest: dict) -> str:
+        """把今日判断改写成 60-90 秒口播稿(口语/短句/铺垫专有名词), 供 TTS/短视频。
+
+        判断是为"读"写的(密集堆专有名词), 念出来听众跟不上 —— 这里专门生成可朗读版。
+        失败返回 ''(调用方据此不渲染口播稿区块)。
+        """
+        digest = digest or {}
+        judgments = digest.get('judgments') or []
+        if not judgments:
+            return ''
+        headline = (digest.get('headline') or '').strip()
+        pts = []
+        for j in judgments[:3]:
+            t = (j.get('title') or '').strip()
+            b = (j.get('body') or '').strip()
+            if t:
+                pts.append(f'- {t}\n  {b}')
+        if not pts:
+            return ''
+        sys_msg = "你是科技播客主播。把要点改写成可以直接念出来的中文口播稿。"
+        user_msg = (
+            "把下面的「今日判断」改写成一段 60-90 秒的口播稿, 用于音频/短视频:\n"
+            "- 纯口语、短句, 像跟朋友讲; 不要书面语堆叠、不要一句塞太多专有名词\n"
+            "- 开场一句钩子抓注意力\n"
+            "- 每件事先用半句话铺垫(这是谁/是什么), 再讲为什么重要\n"
+            "- 自然过渡, 结尾一句收束\n"
+            "- 只输出口播稿正文, 不要标题/小标题/markdown/序号/方括号备注\n\n"
+            + (f'今日主旋律: {headline}\n\n' if headline else '')
+            + '今日判断:\n' + '\n'.join(pts)
+        )
+        try:
+            resp = self._call_api([
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": user_msg},
+            ])
+            return (resp or '').strip()
+        except Exception as e:
+            log.warning("⚠️ 口播稿生成失败(跳过): %s", e)
+            return ''
+
     # 今日速览（全局综合）
     # ------------------------------------------------------------------
 

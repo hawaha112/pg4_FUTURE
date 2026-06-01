@@ -688,6 +688,14 @@ def main():
                 entity_set.add(eid)
     entity_count = len(entity_set)
 
+    # ── 口播稿 (C, 不阻塞): 把今日判断改写成 60-90 秒口语稿, 供音频/短视频取用 ──
+    broadcast_script = ''
+    if isinstance(digest, dict) and digest.get('judgments'):
+        try:
+            broadcast_script = create_analyzer_from_config(config).generate_broadcast_script(digest)
+        except Exception as e:
+            log.warning("⚠️ 口播稿生成失败 (不阻塞): %s", e)
+
     meta = {
         'llm_coverage': llm_coverage,
         'llm_count': llm_count,
@@ -696,6 +704,7 @@ def main():
         'official_count': official_count,
         'depth_count': depth_count,
         'entity_count': entity_count,
+        'broadcast_script': broadcast_script,
     }
 
     # ── 生成实体时间线 (P1, 不阻塞主流程) ──

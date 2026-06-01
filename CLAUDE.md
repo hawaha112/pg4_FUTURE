@@ -198,6 +198,15 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 
 用户反馈"已核/未核"对读者太抽象。把「今日判断」卡顶部的事实核对计数徽章（`✓ N 处已核 / M 处未核`）**换成卡片底部的原文来源链接**：`evidence_ids` → `all_items[i]` 的真实 URL（[html_generator.py](ai-morning-news/html_generator.py) 判断卡循环；`generate_digest(all_items)` 与 `generate_html(all_items,…)` 收同一份 list，下标对齐，安全映射）。形如「📎 来源：🤖 OpenAI Blog · 📰 Techmeme」，点开即核对。**保留** `⚠ N 处与新闻不符`（contradicted_count>0，真红旗）。CSS 加 `.jc-sources`/`.jc-src`。下一班出报生效。
 
+### 改进 9: 内容质量三连（2026-06-01）
+
+实测真实产出后定的（判断/deep_analysis 已很强，没动）：
+1. **why_it_matters 去套话**（commit `93713d4`）：[prompts/system.txt](ai-morning-news/prompts/system.txt) 的 why_it_matters 原只"说清所以呢"、无反套话约束，输出退回"标志着…关键一步"。补全禁忌词 + 要求具体后果（谁受益谁受损）+ 强弱对照例。
+2. **渲染前 LLM 语义去重**（commit `3c2b667`）：同一事件不同来源/措辞，表层相似度抓不住（实测真重复 minhash 仅 0.28，调阈值必漏/误合并）。新增 `LLMAnalyzer.dedupe_same_event`（出报前把当天标题丢 LLM 判"哪些同事件"并合并，保留 importance 最高那条，失败/越界一律原样返回），[briefing_renderer.py](ai-morning-news/briefing_renderer.py) 在 digest 前调用 → 去重后 all_items 同时供判断和卡片。
+3. **今日口播稿**：判断是为"读"写的、念出来太密（用户要做音频/视频）。新增 `LLMAnalyzer.generate_broadcast_script`（判断→60-90 秒口语稿），页面底部加可复制「🎙 今日口播稿」区块（[page.html](ai-morning-news/templates/page.html) `$broadcast_html` + html_generator + style.css）。
+
+三项均 LLM 依赖、仅命中/出报时调用（token 小）；逻辑/渲染已本地桩测，最终文案需云端出报验证。
+
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）
 - **Cloudflare / Nitter 反爬**：[content_fetcher.py](ai-morning-news/content_fetcher.py) 对 X(Twitter) 走 Nitter 实例，经常 429。健康度由 [health_tracker.py](ai-morning-news/health_tracker.py) 跟踪，10+ 连续失败自动停用
