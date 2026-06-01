@@ -710,47 +710,49 @@ def generate_html(all_items, config, digest=None, meta=None):
             j_body = re.sub(r'\*\*([^*\n]+?)\*\*',
                             r'<strong class="jc-bold">\1</strong>', j_body)
 
-            # 三道工序徽章: 编辑改过 / 校对结果
+            # 顶部徽章: 编辑改写标 + (仅) 与来源矛盾的红旗。
+            # 旧的"已核/未核"计数对读者太抽象 → 改成卡片底部直接列原文来源链接(见下方
+            # jc-sources), 让读者点进去自己核对, 比一个数字徽章直观。
             badges_html = ''
             if j.get('_was_rewritten'):
                 badges_html += '<span class="jc-badge jc-badge-edited" title="编辑改写过, 提升立场">✎ 编辑改写</span>'
             fc = j.get('fact_check') or {}
-            if fc:
-                conf = fc.get('confidence', 'medium')
-                vc = int(fc.get('verified_count', 0) or 0)
-                uc = int(fc.get('unverified_count', 0) or 0)
-                cc = int(fc.get('contradicted_count', 0) or 0)
-                if cc > 0:
-                    badge_cls = 'jc-badge-warn'
-                    badge_icon = '⚠'
-                    badge_text = f'{cc} 处事实有疑'
-                elif conf == 'high' and vc > 0:
-                    badge_cls = 'jc-badge-verified'
-                    badge_icon = '✓'
-                    badge_text = f'{vc} 处事实已核对'
-                elif conf == 'low':
-                    badge_cls = 'jc-badge-warn'
-                    badge_icon = '⚠'
-                    badge_text = f'{uc} 处未核'
-                elif vc > 0:
-                    badge_cls = 'jc-badge-medium'
-                    badge_icon = '✓'
-                    badge_text = f'{vc} 处已核 / {uc} 处未核'
-                else:
-                    badge_cls = None
-                    badge_icon = None
-                if badge_cls:
-                    title_attr = _safe_escape(' · '.join(fc.get('warnings', [])) or '')
-                    badges_html += (
-                        f'<span class="jc-badge {badge_cls}" title="{title_attr}">'
-                        f'{badge_icon} {badge_text}</span>'
-                    )
+            cc = int((fc.get('contradicted_count') if fc else 0) or 0)
+            if cc > 0:
+                title_attr = _safe_escape(' · '.join(fc.get('warnings', [])) or '此判断有事实点与采集到的新闻不符')
+                badges_html += (
+                    f'<span class="jc-badge jc-badge-warn" title="{title_attr}">'
+                    f'⚠ {cc} 处与新闻不符</span>'
+                )
+
+            # 来源链接: evidence_ids → all_items[i] 的原文。generate_digest 和 generate_html
+            # 收到同一份 all_items(briefing_renderer 同一变量), 下标对齐, 可直接映射。
+            src_links = []
+            seen_src = set()
+            for ei in (j.get('evidence_ids') or []):
+                if not isinstance(ei, int) or ei < 0 or ei >= len(all_items):
+                    continue
+                it = all_items[ei]
+                u = (it.get('url') or it.get('link') or '').strip()
+                if not u or u in seen_src:
+                    continue
+                seen_src.add(u)
+                sname = _safe_escape(it.get('source_name', '') or '原文')
+                sicon = _safe_escape(str(it.get('source_icon', '') or '🔗'))
+                src_links.append(
+                    f'<a class="jc-src" href="{_safe_escape(u)}" target="_blank" '
+                    f'rel="noopener">{sicon} {sname}</a>'
+                )
+            src_html = ''
+            if src_links:
+                src_html = '<div class="jc-sources">📎 来源：' + ' · '.join(src_links) + '</div>'
 
             j_cards_html += (
                 '<article class="judgment-card">'
                 f'<div class="jc-header"><span class="jc-emoji">{j_emoji}</span>{badges_html}</div>'
                 f'<h3 class="jc-title">{j_title}</h3>'
                 f'<p class="jc-body">{j_body}</p>'
+                f'{src_html}'
                 '</article>'
             )
 

@@ -183,6 +183,19 @@ body {
 .jc-body .jc-bold {
     color: var(--text-100); font-weight: 600;
 }
+/* 判断卡底部"来源"链接 — 取代抽象的"已核/未核"徽章, 让读者直接点原文核对 */
+.jc-sources {
+    margin: 12px 0 0;
+    padding-top: 9px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.10);
+    font-size: 11px; line-height: 1.8;
+    color: var(--text-50, #8a93a6);
+}
+.jc-src {
+    color: var(--accent, #66c0ff);
+    text-decoration: none;
+}
+.jc-src:hover { text-decoration: underline; }
 .briefing .br-outro {
     max-width: 1120px;
     font-style: italic;

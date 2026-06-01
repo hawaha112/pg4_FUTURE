@@ -194,6 +194,10 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 2. **两段式省 token/Actions**：detector 拆 `detect`(纯 stdlib, 每小时, 无命中即止) / `push`(读 pending 翻译后推) / `all`(本地兜底)。[breaking-news.yml](.github/workflows/breaking-news.yml) 改成 detect 先跑 → **仅当有命中**才装 claude + 起 proxy + push。无突发的小时(绝大多数)不装 claude、不调 LLM → token 几乎为 0、Actions 分钟也省。timeout 5→10 分。新增 `min_points` dispatch 输入(临时降阈做测试/演示)。
 3. **HN AI 过滤修词边界 bug**：[hot_signals.py](ai-morning-news/extractors/hot_signals.py) 旧 `'ai' in title` 子串匹配会命中 "br**ai**n"/"ch**ai**r"/"**ai**r"，把非 AI 帖(实测"Creatine raises brain energy" 518 分)误判成 AI 突发。改成词边界正则（`\bai\b`/`\brag\b` 要求整词，其余允许前缀）。
 
+### 改进 8: 判断卡"已核/未核"徽章 → 原文来源链接（2026-06-01）
+
+用户反馈"已核/未核"对读者太抽象。把「今日判断」卡顶部的事实核对计数徽章（`✓ N 处已核 / M 处未核`）**换成卡片底部的原文来源链接**：`evidence_ids` → `all_items[i]` 的真实 URL（[html_generator.py](ai-morning-news/html_generator.py) 判断卡循环；`generate_digest(all_items)` 与 `generate_html(all_items,…)` 收同一份 list，下标对齐，安全映射）。形如「📎 来源：🤖 OpenAI Blog · 📰 Techmeme」，点开即核对。**保留** `⚠ N 处与新闻不符`（contradicted_count>0，真红旗）。CSS 加 `.jc-sources`/`.jc-src`。下一班出报生效。
+
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）
 - **Cloudflare / Nitter 反爬**：[content_fetcher.py](ai-morning-news/content_fetcher.py) 对 X(Twitter) 走 Nitter 实例，经常 429。健康度由 [health_tracker.py](ai-morning-news/health_tracker.py) 跟踪，10+ 连续失败自动停用
