@@ -43,7 +43,7 @@ log = get_logger('breaking')
 # 旧值 HN>=800 / 2h 窗口实测永不触发: HN 故事要 6-12h 才攒够分, 最近 2h 内 AI 故事
 # 常为 0 条 (见 breaking-news workflow 日志 "HN 抓到 0 条")。改成 24h 窗口看"当前
 # 热榜爆款", 阈值降到 300 (实测 24h 内 AI top 故事约 300-720 分, 每天 0-3 条真命中)。
-HN_POINTS_THRESHOLD = int(os.environ.get('BREAKING_HN_POINTS', '300'))
+HN_POINTS_THRESHOLD = int(os.environ.get('BREAKING_HN_POINTS') or '300')  # or: 空串也回退默认
 HN_WINDOW_HOURS = int(os.environ.get('BREAKING_HN_HOURS', '24'))
 HF_LIKES_THRESHOLD = int(os.environ.get('BREAKING_HF_LIKES', '2000'))
 
@@ -76,6 +76,8 @@ DEDUP_TTL_HOURS = int(os.environ.get('BREAKING_DEDUP_TTL_HOURS', '48'))
 # ── 路径 ──
 SCRIPT_DIR = Path(__file__).parent
 PUSHED_PATH = SCRIPT_DIR / 'output' / 'pushed_breaking.json'
+# detect 阶段把"本次该推的新突发"写这里, push 阶段读它翻译后推 (两段式, 见 main)
+PENDING_PATH = SCRIPT_DIR / 'output' / 'breaking_pending.json'
 
 # ── TG 凭据 ──
 TG_BOT_TOKEN = os.environ.get('TG_BOT_TOKEN', '')
@@ -204,33 +206,74 @@ def _detect_breaking() -> list:
     return breaking
 
 
-def _format_breaking_msg(sig: dict) -> str:
-    """根据源类型生成简短 TG 推送消息 (HTML 格式)."""
-    src = sig.get('_source')
-    title = sig.get('title', '').strip()
-    url = sig.get('url', '')
+def _translate_title(title: str) -> str:
+    """调本地 LLM 代理把外文标题译成简洁中文标题 (best-effort, 卡片化用)。
 
-    # 时间戳
+    仅在 push 阶段、确有突发命中时才会被调到 —— 每天 0-3 次、每次几百 token,
+    成本可忽略。代理不可用 / 超时 / 失败 → 返回 ''(调用方回退英文原标题, 永不阻塞推送)。
+    """
+    title = (title or '').strip()
+    if not title:
+        return ''
+    base = os.environ.get('LLM_BASE_URL', 'http://localhost:3456/v1').rstrip('/')
+    prompt = (
+        "把下面这条 AI 新闻标题翻译成简洁、准确的中文标题: 保留公司/产品/型号原名"
+        "(如 GPT-5、Claude、OpenAI、NVIDIA、DeepSeek), 不超过 40 字, 不要加引号或解释, "
+        "只输出中文标题这一行。\n\n标题: " + title
+    )
+    payload = json.dumps({
+        'model': 'claude-sonnet-4',
+        'messages': [{'role': 'user', 'content': prompt}],
+        'max_tokens': 120,
+        'temperature': 0,
+    }).encode('utf-8')
+    req = urllib.request.Request(
+        base + '/chat/completions', data=payload, method='POST',
+        headers={'Content-Type': 'application/json'},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            body = json.loads(resp.read().decode('utf-8'))
+        txt = ((body.get('choices') or [{}])[0].get('message') or {}).get('content', '')
+        txt = (txt or '').strip().strip('"\'').strip()
+        return txt.splitlines()[0][:60] if txt else ''
+    except Exception as e:
+        log.warning("⚠️ 标题翻译失败(回退英文原标题): %s", e)
+        return ''
+
+
+def _format_breaking_msg(sig: dict) -> str:
+    """生成突发 TG 卡片 (HTML)。标题翻译成中文卡片化呈现, 同时附英文原标题便于核对;
+    翻译不可用时只显示原标题, 永不阻塞推送。命中信号(HN 分/HF 赞)保留。"""
+    src = sig.get('_source')
+    title = (sig.get('title') or '').strip()
+    url = sig.get('url', '')
     ts = datetime.now(timezone(timedelta(hours=8))).strftime('%m-%d %H:%M')
+
+    zh = _translate_title(title)
+    if zh and zh != title:
+        title_block = f"<b>{_html_escape(zh)}</b>\n<i>{_html_escape(title)}</i>"
+    else:
+        title_block = f"<b>{_html_escape(title)}</b>"
 
     if src == 'hn':
         pts = int(sig.get('points') or 0)
         comments = int(sig.get('comments') or 0)
         return (
-            f"🚨 <b>HN 突发</b> · {ts}\n"
-            f"<b>{pts} 分</b> / {comments} 评论\n"
-            f"\n"
-            f'<a href="{url}">{_html_escape(title)}</a>'
+            f"🚨 <b>突发 · HN 热点</b> · {ts}\n\n"
+            f"{title_block}\n\n"
+            f"📊 {pts} 分 · {comments} 评论\n"
+            f'<a href="{url}">🔗 阅读原文 →</a>'
         )
     if src == 'hf':
         likes = int(sig.get('likes') or 0)
         type_ = sig.get('type', 'model')
         type_zh = {'model': '模型', 'dataset': '数据集', 'space': '应用'}.get(type_, type_)
         return (
-            f"🔥 <b>HuggingFace 爆款{type_zh}</b> · {ts}\n"
-            f"<b>{likes} 赞</b> · 7 天 trending\n"
-            f"\n"
-            f'<a href="{url}">{_html_escape(title)}</a>'
+            f"🔥 <b>突发 · HuggingFace 爆款{type_zh}</b> · {ts}\n\n"
+            f"{title_block}\n\n"
+            f"❤️ {likes} 赞 · 7 天 trending\n"
+            f'<a href="{url}">🔗 查看 →</a>'
         )
     return ''
 
@@ -268,43 +311,43 @@ def _send_tg(html_text: str) -> bool:
         return False
 
 
-def main() -> int:
-    log.info("=" * 55)
-    log.info("📡 突发热点检测器启动 — 阈值: HN>=%d / HF>=%d",
-             HN_POINTS_THRESHOLD, HF_LIKES_THRESHOLD)
-    log.info("=" * 55)
-
+def _detect_and_select() -> list:
+    """检测 → 去重过滤 → 按热度排序 → 取 top N。返回本次该推的新 signals
+    (尚未推送、尚未标记)。detect 与 all 两种模式共用。"""
     pushed = _load_pushed()
-    log.info("📋 已推送历史 (24h 内): %d 条", len(pushed))
-
+    log.info("📋 已推送历史 (%dh 内): %d 条", DEDUP_TTL_HOURS, len(pushed))
     breaking = _detect_breaking()
     log.info("🎯 检测到突发候选: %d 条", len(breaking))
-
-    if not breaking:
-        log.info("✅ 无突发, 退出")
-        return 0
-
-    # 按分数降序, 大新闻优先; 单次最多 MAX_PUSH_PER_RUN 条 (防冷启动/大新闻日轰炸)
+    # 按分数降序, 大新闻优先
     breaking.sort(key=lambda s: int(s.get('points') or s.get('likes') or 0), reverse=True)
-
-    new_pushes = []
+    selected = []
     for sig in breaking:
-        if len(new_pushes) >= MAX_PUSH_PER_RUN:
+        if len(selected) >= MAX_PUSH_PER_RUN:
             log.info("  ⏸️ 已达单次上限 %d 条, 余下留待下轮", MAX_PUSH_PER_RUN)
             break
-        sid = sig['_id']
-        if sid in pushed:
-            log.info("  ⏭️ 已推过 (%dh): %s", DEDUP_TTL_HOURS, sid)
+        if sig.get('_id') in pushed:
+            log.info("  ⏭️ 已推过 (%dh): %s", DEDUP_TTL_HOURS, sig.get('_id'))
             continue
-        msg = _format_breaking_msg(sig)
+        selected.append(sig)
+    return selected
+
+
+def _push_signals(signals: list) -> int:
+    """翻译成卡片并推送给定 signals; 推成功的立即标记去重。返回成功条数。"""
+    pushed = _load_pushed()
+    n = 0
+    for sig in signals:
+        sid = sig.get('_id')
+        if not sid or sid in pushed:
+            continue
+        msg = _format_breaking_msg(sig)   # 内部 best-effort 翻译, 失败回退英文原文
         if not msg:
             continue
         if _send_tg(msg):
-            score_val = (
-                sig.get('points')
-                or sig.get('likes')
-                or sig.get('stars')
-                or 0
+            score_val = sig.get('points') or sig.get('likes') or sig.get('stars') or 0
+            _mark_pushed_one(
+                sig_id=sid, source=sig.get('_source', 'unknown'),
+                title=sig.get('title', ''), url=sig.get('url', ''), score=score_val,
             )
             pushed[sid] = {
                 'pushed_at': datetime.now(timezone.utc).isoformat(),
@@ -313,22 +356,52 @@ def main() -> int:
                 'url': sig.get('url', ''),
                 'score': score_val,
             }
-            # 主路径: 立即写 DB (SOT)
-            _mark_pushed_one(
-                sig_id=sid,
-                source=sig.get('_source', 'unknown'),
-                title=sig.get('title', ''),
-                url=sig.get('url', ''),
-                score=score_val,
-            )
-            new_pushes.append(sid)
+            n += 1
             log.info("  ✅ 已推送: %s", sig.get('title', '')[:60])
-
     _save_pushed(pushed)
+    return n
+
+
+def main() -> int:
+    mode = sys.argv[1].strip().lower() if len(sys.argv) > 1 else 'all'
     log.info("=" * 55)
-    log.info("✅ 完成: 推送 %d 条新突发, 总历史 %d 条",
-             len(new_pushes), len(pushed))
+    log.info("📡 突发检测器 [mode=%s] — 阈值 HN>=%d / HF>=%d",
+             mode, HN_POINTS_THRESHOLD, HF_LIKES_THRESHOLD)
     log.info("=" * 55)
+
+    # detect: 只检测+选出, 写 pending, 不推不标记 (留给 push 阶段翻译后推)。
+    # 无突发的小时(绝大多数)纯 stdlib 跑完即止, 不必装 claude → 省 token 省 Actions。
+    if mode == 'detect':
+        selected = _detect_and_select()
+        PENDING_PATH.parent.mkdir(parents=True, exist_ok=True)
+        PENDING_PATH.write_text(json.dumps(selected, ensure_ascii=False), encoding='utf-8')
+        log.info("✅ detect: %d 条新突发写入 pending", len(selected))
+        return 0
+
+    # push: 读 pending, 翻译成中文卡片后推 (仅当 detect 报告有命中时由 workflow 调起)。
+    if mode == 'push':
+        try:
+            signals = json.loads(PENDING_PATH.read_text(encoding='utf-8'))
+        except (OSError, json.JSONDecodeError):
+            signals = []
+        if not signals:
+            log.info("✅ push: pending 为空, 无事可做")
+            return 0
+        n = _push_signals(signals)
+        try:
+            PENDING_PATH.unlink()
+        except OSError:
+            pass
+        log.info("✅ push: 推送 %d 条新突发卡片", n)
+        return 0
+
+    # all (默认, 本地/兜底): 检测 + 直接推。翻译 best-effort, 无代理则回退英文原标题。
+    selected = _detect_and_select()
+    if not selected:
+        log.info("✅ 无突发, 退出")
+        return 0
+    n = _push_signals(selected)
+    log.info("✅ 完成: 推送 %d 条新突发", n)
     return 0
 
 

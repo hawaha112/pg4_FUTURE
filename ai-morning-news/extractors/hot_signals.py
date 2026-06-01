@@ -94,12 +94,16 @@ def fetch_hn_top(limit: int = 30, hours: int = 36) -> List[Dict]:
     if not data:
         return []
 
-    # AI 关键词过滤 (HN search 不支持 OR, 自己筛)
-    ai_keywords = (
-        'ai', 'llm', 'gpt', 'claude', 'gemini', 'llama', 'mistral',
-        'openai', 'anthropic', 'deepmind', 'huggingface', 'transformer',
-        'diffusion', 'neural', 'machine learning', 'rag', 'agent',
-        'inference', 'embedding', 'fine-tun', 'open-source', 'mlx',
+    # AI 关键词过滤 (HN search 不支持 OR, 自己筛)。用词边界正则而非朴素子串 ——
+    # 否则 'ai' 会命中 "br(ai)n"/"ch(ai)r"/"(ai)r travel" 等, 把非 AI 帖(实测
+    # "Creatine raises brain energy" 518 分)误判成 AI 突发。'ai'/'rag' 要求整词,
+    # 其余允许前缀(agent→agents、fine-tun→fine-tuning…)。
+    ai_kw_re = re.compile(
+        r'(?:\bai\b|\brag\b|'
+        r'\b(?:llm|gpt|claude|gemini|llama|mistral|openai|anthropic|deepmind|'
+        r'huggingface|transformer|diffusion|neural|machine\s+learning|agent|'
+        r'inference|embedding|fine[-\s]?tun|open[-\s]?source|mlx))',
+        re.IGNORECASE,
     )
     hits = data.get('hits', [])
     results = []
@@ -108,7 +112,7 @@ def fetch_hn_top(limit: int = 30, hours: int = 36) -> List[Dict]:
         if not title:
             continue
         title_lc = title.lower()
-        if not any(kw in title_lc for kw in ai_keywords):
+        if not ai_kw_re.search(title_lc):
             continue
         url_field = h.get('url') or f'https://news.ycombinator.com/item?id={h.get("objectID")}'
         results.append({

@@ -11,7 +11,12 @@ name: AI 突发热点检测
 # 实现 24h 去重 (同事件不重复推).
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      min_points:
+        description: 'HN 分数阈值覆盖 (测试/演示用临时降阈; 留空=默认 300)'
+        type: string
+        default: ''
   # 兜底 cron — 主触发由 Anthropic Routine 提供 (更准时)
   # 这条 cron 只在 routine 长期失效时拯救; 平时大概率被 routine 抢先执行
   schedule:
@@ -28,12 +33,14 @@ permissions:
 jobs:
   detect:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     env:
       TZ: Asia/Shanghai
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
       TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
       BRIEFING_URL: ${{ secrets.BRIEFING_URL }}
+      # 手动 dispatch 时可临时降阈值(测试/演示); 留空走默认 300
+      BREAKING_HN_POINTS: ${{ github.event.inputs.min_points || '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -58,11 +65,33 @@ jobs:
           # detector 只用标准库 + 可选 certifi (项目其他地方也用)
           python3 -m pip install --quiet certifi
 
-      - name: Run breaking news detector
+      # 两段式: detect 纯 stdlib(每小时, 快), 无命中即止; 仅当有命中才装 claude 翻译推送。
+      - name: Detect breaking (纯 stdlib, 无命中即止)
+        id: detect
         run: |
           mkdir -p ai-morning-news/output
           cd ai-morning-news
-          python3 breaking_news_detector.py
+          python3 breaking_news_detector.py detect
+          N=$(python3 -c "import json,os;p='output/breaking_pending.json';print(len(json.load(open(p))) if os.path.exists(p) else 0)" 2>/dev/null || echo 0)
+          echo "hits=$N" >> "$GITHUB_OUTPUT"
+          echo "🎯 本次新突发命中: $N 条"
+
+      - name: 翻译并推送卡片 (仅当有命中 — 此时才装 claude + 调 LLM)
+        if: steps.detect.outputs.hits != '0'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          # 装 claude CLI 失败也不致命: push 内部会回退英文原标题, 绝不漏推
+          npm install -g @anthropic-ai/claude-code || echo "⚠️ claude 安装失败, 将回退英文原标题"
+          cd ai-morning-news
+          nohup python3 -u claude_proxy.py > /tmp/breaking_proxy.log 2>&1 &
+          PROXY_PID=$!
+          for i in $(seq 1 30); do
+            curl -s http://localhost:3456/health >/dev/null 2>&1 && { echo "proxy ready (${i}s)"; break; }
+            sleep 1
+          done
+          python3 breaking_news_detector.py push
+          kill "$PROXY_PID" 2>/dev/null || true
 
       # ── 持久化更新后的去重状态 (cache 自动 save) ──
       # actions/cache 在 post-action 阶段自动保存 path 内容
