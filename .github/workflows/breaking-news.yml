@@ -17,6 +17,10 @@ on:
         description: 'HN 分数阈值覆盖 (测试/演示用临时降阈; 留空=默认 300)'
         type: string
         default: ''
+      demo_title:
+        description: '翻译卡片演示: 填一条标题即推一张[演示]卡片(走真实翻译, 不进去重)'
+        type: string
+        default: ''
   # 兜底 cron — 主触发由 Anthropic Routine 提供 (更准时)
   # 这条 cron 只在 routine 长期失效时拯救; 平时大概率被 routine 抢先执行
   schedule:
@@ -92,6 +96,23 @@ jobs:
           done
           python3 breaking_news_detector.py push
           kill "$PROXY_PID" 2>/dev/null || true
+
+      - name: 翻译卡片演示 (仅当填了 demo_title)
+        if: github.event.inputs.demo_title != ''
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          DEMO_TITLE: ${{ github.event.inputs.demo_title }}
+        run: |
+          npm install -g @anthropic-ai/claude-code || echo "⚠️ claude 装失败, 演示回退英文原标题"
+          cd ai-morning-news
+          nohup python3 -u claude_proxy.py > /tmp/breaking_proxy.log 2>&1 &
+          PID=$!
+          for i in $(seq 1 30); do
+            curl -s http://localhost:3456/health >/dev/null 2>&1 && { echo "proxy ready (${i}s)"; break; }
+            sleep 1
+          done
+          python3 breaking_news_detector.py demo "$DEMO_TITLE"
+          kill "$PID" 2>/dev/null || true
 
       # ── 持久化更新后的去重状态 (cache 自动 save) ──
       # actions/cache 在 post-action 阶段自动保存 path 内容

@@ -395,6 +395,20 @@ def main() -> int:
         log.info("✅ push: 推送 %d 条新突发卡片", n)
         return 0
 
+    # demo: 用给定(或示例)标题走完整 翻译→卡片→推送, 标注[演示]、不进去重。
+    # 用途: 没有真实突发时, 也能验证翻译+卡片链路是否正常 (需代理可用)。
+    if mode == 'demo':
+        demo_title = (sys.argv[2] if len(sys.argv) > 2 else '').strip() or \
+            'Mistral releases Large 3, an open-weight model rivaling GPT-5'
+        sig = {
+            '_source': 'hn', 'title': demo_title,
+            'url': 'https://news.ycombinator.com/', 'points': 542, 'comments': 210,
+        }
+        card = _format_breaking_msg(sig)
+        ok = _send_tg("🧪 <b>[翻译卡片演示 · 非真实突发]</b>\n\n" + card)
+        log.info("✅ demo: 演示卡片推送 ok=%s — %s", ok, demo_title[:60])
+        return 0
+
     # all (默认, 本地/兜底): 检测 + 直接推。翻译 best-effort, 无代理则回退英文原标题。
     selected = _detect_and_select()
     if not selected:
