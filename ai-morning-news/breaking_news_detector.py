@@ -35,6 +35,7 @@ from logger import get_logger
 from extractors.hot_signals import (
     fetch_hn_top,
     fetch_hf_trending,
+    fetch_reddit_hot,
 )
 
 log = get_logger('breaking')
@@ -46,6 +47,12 @@ log = get_logger('breaking')
 HN_POINTS_THRESHOLD = int(os.environ.get('BREAKING_HN_POINTS') or '300')  # or: 空串也回退默认
 HN_WINDOW_HOURS = int(os.environ.get('BREAKING_HN_HOURS', '24'))
 HF_LIKES_THRESHOLD = int(os.environ.get('BREAKING_HF_LIKES', '2000'))
+
+# Reddit: 公开 hot.rss 无分数, 靠"在 AI 子版热榜 + 事件标题(发布/型号/事故)"判突发(默认开)。
+# 子版默认限高信号的 LocalLLaMA / MachineLearning(发布帖多); BREAKING_REDDIT=false 可关。
+REDDIT_ENABLED = os.environ.get('BREAKING_REDDIT', 'true').lower() == 'true'
+REDDIT_SUBS = [s.strip() for s in os.environ.get(
+    'BREAKING_REDDIT_SUBS', 'LocalLLaMA,MachineLearning').split(',') if s.strip()]
 
 # 单次最多推几条 (防冷启动 / 大新闻日一次性轰炸)
 MAX_PUSH_PER_RUN = int(os.environ.get('BREAKING_MAX_PER_RUN', '5'))
@@ -66,6 +73,20 @@ _HN_EVENT_RE = re.compile(
     r'GPT-?\d|Claude\s?(?:Opus|Sonnet|Haiku|\d)|Gemini\s?\d|Llama\s?\d|'
     r'DeepSeek[-\s]?[RV]?\d|Grok\s?\d|Qwen\s?\d|\bo[1-9]\b|'
     # 中文
+    r'发布|开源|推出|上线|融资|收购|宕机|崩溃|泄露|诉讼|封禁|裁员|下架'
+    r')'
+)
+
+# Reddit 专用(更严): 只认"动作/事故"词, 去掉光有型号名也算的部分 —— Reddit 讨论帖
+# 到处提 Qwen/Claude, 光匹配型号名会把"我把 Claude 换成 Qwen"这种讨论当成事件。
+# 要求 released/launched/发布 这类真动作词才放行。
+_EVENT_ACTION_RE = re.compile(
+    r'(?i)('
+    r'launch|releas|announc|unveil|introduc|debut|ships?\b|shipped|rolls?\s?out|'
+    r'open[\s-]?sourc|now available|general availability|'
+    r'raise[sd]?\b|raising|funding|\$\d|valuation|acqui|merger|\bipo\b|'
+    r'shuts?\s?down|outage|\bdown\b|breach|hacked|\bleak|lawsuit|sue[sd]?\b|'
+    r'\bbans?\b|banned|lay[s]?\s?off|layoffs?|fired|resign|'
     r'发布|开源|推出|上线|融资|收购|宕机|崩溃|泄露|诉讼|封禁|裁员|下架'
     r')'
 )
@@ -203,6 +224,22 @@ def _detect_breaking() -> list:
     except Exception as e:
         log.warning("HF 抓取异常: %s", e)
 
+    # Reddit — AI 子版 hot.rss (无分数, 用'事件标题'过滤判突发; 子版本身即 AI 相关)
+    if REDDIT_ENABLED:
+        log.info("🔍 检查 Reddit hot (%s)...", '/'.join(REDDIT_SUBS))
+        try:
+            for sig in fetch_reddit_hot(subreddits=REDDIT_SUBS, limit_per_sub=15):
+                title = sig.get('title', '')
+                # 无分数 + 讨论帖多 → 用更严的"动作词"过滤(released/发布…), 不认光有型号名
+                if HN_EVENT_ONLY and not _EVENT_ACTION_RE.search(title):
+                    continue
+                sig['_source'] = 'reddit'
+                sig['_id'] = f"reddit:{sig.get('url', '')}"
+                breaking.append(sig)
+                log.info("  💬 Reddit 命中: r/%s — %s", sig.get('subreddit', ''), title[:55])
+        except Exception as e:
+            log.warning("Reddit 抓取异常: %s", e)
+
     return breaking
 
 
@@ -274,6 +311,14 @@ def _format_breaking_msg(sig: dict) -> str:
             f"{title_block}\n\n"
             f"❤️ {likes} 赞 · 7 天 trending\n"
             f'<a href="{url}">🔗 查看 →</a>'
+        )
+    if src == 'reddit':
+        sub = sig.get('subreddit', '') or 'AI'
+        return (
+            f"🚨 <b>突发 · Reddit 热议</b> · {ts}\n\n"
+            f"{title_block}\n\n"
+            f"💬 r/{sub} · 正在热榜\n"
+            f'<a href="{url}">🔗 查看讨论 →</a>'
         )
     return ''
 

@@ -228,7 +228,7 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 │   ├── dedup_engine.py           MinHash/LSH 去重（中英分阈值）
 │   ├── event_cluster.py          确定性签名预合并 + LSH 聚类
 │   ├── weekly_report.py          周日周报
-│   ├── breaking_news_detector.py 突发热点检测（扫 HN/HF 热度, 纯 stdlib, 每小时 cron）
+│   ├── breaking_news_detector.py 突发热点检测（扫 HN/HF/Reddit 热度, 纯 stdlib, 每小时 cron）
 │   ├── run_daily.sh              主入口（本地+云端共用）
 │   ├── run_collect.sh            仅采集阶段
 │   ├── config.json               66 个 RSS 源 + LLM 配置 + 去重阈值（全公开 RSS/无鉴权，零账号）
