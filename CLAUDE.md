@@ -231,7 +231,7 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 │   ├── breaking_news_detector.py 突发热点检测（扫 HN/HF/Reddit 热度, 纯 stdlib, 每小时 cron）
 │   ├── run_daily.sh              主入口（本地+云端共用）
 │   ├── run_collect.sh            仅采集阶段
-│   ├── config.json               81 个源（19 个 X via Nitter + 5 个 GitHub releases.atom + RSS）+ LLM + 去重阈值（全免账号）
+│   ├── config.json               87 个源（23 个 X via Nitter + 10 个 GitHub releases.atom + RSS）+ LLM + 去重（全免账号）；突发另扫 HN/HF/Reddit×5 子版
 │   ├── prompts/                  抽取出的 prompt 模板
 │   ├── causal_kb/                因果链知识库 JSON
 │   └── tests/                    pytest 测试

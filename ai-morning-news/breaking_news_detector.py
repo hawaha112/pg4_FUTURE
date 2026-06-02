@@ -49,10 +49,12 @@ HN_WINDOW_HOURS = int(os.environ.get('BREAKING_HN_HOURS', '24'))
 HF_LIKES_THRESHOLD = int(os.environ.get('BREAKING_HF_LIKES', '2000'))
 
 # Reddit: 公开 hot.rss 无分数, 靠"在 AI 子版热榜 + 事件标题(发布/型号/事故)"判突发(默认开)。
-# 子版默认限高信号的 LocalLLaMA / MachineLearning(发布帖多); BREAKING_REDDIT=false 可关。
+# 默认 5 个高信号 AI 子版; 都过 _EVENT_ACTION_RE 严格动作词闸, 讨论帖进不来。
+# BREAKING_REDDIT=false 可关; BREAKING_REDDIT_SUBS 可自定义子版列表。
 REDDIT_ENABLED = os.environ.get('BREAKING_REDDIT', 'true').lower() == 'true'
 REDDIT_SUBS = [s.strip() for s in os.environ.get(
-    'BREAKING_REDDIT_SUBS', 'LocalLLaMA,MachineLearning').split(',') if s.strip()]
+    'BREAKING_REDDIT_SUBS',
+    'LocalLLaMA,MachineLearning,StableDiffusion,singularity,OpenAI').split(',') if s.strip()]
 
 # 单次最多推几条 (防冷启动 / 大新闻日一次性轰炸)
 MAX_PUSH_PER_RUN = int(os.environ.get('BREAKING_MAX_PER_RUN', '5'))

@@ -728,6 +728,72 @@
         "description": "Philipp Schmid（Google DeepMind, 实战/发布）",
         "ai_only": false,
         "enabled": true
+      },
+      {
+        "name": "X-xAI",
+        "tier": 0,
+        "category": "official",
+        "url": "twitter://xai",
+        "icon": "🐦",
+        "color": "#111111",
+        "description": "xAI 官方推文",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "X-Cohere",
+        "tier": 0,
+        "category": "official",
+        "url": "twitter://cohere",
+        "icon": "🐦",
+        "color": "#39594D",
+        "description": "Cohere 官方推文（企业 LLM）",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "X-Perplexity",
+        "tier": 0,
+        "category": "official",
+        "url": "twitter://perplexity_ai",
+        "icon": "🐦",
+        "color": "#20808D",
+        "description": "Perplexity 官方推文（AI 搜索）",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "X-Stability AI",
+        "tier": 0,
+        "category": "official",
+        "url": "twitter://StabilityAI",
+        "icon": "🐦",
+        "color": "#7C3AED",
+        "description": "Stability AI 官方推文（图像模型）",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "GitHub: SGLang",
+        "tier": 1,
+        "category": "research",
+        "url": "https://github.com/sgl-project/sglang/releases.atom",
+        "icon": "🐙",
+        "color": "#6E5494",
+        "description": "SGLang 版本发布（高性能推理服务）",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "GitHub: Open WebUI",
+        "tier": 1,
+        "category": "research",
+        "url": "https://github.com/open-webui/open-webui/releases.atom",
+        "icon": "🐙",
+        "color": "#6E5494",
+        "description": "Open WebUI 版本发布（本地 LLM 界面）",
+        "ai_only": true,
+        "enabled": true
       }
     ],
     "chinese": [
