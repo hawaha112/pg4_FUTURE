@@ -223,6 +223,21 @@ body {
     .broadcast { margin: 20px 12px 0; padding: 14px; }
     .bc-text { font-size: 14px; }
 }
+/* 「其他资讯」按类别分组的小标题 —— 全宽横跨网格, 卡片在其下方按类聚拢 */
+.grid-cat-head {
+    grid-column: 1 / -1;
+    margin: 18px 0 2px; padding: 6px 0 8px;
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.10));
+    font-size: 13px; font-weight: 700; letter-spacing: 0.5px;
+    color: var(--text-70, #b6bdcb);
+    display: flex; align-items: center; gap: 8px;
+}
+.grid-cat-head:first-child { margin-top: 0; }
+.gc-n {
+    font-size: 11px; font-weight: 600; color: var(--text-50, #8a93a6);
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 9px; padding: 0 7px;
+}
 .briefing .br-outro {
     max-width: 1120px;
     font-style: italic;

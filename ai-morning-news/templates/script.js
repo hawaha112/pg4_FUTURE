@@ -135,6 +135,7 @@ function markRead(iid) {
 
 // 页面加载后立即按已读集合隐藏对应卡片，并显示"今日 X 条 / 已读 Y 条 · 显示已读"toggle
 function _applyReadState() {
+    if (typeof _updateGridHeaders === 'function') { setTimeout(_updateGridHeaders, 0); }
     var read = getReadSet();
     var totalCards = 0, readCards = 0;
     document.querySelectorAll('[data-iid]').forEach(function(card) {
@@ -162,6 +163,7 @@ function _toggleShowRead() {
         var on = document.body.classList.contains('show-read');
         btn.querySelector('.rt-label').textContent = on ? '隐藏已读' : '显示已读';
     }
+    _updateGridHeaders();
 }
 
 // 标记为已读 + 触发"消散"动画后隐藏卡片
@@ -473,6 +475,25 @@ var _activeCat = 'all';
 var _activeAud = 'all';
 var _activeQuery = '';
 
+// 「其他资讯」分组小标题：本组下方(到下一个组头之间)无可见卡片时, 隐藏该组头,
+// 避免筛选/阅后即焚把卡片隐去后留下空标题。offsetParent 判可见, 兼容两种隐藏机制。
+function _updateGridHeaders() {
+    var grid = document.getElementById('grid');
+    if (!grid) return;
+    grid.querySelectorAll('.grid-cat-head').forEach(function(h) {
+        var anyVisible = false;
+        var el = h.nextElementSibling;
+        while (el && !el.classList.contains('grid-cat-head')) {
+            if (el.classList.contains('card') && el.offsetParent !== null) {
+                anyVisible = true;
+                break;
+            }
+            el = el.nextElementSibling;
+        }
+        h.classList.toggle('hidden', !anyVisible);
+    });
+}
+
 function _applyFilters() {
     var q = _activeQuery;
     document.querySelectorAll('.card,[class*="featured-card"]').forEach(function(c) {
@@ -483,6 +504,7 @@ function _applyFilters() {
         var qOk   = !q || c.textContent.toLowerCase().includes(q);
         c.classList.toggle('hidden', !(catOk && audOk && qOk));
     });
+    _updateGridHeaders();
 }
 
 document.querySelectorAll('.f-btn').forEach(function(btn) {

@@ -411,8 +411,15 @@ def generate_html(all_items, config, digest=None, meta=None):
 
         featured_html += '</div>\n</div>\n'
 
-    # ── 构建普通卡片（regular grid）──
-    cards_html = ""
+    # ── 构建普通卡片（regular grid）—— 按主类别分组，每组一个全宽小标题 ──
+    _GRID_CAT_ORDER = [
+        ('大模型发布', '🧠'), ('开源生态', '🔓'), ('学术研究', '🔬'), ('AI编程', '💻'),
+        ('AI工具', '🛠️'), ('产品与应用', '📦'), ('芯片与算力', '⚡'), ('融资与商业', '💰'),
+        ('AI政策监管', '📜'), ('安全与对齐', '🛡️'), ('具身智能', '🤖'), ('自动驾驶', '🚗'),
+        ('行业观点', '💬'), ('其他', '📰'),
+    ]
+    _cat_rank = {c: i for i, (c, _) in enumerate(_GRID_CAT_ORDER)}
+    _grid_groups = {}   # {主类别: [card_html, ...]}，组内保持原(relevance)排序
     for idx, item in regular_items:
         analysis = item.get('analysis', {})
 
@@ -539,7 +546,7 @@ def generate_html(all_items, config, digest=None, meta=None):
         aud_data = '|'.join(a for a in aud_list if a in AUDIENCE_LABELS) or 'general'
 
         _riid = item.get('_event_id') or item.get('link') or f'r{idx}'
-        cards_html += f'''
+        _card_html = f'''
         <div class="card" data-cat="{_safe_escape(cat_data)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_riid)}"
              style="animation-delay:{min(idx * 25, 500)}ms">
             {img_html}
@@ -552,6 +559,22 @@ def generate_html(all_items, config, digest=None, meta=None):
                 {z5_html}
             </div>
         </div>'''
+        _gcat = categories[0] if categories else '其他'
+        if _gcat not in _cat_rank:
+            _gcat = '其他'
+        _grid_groups.setdefault(_gcat, []).append(_card_html)
+
+    # 按类别顺序拼接 cards_html，每个非空组前插一个全宽小标题(含计数)
+    cards_html = ""
+    for _cat, _emoji in _GRID_CAT_ORDER:
+        _cards = _grid_groups.get(_cat)
+        if not _cards:
+            continue
+        cards_html += (
+            f'<h3 class="grid-cat-head" data-gcat="{_safe_escape(_cat)}">'
+            f'{_emoji} {_safe_escape(_cat)}<span class="gc-n">{len(_cards)}</span></h3>'
+            + ''.join(_cards)
+        )
 
     # ── 为所有卡片构建 modal_data ──
     # 必须按 all_items 原顺序遍历，因为卡片的 data-idx 用的是 enumerate(all_items) 的 idx。
