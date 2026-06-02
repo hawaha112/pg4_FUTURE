@@ -210,6 +210,7 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）
 - **Cloudflare / Nitter 反爬**：[content_fetcher.py](ai-morning-news/content_fetcher.py) 对 X(Twitter) 走 Nitter 实例，经常 429。健康度由 [health_tracker.py](ai-morning-news/health_tracker.py) 跟踪，10+ 连续失败自动停用
+- **云端必须装 `curl_cffi`**（2026-06-02 修）：[tls_client.py](ai-morning-news/tls_client.py) 靠 curl_cffi 模拟 Chrome TLS 指纹绕 Cloudflare/Substack；不装则回退裸 urllib，Substack（Import AI 等）/严审站间歇 403。本地有、云端 workflow 原来只 `pip install certifi` 漏了它 → 已给 [morning-briefing.yml](.github/workflows/morning-briefing.yml) + [auto-fix-sources.yml](.github/workflows/auto-fix-sources.yml) 补 `pip install curl_cffi`（best-effort，装不上回退）。新增采集类 workflow 记得带上。
 - **节点 20 deprecated 警告**：`actions/checkout@v4` 等 2026-09-16 后会强制 Node 24。不影响功能但要在那之前升级
 
 ---

@@ -91,7 +91,11 @@ jobs:
           python-version: '3.12'
 
       - name: Install Python deps
-        run: pip install certifi
+        run: |
+          pip install certifi
+          # curl_cffi: tls_client 用它模拟 Chrome TLS 指纹, 绕 Cloudflare/Substack 反爬。
+          # 不装则回退裸 urllib → Substack(Import AI 等)/严审站间歇 403。装不上不致命。
+          pip install curl_cffi || echo "⚠️ curl_cffi 安装失败(非致命: 回退 urllib, 严审站可能 403)"
 
       - name: Install Claude Code CLI
         shell: bash

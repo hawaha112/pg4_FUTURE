@@ -45,7 +45,10 @@ jobs:
           python-version: '3.12'
 
       - name: Install minimal deps
-        run: pip install --quiet certifi
+        run: |
+          pip install --quiet certifi
+          # curl_cffi 与采集端一致, 否则健康检查会把 Substack/严审站误判为失败而错误停用
+          pip install --quiet curl_cffi || echo "⚠️ curl_cffi 安装失败(非致命)"
 
       - name: Sync events.db from state branch
         run: |
