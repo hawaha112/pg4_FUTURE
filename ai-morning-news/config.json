@@ -497,6 +497,72 @@
         "description": "LangChain 框架新版本(Agent/RAG 生态信号)",
         "ai_only": true,
         "enabled": true
+      },
+      {
+        "name": "Together AI",
+        "tier": 1,
+        "category": "research",
+        "url": "https://www.together.ai/blog/rss.xml",
+        "icon": "🤝",
+        "color": "#1A1A2E",
+        "description": "Together AI 博客（开源模型 / 推理基建）",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "Google Research Blog",
+        "tier": 1,
+        "category": "research",
+        "url": "https://research.google/blog/rss/",
+        "icon": "🔬",
+        "color": "#4285F4",
+        "description": "Google Research 官方研究博客",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "MIT News AI",
+        "tier": 1,
+        "category": "research",
+        "url": "https://news.mit.edu/topic/mitmachine-learning-rss.xml",
+        "icon": "🎓",
+        "color": "#A31F34",
+        "description": "MIT 机器学习/AI 学术动态",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "Import AI",
+        "tier": 1,
+        "category": "research",
+        "url": "https://importai.substack.com/feed",
+        "icon": "📩",
+        "color": "#FF6719",
+        "description": "Jack Clark 的 AI 政策与前沿分析",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "One Useful Thing",
+        "tier": 1,
+        "category": "research",
+        "url": "https://www.oneusefulthing.org/feed",
+        "icon": "🧰",
+        "color": "#5E35B1",
+        "description": "Ethan Mollick 的 AI 实用与落地观察",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "Ars Technica AI",
+        "tier": 2,
+        "category": "media",
+        "url": "https://arstechnica.com/ai/feed/",
+        "icon": "📰",
+        "color": "#FF4E00",
+        "description": "Ars Technica AI 频道（高质量科技报道）",
+        "ai_only": true,
+        "enabled": true
       }
     ],
     "chinese": [
@@ -629,6 +695,17 @@
         "color": "#0084FF",
         "description": "知乎日报精选",
         "ai_only": false
+      },
+      {
+        "name": "雷峰网",
+        "tier": 2,
+        "category": "media",
+        "url": "https://www.leiphone.com/feed",
+        "icon": "📡",
+        "color": "#E60012",
+        "description": "雷峰网（AI / 科技中文媒体）",
+        "ai_only": false,
+        "enabled": true
       }
     ]
   },
