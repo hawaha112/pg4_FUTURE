@@ -563,6 +563,83 @@
         "description": "Ars Technica AI 频道（高质量科技报道）",
         "ai_only": true,
         "enabled": true
+      },
+      {
+        "name": "X-Meta AI",
+        "tier": 0,
+        "category": "official",
+        "url": "twitter://AIatMeta",
+        "icon": "🐦",
+        "color": "#0668E1",
+        "description": "Meta AI 官方推文",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "X-Mistral AI",
+        "tier": 0,
+        "category": "official",
+        "url": "twitter://MistralAI",
+        "icon": "🐦",
+        "color": "#FF7000",
+        "description": "Mistral AI 官方推文",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "X-HuggingFace",
+        "tier": 0,
+        "category": "official",
+        "url": "twitter://huggingface",
+        "icon": "🐦",
+        "color": "#FFD21E",
+        "description": "Hugging Face 官方推文",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "X-Google AI",
+        "tier": 0,
+        "category": "official",
+        "url": "twitter://GoogleAI",
+        "icon": "🐦",
+        "color": "#4285F4",
+        "description": "Google AI 官方推文",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "X-OpenAI Devs",
+        "tier": 0,
+        "category": "official",
+        "url": "twitter://OpenAIDevs",
+        "icon": "🐦",
+        "color": "#10A37F",
+        "description": "OpenAI 开发者动态（API / 产品）",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "X-Demis Hassabis",
+        "tier": 1,
+        "category": "research",
+        "url": "twitter://demishassabis",
+        "icon": "🐦",
+        "color": "#5C6BC0",
+        "description": "DeepMind CEO Demis Hassabis",
+        "ai_only": false,
+        "enabled": true
+      },
+      {
+        "name": "X-Greg Brockman",
+        "tier": 1,
+        "category": "research",
+        "url": "twitter://gdb",
+        "icon": "🐦",
+        "color": "#10A37F",
+        "description": "OpenAI 总裁 Greg Brockman",
+        "ai_only": false,
+        "enabled": true
       }
     ],
     "chinese": [
