@@ -640,6 +640,94 @@
         "description": "OpenAI 总裁 Greg Brockman",
         "ai_only": false,
         "enabled": true
+      },
+      {
+        "name": "GitHub: llama.cpp",
+        "tier": 1,
+        "category": "research",
+        "url": "https://github.com/ggml-org/llama.cpp/releases.atom",
+        "icon": "🐙",
+        "color": "#6E5494",
+        "description": "llama.cpp 版本发布（本地推理引擎）",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "GitHub: Ollama",
+        "tier": 1,
+        "category": "research",
+        "url": "https://github.com/ollama/ollama/releases.atom",
+        "icon": "🐙",
+        "color": "#6E5494",
+        "description": "Ollama 版本发布（本地大模型运行）",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "GitHub: vLLM",
+        "tier": 1,
+        "category": "research",
+        "url": "https://github.com/vllm-project/vllm/releases.atom",
+        "icon": "🐙",
+        "color": "#6E5494",
+        "description": "vLLM 版本发布（高吞吐推理服务）",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "GitHub: Transformers",
+        "tier": 1,
+        "category": "research",
+        "url": "https://github.com/huggingface/transformers/releases.atom",
+        "icon": "🐙",
+        "color": "#6E5494",
+        "description": "HF Transformers 版本发布",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "GitHub: ComfyUI",
+        "tier": 1,
+        "category": "research",
+        "url": "https://github.com/comfyanonymous/ComfyUI/releases.atom",
+        "icon": "🐙",
+        "color": "#6E5494",
+        "description": "ComfyUI 版本发布（图像生成工作流）",
+        "ai_only": true,
+        "enabled": true
+      },
+      {
+        "name": "X-Vaibhav (HF)",
+        "tier": 1,
+        "category": "research",
+        "url": "twitter://reach_vb",
+        "icon": "🐦",
+        "color": "#FFD21E",
+        "description": "Hugging Face 的 Vaibhav（模型发布/开源动态）",
+        "ai_only": false,
+        "enabled": true
+      },
+      {
+        "name": "X-Omar Sanseviero",
+        "tier": 1,
+        "category": "research",
+        "url": "twitter://osanseviero",
+        "icon": "🐦",
+        "color": "#4285F4",
+        "description": "Omar（DeepMind/HF, 模型与工具发布）",
+        "ai_only": false,
+        "enabled": true
+      },
+      {
+        "name": "X-Philipp Schmid",
+        "tier": 1,
+        "category": "research",
+        "url": "twitter://_philschmid",
+        "icon": "🐦",
+        "color": "#4285F4",
+        "description": "Philipp Schmid（Google DeepMind, 实战/发布）",
+        "ai_only": false,
+        "enabled": true
       }
     ],
     "chinese": [
