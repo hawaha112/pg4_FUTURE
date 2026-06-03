@@ -216,6 +216,8 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 - 结果：**TG 只 2 条消息（早晚报 + 突发提醒），1 个页面/URL（早报）**；突发卡片在早报顶部。
 - 窗口可调 `BREAKING_DISPLAY_HOURS`(默认 24)。`_render_breaking_html` 弃用保留。`demo` 仍走旧单卡推送(翻译自检)。
 - ⚠️ 坑：`run: |` 块里**别写多行 `python3 -c`**——续行顶格会被 YAML 当 mapping 解析报错。用单行。
+- ⚠️ 坑2（2026-06-03 踩）：`read NEW TOTAL < flag` 在 flag **无结尾换行**时撞 EOF 返回非零 → `bash -e` 误杀整步骤（push 已写 breaking.json 但部署/推送不发生）。修复：[breaking_news_detector.py](ai-morning-news/breaking_news_detector.py) flag 写入带 `\n` + [breaking-news.yml](.github/workflows/breaking-news.yml) `read … || true` 双保险。
+- **噪声闸 `_NOISE_RE`（2026-06-03）**：事件闸之前先否掉问句（`?`结尾 / why·how·when 等疑问词开头）、估值观点（`aren't worth`/overvalued/bubble）、讨论帖（weird/`vs`/thoughts on/`i built…`）。实测 `min_points=10` 时这类帖蹭动作词或型号名混进来（"When will X released?"、"…aren't worth \$1T"、"Weird problem with Qwen3.6"）。过滤跑在**翻译前的英文原标题**上，故以英文标记为主。`BREAKING_HN_EVENT_ONLY=false` 时连同事件闸一起关。
 
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）

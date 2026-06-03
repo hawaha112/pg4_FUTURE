@@ -108,7 +108,8 @@ jobs:
         run: |
           cd ai-morning-news
           [ -f output/breaking_push.flag ] || { echo "无 push flag, 跳过"; exit 0; }
-          read NEW TOTAL < output/breaking_push.flag
+          # `|| true`: flag 无结尾换行时 read 撞 EOF 返回非零, bash -e 会误杀整步骤
+          read NEW TOTAL < output/breaking_push.flag || true
           if ! [ "${NEW:-0}" -gt 0 ] 2>/dev/null; then echo "本次无新增突发, 不部署/不推送"; exit 0; fi
           # 1) 部署 breaking.json → 部署仓 archive/breaking.json (走 archive/** 白名单; 早报页前端拉它渲染顶部突发区)
           TMP=$(mktemp -d)

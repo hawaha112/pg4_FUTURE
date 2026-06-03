@@ -93,6 +93,31 @@ _EVENT_ACTION_RE = re.compile(
     r')'
 )
 
+# 噪声闸(在事件闸之前先否掉): 问句/观点/讨论帖即便蹭到动作词或型号名也不是突发。
+# 实测泄漏案例 (min_points=10):
+#   "When will DolphinGemma be released?" — 问句(蹭 released)
+#   "Michael Burry says ... aren't worth $1 trillion" — 估值观点(蹭 $1)
+#   "Weird problem with OpenCode and Qwen3.6" — 讨论帖(蹭型号名 Qwen3)
+# 过滤跑在翻译前的英文原标题上, 故以英文标记为主, 附少量中文兜底。
+_NOISE_RE = re.compile(
+    r'(?i)('
+    r'[?？]\s*$|'                                                  # 问号结尾 = 问句
+    r'^\s*(why|how|what|when|where|who|whose|whether|should)\b|'   # 疑问词开头
+    r'\b(vs\.?|versus|opinion|thoughts?\s+on|\brant\b|'
+    r'please\s+(use|stop)|why\s+you\s+should|'
+    r'(are|is)\s*n.?t\s+worth|not\s+worth|over\s?valued|under\s?valued|'
+    r'\bbubble\b|weird|strange|\bodd\b|confusing|'
+    r'i\s+(built|made|wrote|tried|switched|replaced))\b|'
+    r'疑似|奇怪|吐槽|求助|请教'
+    r')'
+)
+
+
+def _is_noise(title: str) -> bool:
+    """问句/观点/讨论帖 → True (在事件闸之前先否掉)。HN_EVENT_ONLY 关时不生效。"""
+    return HN_EVENT_ONLY and bool(_NOISE_RE.search(title or ''))
+
+
 # ── 去重窗口 ── (48h: HF trending 模型常持续多天热, 24h TTL 会让同一爆款天天重推)
 DEDUP_TTL_HOURS = int(os.environ.get('BREAKING_DEDUP_TTL_HOURS', '48'))
 
@@ -207,7 +232,10 @@ def _detect_breaking() -> list:
             if pts < HN_POINTS_THRESHOLD:
                 continue
             title = sig.get('title', '')
-            # 只要"大事": 标题须像真新闻事件, 滤掉爆火的观点/讨论/提问帖
+            # 只要"大事": 先否掉问句/观点/讨论, 再要求标题像真新闻事件
+            if _is_noise(title):
+                log.info("  ⏭️ HN 跳过(问句/观点/讨论, %d 分): %s", pts, title[:50])
+                continue
             if HN_EVENT_ONLY and not _HN_EVENT_RE.search(title):
                 log.info("  ⏭️ HN 跳过(非事件类, %d 分): %s", pts, title[:50])
                 continue
@@ -238,7 +266,9 @@ def _detect_breaking() -> list:
         try:
             for sig in fetch_reddit_hot(subreddits=REDDIT_SUBS, limit_per_sub=15):
                 title = sig.get('title', '')
-                # 无分数 + 讨论帖多 → 用更严的"动作词"过滤(released/发布…), 不认光有型号名
+                # 无分数 + 讨论帖多 → 先否掉问句/观点/讨论, 再用更严的"动作词"过滤(不认光有型号名)
+                if _is_noise(title):
+                    continue
                 if HN_EVENT_ONLY and not _EVENT_ACTION_RE.search(title):
                     continue
                 sig['_source'] = 'reddit'
@@ -545,7 +575,9 @@ def main() -> int:
         events = _breaking_events_in_window(DISPLAY_WINDOW_HOURS)
         BREAKING_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
         BREAKING_JSON_PATH.write_text(_breaking_payload(events), encoding='utf-8')
-        PUSH_FLAG_PATH.write_text(f'{new_n} {len(events)}', encoding='utf-8')
+        # 必须带结尾换行: workflow 里 `read NEW TOTAL < flag` 在无换行(撞 EOF)时
+        # 会返回非零, `bash -e` 下整步骤直接 exit 1 (踩过)。
+        PUSH_FLAG_PATH.write_text(f'{new_n} {len(events)}\n', encoding='utf-8')
         log.info("✅ push: 新增 %d 条, 近 %dh 共 %d 条, 已写 breaking.json",
                  new_n, DISPLAY_WINDOW_HOURS, len(events))
         return 0
