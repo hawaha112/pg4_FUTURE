@@ -207,6 +207,13 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 
 三项均 LLM 依赖、仅命中/出报时调用（token 小）；逻辑/渲染已本地桩测，最终文案需云端出报验证。
 
+### 改进 10: 突发改"单链接 + 卡片页"防轰炸（2026-06-02）
+
+用户反馈突发逐条推 = 消息轰炸。改成：突发命中 → 翻译累积进 `pushed_breaking`（含 `title_zh`+`signal`）→ 渲染 [breaking_news_detector.py](ai-morning-news/breaking_news_detector.py) `_render_breaking_html`（近 24h 卡片页 `output/breaking.html`）→ 部署到**部署仓 `archive/breaking.html`**（走 archive/** 白名单，无需改 deploy.yml）→ **删旧推新一条** TG「🚨 AI 突发 · 近24h N 条 · 链接」（msg_id 存 `breaking_tg_state.json`，actions/cache 持久化）。**TG 窗口里只剩 2 条链接：早晚报 + 突发列表**。
+- `push` 模式只累积+渲染+写 `breaking_push.flag`(新增数 总数)；**部署 + 删旧推新 TG 在 [breaking-news.yml](.github/workflows/breaking-news.yml) 的条件步骤**（仅 `NEW>0` 才部署/刷新）。
+- 窗口可调 `BREAKING_DISPLAY_HOURS`(默认 24)。`demo` 模式仍走旧的单卡推送（仅作翻译自检）。
+- ⚠️ 坑：`run: |` 块里**别写多行 `python3 -c`**——续行顶格会被 YAML 当 mapping 解析报错（本次踩过）。用单行。
+
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）
 - **Cloudflare / Nitter 反爬**：[content_fetcher.py](ai-morning-news/content_fetcher.py) 对 X(Twitter) 走 Nitter 实例，经常 429。健康度由 [health_tracker.py](ai-morning-news/health_tracker.py) 跟踪，10+ 连续失败自动停用

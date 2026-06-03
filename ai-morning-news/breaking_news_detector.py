@@ -99,8 +99,14 @@ DEDUP_TTL_HOURS = int(os.environ.get('BREAKING_DEDUP_TTL_HOURS', '48'))
 # ── 路径 ──
 SCRIPT_DIR = Path(__file__).parent
 PUSHED_PATH = SCRIPT_DIR / 'output' / 'pushed_breaking.json'
-# detect 阶段把"本次该推的新突发"写这里, push 阶段读它翻译后推 (两段式, 见 main)
+# detect 阶段把"本次该推的新突发"写这里, push 阶段读它翻译后累积 (两段式, 见 main)
 PENDING_PATH = SCRIPT_DIR / 'output' / 'breaking_pending.json'
+# push 阶段渲染的突发卡片页(部署到 部署仓/archive/breaking.html, TG 只放一条它的链接)
+BREAKING_HTML_PATH = SCRIPT_DIR / 'output' / 'breaking.html'
+# workflow 读这个 flag 决定是否部署+更新 TG 链接: 内容 "新增数 窗口内总数"
+PUSH_FLAG_PATH = SCRIPT_DIR / 'output' / 'breaking_push.flag'
+# 突发页显示窗口(小时); 比 DEDUP_TTL(48h) 短, 页面只列近 24h
+DISPLAY_WINDOW_HOURS = int(os.environ.get('BREAKING_DISPLAY_HOURS', '24'))
 
 # ── TG 凭据 ──
 TG_BOT_TOKEN = os.environ.get('TG_BOT_TOKEN', '')
@@ -379,34 +385,116 @@ def _detect_and_select() -> list:
     return selected
 
 
-def _push_signals(signals: list) -> int:
-    """翻译成卡片并推送给定 signals; 推成功的立即标记去重。返回成功条数。"""
+def _signal_text(sig: dict) -> str:
+    """命中信号文案(HN 分/HF 赞/Reddit 子版), 显示在突发卡片上。"""
+    src = sig.get('_source')
+    if src == 'hn':
+        return f"HN {int(sig.get('points') or 0)} 分 · {int(sig.get('comments') or 0)} 评论"
+    if src == 'hf':
+        tz = {'model': '模型', 'dataset': '数据集', 'space': '应用'}.get(
+            sig.get('type', 'model'), sig.get('type', 'model'))
+        return f"HuggingFace 爆款{tz} · {int(sig.get('likes') or 0)} 赞"
+    if src == 'reddit':
+        return f"r/{sig.get('subreddit', '')} 热榜"
+    return ''
+
+
+def _accumulate_signals(signals: list) -> int:
+    """翻译每条新突发并累积进 pushed_breaking(含中文标题+命中信号), 供突发页渲染。
+    不再逐条推 TG —— TG 只保留一条指向突发页的链接(由 workflow 删旧推新)。返回新增条数。"""
     pushed = _load_pushed()
     n = 0
     for sig in signals:
         sid = sig.get('_id')
         if not sid or sid in pushed:
             continue
-        msg = _format_breaking_msg(sig)   # 内部 best-effort 翻译, 失败回退英文原文
-        if not msg:
-            continue
-        if _send_tg(msg):
-            score_val = sig.get('points') or sig.get('likes') or sig.get('stars') or 0
-            _mark_pushed_one(
-                sig_id=sid, source=sig.get('_source', 'unknown'),
-                title=sig.get('title', ''), url=sig.get('url', ''), score=score_val,
-            )
-            pushed[sid] = {
-                'pushed_at': datetime.now(timezone.utc).isoformat(),
-                'source': sig.get('_source'),
-                'title': sig.get('title', '')[:120],
-                'url': sig.get('url', ''),
-                'score': score_val,
-            }
-            n += 1
-            log.info("  ✅ 已推送: %s", sig.get('title', '')[:60])
+        title_en = (sig.get('title') or '').strip()
+        zh = _translate_title(title_en)   # best-effort, 失败回退英文
+        score_val = sig.get('points') or sig.get('likes') or sig.get('stars') or 0
+        pushed[sid] = {
+            'pushed_at': datetime.now(timezone.utc).isoformat(),
+            'source': sig.get('_source'),
+            'title': title_en[:160],
+            'title_zh': (zh or '')[:80],
+            'signal': _signal_text(sig),
+            'url': sig.get('url', ''),
+            'score': score_val,
+        }
+        _mark_pushed_one(sig_id=sid, source=sig.get('_source', 'unknown'),
+                         title=title_en, url=sig.get('url', ''), score=score_val)
+        n += 1
+        log.info("  ➕ 收录突发: %s", (zh or title_en)[:50])
     _save_pushed(pushed)
     return n
+
+
+def _breaking_events_in_window(hours: int) -> list:
+    """从 pushed_breaking 取近 N 小时的突发事件, 按时间倒序, 供渲染突发页。"""
+    pushed = _load_pushed()
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    evs = [info for info in pushed.values()
+           if isinstance(info, dict) and info.get('pushed_at', '') >= cutoff]
+    evs.sort(key=lambda e: e.get('pushed_at', ''), reverse=True)
+    return evs
+
+
+def _render_breaking_html(events: list, briefing_url: str = '') -> str:
+    """渲染突发卡片页(自包含 HTML, 暗色, 与早报风格一致)。"""
+    now = datetime.now(timezone(timedelta(hours=8)))
+
+    def _rel(iso: str) -> str:
+        try:
+            dt = datetime.fromisoformat(iso).astimezone(timezone(timedelta(hours=8)))
+            mins = int((now - dt).total_seconds() // 60)
+            if mins < 60:
+                return f'{max(mins, 0)} 分钟前'
+            if mins < 1440:
+                return f'{mins // 60} 小时前'
+            return dt.strftime('%m-%d %H:%M')
+        except Exception:
+            return ''
+
+    cards = []
+    for e in events:
+        zh = _html_escape(e.get('title_zh') or e.get('title') or '(无标题)')
+        en = _html_escape(e.get('title') or '')
+        sig = _html_escape(e.get('signal') or '')
+        url = e.get('url') or '#'
+        en_html = f'<div class="bk-en">{en}</div>' if (en and e.get('title_zh')) else ''
+        cards.append(
+            f'<a class="bk-card" href="{url}" target="_blank" rel="noopener">'
+            f'<div class="bk-title">🚨 {zh}</div>{en_html}'
+            f'<div class="bk-meta"><span>{sig}</span>'
+            f'<span class="bk-time">{_rel(e.get("pushed_at", ""))}</span></div></a>'
+        )
+    body = '\n'.join(cards) if cards else '<p class="bk-empty">近 24 小时暂无突发事件。</p>'
+    back = (f'<a class="bk-back" href="{_html_escape(briefing_url)}">← 早报首页</a>'
+            if briefing_url else '')
+    return f'''<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🚨 AI 突发列表 · 近 24 小时</title>
+<style>
+:root{{--bg:#0c1220;--card:rgba(255,255,255,.04);--bd:rgba(255,255,255,.10);--t1:#ecf0f5;--t2:#b6bdcb;--t3:#8a93a6;--accent:#ff6b6b}}
+*{{box-sizing:border-box}}
+body{{margin:0;padding:28px 16px;background:var(--bg);color:var(--t1);font-family:-apple-system,'PingFang SC','Noto Sans SC',sans-serif;line-height:1.6}}
+.wrap{{max-width:760px;margin:0 auto}}
+.bk-back{{color:var(--t3);font-size:12px;text-decoration:none;display:inline-block;margin-bottom:14px}}
+.bk-h{{font-size:22px;font-weight:800;margin:0 0 4px}}
+.bk-sub{{color:var(--t3);font-size:12px;margin:0 0 22px}}
+.bk-card{{display:block;text-decoration:none;background:var(--card);border:1px solid var(--bd);border-left:3px solid var(--accent);border-radius:9px;padding:14px 16px;margin-bottom:12px;transition:border-color .15s,transform .15s}}
+.bk-card:hover{{border-color:var(--accent);transform:translateY(-1px)}}
+.bk-title{{font-size:16px;font-weight:700;color:var(--t1);line-height:1.5}}
+.bk-en{{font-size:12px;color:var(--t3);margin-top:4px;font-style:italic}}
+.bk-meta{{display:flex;justify-content:space-between;gap:10px;margin-top:9px;font-size:12px;color:var(--t2)}}
+.bk-time{{color:var(--t3);white-space:nowrap}}
+.bk-empty{{color:var(--t3);font-size:14px;padding:20px 0}}
+</style></head><body><div class="wrap">
+{back}
+<h1 class="bk-h">🚨 AI 突发列表</h1>
+<p class="bk-sub">近 24 小时 · 共 {len(events)} 条 · 更新于 {now.strftime('%m-%d %H:%M')} · 点卡片看原文</p>
+{body}
+</div></body></html>'''
 
 
 def main() -> int:
@@ -425,21 +513,25 @@ def main() -> int:
         log.info("✅ detect: %d 条新突发写入 pending", len(selected))
         return 0
 
-    # push: 读 pending, 翻译成中文卡片后推 (仅当 detect 报告有命中时由 workflow 调起)。
+    # push: 读 pending → 翻译累积进突发库 → 渲染突发页(近24h)。写 push flag 给 workflow
+    # 决定是否部署+删旧推新 TG 链接(仅当有新增)。不再逐条推 TG。
     if mode == 'push':
         try:
             signals = json.loads(PENDING_PATH.read_text(encoding='utf-8'))
         except (OSError, json.JSONDecodeError):
             signals = []
-        if not signals:
-            log.info("✅ push: pending 为空, 无事可做")
-            return 0
-        n = _push_signals(signals)
+        new_n = _accumulate_signals(signals) if signals else 0
         try:
             PENDING_PATH.unlink()
         except OSError:
             pass
-        log.info("✅ push: 推送 %d 条新突发卡片", n)
+        events = _breaking_events_in_window(DISPLAY_WINDOW_HOURS)
+        BREAKING_HTML_PATH.parent.mkdir(parents=True, exist_ok=True)
+        BREAKING_HTML_PATH.write_text(
+            _render_breaking_html(events, BRIEFING_URL), encoding='utf-8')
+        PUSH_FLAG_PATH.write_text(f'{new_n} {len(events)}', encoding='utf-8')
+        log.info("✅ push: 新增 %d 条, 近 %dh 共 %d 条, 已渲染 breaking.html",
+                 new_n, DISPLAY_WINDOW_HOURS, len(events))
         return 0
 
     # demo: 用给定(或示例)标题走完整 翻译→卡片→推送, 标注[演示]、不进去重。
@@ -456,13 +548,15 @@ def main() -> int:
         log.info("✅ demo: 演示卡片推送 ok=%s — %s", ok, demo_title[:60])
         return 0
 
-    # all (默认, 本地/兜底): 检测 + 直接推。翻译 best-effort, 无代理则回退英文原标题。
+    # all (默认, 本地/兜底): 检测 → 累积 → 渲染突发页(不部署/不推 TG, 供本地查看)。
     selected = _detect_and_select()
-    if not selected:
-        log.info("✅ 无突发, 退出")
-        return 0
-    n = _push_signals(selected)
-    log.info("✅ 完成: 推送 %d 条新突发", n)
+    new_n = _accumulate_signals(selected) if selected else 0
+    events = _breaking_events_in_window(DISPLAY_WINDOW_HOURS)
+    BREAKING_HTML_PATH.parent.mkdir(parents=True, exist_ok=True)
+    BREAKING_HTML_PATH.write_text(
+        _render_breaking_html(events, BRIEFING_URL), encoding='utf-8')
+    log.info("✅ 完成: 新增 %d 条, 近 %dh 共 %d 条, breaking.html 已渲染",
+             new_n, DISPLAY_WINDOW_HOURS, len(events))
     return 0
 
 

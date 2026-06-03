@@ -58,7 +58,9 @@ jobs:
         id: cache-dedup
         uses: actions/cache@v4
         with:
-          path: ai-morning-news/output/pushed_breaking.json
+          path: |
+            ai-morning-news/output/pushed_breaking.json
+            ai-morning-news/output/breaking_tg_state.json
           # key 含日期, 自动滚动; restore-keys 让今天可以读昨天的
           key: pushed-breaking-${{ github.run_id }}
           restore-keys: |
@@ -80,12 +82,13 @@ jobs:
           echo "hits=$N" >> "$GITHUB_OUTPUT"
           echo "🎯 本次新突发命中: $N 条"
 
-      - name: 翻译并推送卡片 (仅当有命中 — 此时才装 claude + 调 LLM)
+      - name: 翻译+累积+渲染突发页 (仅当有命中 — 此时才装 claude + 调 LLM)
         if: steps.detect.outputs.hits != '0'
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          # 装 claude CLI 失败也不致命: push 内部会回退英文原标题, 绝不漏推
+          # push: 翻译新突发→累积进库→渲染 breaking.html→写 push flag。不再逐条推 TG。
+          # 装 claude 失败也不致命: 翻译回退英文原标题。
           npm install -g @anthropic-ai/claude-code || echo "⚠️ claude 安装失败, 将回退英文原标题"
           cd ai-morning-news
           nohup python3 -u claude_proxy.py > /tmp/breaking_proxy.log 2>&1 &
@@ -96,6 +99,41 @@ jobs:
           done
           python3 breaking_news_detector.py push
           kill "$PROXY_PID" 2>/dev/null || true
+
+      - name: 部署突发页 + 删旧推新 TG 链接 (仅当有新增突发)
+        if: steps.detect.outputs.hits != '0'
+        env:
+          DEPLOY_REPO_TOKEN: ${{ secrets.DEPLOY_REPO_TOKEN }}
+          DEPLOY_REPO: hawaha112/ai-morning-briefing
+        run: |
+          cd ai-morning-news
+          [ -f output/breaking_push.flag ] || { echo "无 push flag, 跳过"; exit 0; }
+          read NEW TOTAL < output/breaking_push.flag
+          if ! [ "${NEW:-0}" -gt 0 ] 2>/dev/null; then echo "本次无新增突发, 不部署/不推送"; exit 0; fi
+          # 1) 部署 breaking.html → 部署仓 archive/breaking.html (走 archive/** 白名单, 无需改 deploy.yml)
+          TMP=$(mktemp -d)
+          if git clone --depth 1 "https://x-access-token:${DEPLOY_REPO_TOKEN}@github.com/${DEPLOY_REPO}.git" "$TMP" 2>&1 | tail -1; then
+            mkdir -p "$TMP/archive"; cp output/breaking.html "$TMP/archive/breaking.html"
+            git -C "$TMP" add archive/breaking.html
+            if git -C "$TMP" -c user.email=action@github.com -c user.name=action commit -q -m "breaking: $(date -u +%FT%TZ) (+${NEW})"; then
+              git -C "$TMP" push 2>&1 | tail -1 || { echo "push 冲突, rebase 重试"; git -C "$TMP" pull --rebase 2>&1 | tail -1; git -C "$TMP" push 2>&1 | tail -1 || echo "重试仍失败(下轮再补)"; }
+            else echo "breaking.html 无变化"; fi
+          else echo "克隆部署仓失败"; fi
+          rm -rf "$TMP"
+          # 2) 删旧推新: 窗口里只保留一条突发链接
+          URL="${BRIEFING_URL%/}/archive/breaking.html"
+          STATE=output/breaking_tg_state.json
+          PREV=$(python3 -c "import json,os;p='$STATE';print(json.load(open(p)).get('msg_id','') if os.path.exists(p) else '')" 2>/dev/null || echo "")
+          [ -n "$PREV" ] && curl -s "https://api.telegram.org/bot${TG_BOT_TOKEN}/deleteMessage" -d "chat_id=${TG_CHAT_ID}" -d "message_id=${PREV}" >/dev/null 2>&1 || true
+          TEXT="🚨 <b>AI 突发</b> · 近 24h 共 ${TOTAL} 条"$'\n\n'"<a href=\"${URL}\">📋 查看突发列表 →</a>"
+          RESP=$(curl -s "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d "chat_id=${TG_CHAT_ID}" --data-urlencode "text=${TEXT}" -d "parse_mode=HTML" -d "disable_web_page_preview=false") || RESP=""
+          NEWID=$(printf '%s' "$RESP" | python3 -c "import sys,json;d=json.loads(sys.stdin.read() or '{}');print((d.get('result') or {}).get('message_id','') if isinstance(d,dict) else '')" 2>/dev/null || echo "")
+          if [ -n "$NEWID" ]; then
+            printf '{"msg_id": %s, "updated_at": "%s"}' "$NEWID" "$(date -u +%FT%TZ)" > "$STATE"
+            echo "✅ 突发链接已更新: 删旧(${PREV:-无}) → 新(${NEWID}) · 共 ${TOTAL} 条"
+          else
+            echo "⚠️ 未取到新 msg_id(silent/失败), 保留旧 id"
+          fi
 
       - name: 翻译卡片演示 (仅当填了 demo_title)
         if: github.event.inputs.demo_title != ''
