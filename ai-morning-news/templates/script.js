@@ -545,20 +545,28 @@ document.getElementById('searchBox').addEventListener('input', _debounce(functio
 (function() {
     var el = document.getElementById('breaking-banner');
     if (!el) return;
+    var WINDOW_MS = 24 * 3600 * 1000;   // 客户端再过滤一道 24h: 即便 breaking.json 滞后未重部署, 也绝不显示过期突发
     fetch('archive/breaking.json?_=' + Date.now())
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(d) {
             if (!d || !d.events || !d.events.length) return;
-            var cards = d.events.map(function(e) {
+            var now = Date.now();
+            var evs = d.events.filter(function(e) {
+                if (!e.ts) return true;                 // 无时间戳 → 保留(宽松)
+                var t = Date.parse(e.ts);
+                return isNaN(t) || (now - t) <= WINDOW_MS;
+            });
+            if (!evs.length) return;                    // 全部过期 → 不显示 banner
+            var cards = evs.map(function(e) {
                 var zh = escHtml(e.zh || e.en || '(无标题)');
                 var en = (e.en && e.zh) ? '<div class="bkb-en">' + escHtml(e.en) + '</div>' : '';
                 var sig = escHtml(e.signal || '');
-                var url = e.url || '#';
+                var url = escHtml(e.url || '#');
                 return '<a class="bkb-card" href="' + url + '" target="_blank" rel="noopener">'
                     + '<div class="bkb-title">🚨 ' + zh + '</div>' + en
                     + (sig ? '<div class="bkb-sig">' + sig + '</div>' : '') + '</a>';
             }).join('');
-            el.innerHTML = '<div class="bkb-head">🚨 突发 · 近 24h 共 ' + d.events.length + ' 条</div>'
+            el.innerHTML = '<div class="bkb-head">🚨 突发 · 近 24h 共 ' + evs.length + ' 条</div>'
                 + '<div class="bkb-cards">' + cards + '</div>';
             el.hidden = false;
         })

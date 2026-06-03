@@ -66,11 +66,13 @@ HN_EVENT_ONLY = os.environ.get('BREAKING_HN_EVENT_ONLY', 'true').lower() == 'tru
 _HN_EVENT_RE = re.compile(
     r'(?i)('
     # 动作: 发布 / 融资 / 收购 / 事故
-    r'launch|releas|announc|unveil|introduc|debut|ships?\b|shipped|rolls?\s?out|'
+    # ⚠️ 短词务必加两侧 \b: 否则 ship→cen[sorship]、raise→[p]raise、sue→is[sue]s 等子串误命中
+    r'launch|releas|announc|unveil|introduc|debut|\bships?\b|\bshipped\b|rolls?\s?out|'
     r'open[\s-]?sourc|now available|general availability|'
-    r'raise[sd]?\b|raising|funding|\$\d|valuation|acqui|merger|\bipo\b|'
-    r'shuts?\s?down|outage|\bdown\b|breach|hacked|\bleak|lawsuit|sue[sd]?\b|'
-    r'\bbans?\b|banned|lay[s]?\s?off|layoffs?|fired|resign|'
+    r'\braise[sd]?\b|raising|funding|valuation|acqui|merger|\bipo\b|'
+    r'\$\s?\d+(?:[.,]\d+)?\s?(?:k|m|b|t|bn|mn|million|billion|trillion)\b|'  # 必须带量级(滤掉裸 $1 价格)
+    r'shuts?\s?down|outage|\bdown\b|breach|\bhacked\b|\bleak|lawsuit|\bsue[sd]?\b|'
+    r'\bbans?\b|banned|lay[s]?\s?off|layoffs?|\bfired\b|resign|'
     # 带版本号的型号 (GPT-5 / Claude 4 / Gemini 3 / Llama 4 / o3 ...)
     r'GPT-?\d|Claude\s?(?:Opus|Sonnet|Haiku|\d)|Gemini\s?\d|Llama\s?\d|'
     r'DeepSeek[-\s]?[RV]?\d|Grok\s?\d|Qwen\s?\d|\bo[1-9]\b|'
@@ -84,11 +86,13 @@ _HN_EVENT_RE = re.compile(
 # 要求 released/launched/发布 这类真动作词才放行。
 _EVENT_ACTION_RE = re.compile(
     r'(?i)('
-    r'launch|releas|announc|unveil|introduc|debut|ships?\b|shipped|rolls?\s?out|'
+    # ⚠️ 短词加两侧 \b (同 _HN_EVENT_RE): ship→cen[sorship] 等子串误命中
+    r'launch|releas|announc|unveil|introduc|debut|\bships?\b|\bshipped\b|rolls?\s?out|'
     r'open[\s-]?sourc|now available|general availability|'
-    r'raise[sd]?\b|raising|funding|\$\d|valuation|acqui|merger|\bipo\b|'
-    r'shuts?\s?down|outage|\bdown\b|breach|hacked|\bleak|lawsuit|sue[sd]?\b|'
-    r'\bbans?\b|banned|lay[s]?\s?off|layoffs?|fired|resign|'
+    r'\braise[sd]?\b|raising|funding|valuation|acqui|merger|\bipo\b|'
+    r'\$\s?\d+(?:[.,]\d+)?\s?(?:k|m|b|t|bn|mn|million|billion|trillion)\b|'
+    r'shuts?\s?down|outage|\bdown\b|breach|\bhacked\b|\bleak|lawsuit|\bsue[sd]?\b|'
+    r'\bbans?\b|banned|lay[s]?\s?off|layoffs?|\bfired\b|resign|'
     r'发布|开源|推出|上线|融资|收购|宕机|崩溃|泄露|诉讼|封禁|裁员|下架'
     r')'
 )
@@ -105,10 +109,15 @@ _NOISE_RE = re.compile(
     r'^\s*(why|how|what|when|where|who|whose|whether|should)\b|'   # 疑问词开头
     r'\b(vs\.?|versus|opinion|thoughts?\s+on|\brant\b|'
     r'please\s+(use|stop)|why\s+you\s+should|'
-    r'(are|is)\s*n.?t\s+worth|not\s+worth|over\s?valued|under\s?valued|'
-    r'\bbubble\b|weird|strange|\bodd\b|confusing|'
+    # 观点/评论(非事件): X 称/认为/预测/警告… —— 突发要的是动作, 不是表态
+    r'says?|claims?|thinks?|believes?|argues?|predicts?|warns?|insists?|'
+    # 估值表态 + 观察/猜测式标题
+    r'(are|is)\s*n.?t\s+worth|not\s+worth|worth\s+\$?\d|valued\s+at|'
+    r'over\s?valued|under\s?valued|\bbubble\b|'
+    r'appears?\s+to|seems?\s+to|looks?\s+like|'
+    r'weird|strange|\bodd\b|confusing|'
     r'i\s+(built|made|wrote|tried|switched|replaced))\b|'
-    r'疑似|奇怪|吐槽|求助|请教'
+    r'疑似|奇怪|吐槽|求助|请教|认为|觉得'
     r')'
 )
 
@@ -184,6 +193,8 @@ def _load_pushed() -> dict:
                             title=info.get('title', ''),
                             url=info.get('url', ''),
                             score=info.get('score', 0),
+                            title_zh=info.get('title_zh', ''),
+                            signal=info.get('signal', ''),
                         )
                     log.info("✓ 首次升级: 已迁 %d 条突发去重历史从 JSON → DB",
                              len(valid))
@@ -211,10 +222,13 @@ def _save_pushed(pushed: dict) -> None:
         log.warning("⚠️ 保存 pushed_breaking.json 失败 (DB 已更新, 可忽略): %s", e)
 
 
-def _mark_pushed_one(sig_id: str, source: str, title: str, url: str, score: int) -> None:
-    """单条推送后立即写 DB (主路径)."""
+def _mark_pushed_one(sig_id: str, source: str, title: str, url: str, score: int,
+                     title_zh: str = '', signal: str = '') -> None:
+    """单条推送后立即写 DB (主路径). title_zh/signal 一并入库 —— 突发卡片渲染靠它们,
+    而 DB 是 SOT(_load_pushed 优先读 DB), 不存就会丢字段(踩过: signal 全空/中文退回英文)。"""
     try:
-        _get_state_store().mark_breaking_pushed(sig_id, source, title, url, score)
+        _get_state_store().mark_breaking_pushed(
+            sig_id, source, title, url, score, title_zh=title_zh, signal=signal)
     except Exception as e:
         log.warning("⚠️ DB mark_breaking_pushed 失败: %s", e)
 
@@ -441,17 +455,20 @@ def _accumulate_signals(signals: list) -> int:
         title_en = (sig.get('title') or '').strip()
         zh = _translate_title(title_en)   # best-effort, 失败回退英文
         score_val = sig.get('points') or sig.get('likes') or sig.get('stars') or 0
+        signal_txt = _signal_text(sig)
+        title_zh = (zh or '')[:80]
         pushed[sid] = {
             'pushed_at': datetime.now(timezone.utc).isoformat(),
             'source': sig.get('_source'),
             'title': title_en[:160],
-            'title_zh': (zh or '')[:80],
-            'signal': _signal_text(sig),
+            'title_zh': title_zh,
+            'signal': signal_txt,
             'url': sig.get('url', ''),
             'score': score_val,
         }
         _mark_pushed_one(sig_id=sid, source=sig.get('_source', 'unknown'),
-                         title=title_en, url=sig.get('url', ''), score=score_val)
+                         title=title_en, url=sig.get('url', ''), score=score_val,
+                         title_zh=title_zh, signal=signal_txt)
         n += 1
         log.info("  ➕ 收录突发: %s", (zh or title_en)[:50])
     _save_pushed(pushed)
