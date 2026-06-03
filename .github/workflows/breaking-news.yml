@@ -87,7 +87,7 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          # push: 翻译新突发→累积进库→渲染 breaking.html→写 push flag。不再逐条推 TG。
+          # push: 翻译新突发→累积进库→写 breaking.json + push flag。不再逐条推 TG。
           # 装 claude 失败也不致命: 翻译回退英文原标题。
           npm install -g @anthropic-ai/claude-code || echo "⚠️ claude 安装失败, 将回退英文原标题"
           cd ai-morning-news
@@ -110,22 +110,22 @@ jobs:
           [ -f output/breaking_push.flag ] || { echo "无 push flag, 跳过"; exit 0; }
           read NEW TOTAL < output/breaking_push.flag
           if ! [ "${NEW:-0}" -gt 0 ] 2>/dev/null; then echo "本次无新增突发, 不部署/不推送"; exit 0; fi
-          # 1) 部署 breaking.html → 部署仓 archive/breaking.html (走 archive/** 白名单, 无需改 deploy.yml)
+          # 1) 部署 breaking.json → 部署仓 archive/breaking.json (走 archive/** 白名单; 早报页前端拉它渲染顶部突发区)
           TMP=$(mktemp -d)
           if git clone --depth 1 "https://x-access-token:${DEPLOY_REPO_TOKEN}@github.com/${DEPLOY_REPO}.git" "$TMP" 2>&1 | tail -1; then
-            mkdir -p "$TMP/archive"; cp output/breaking.html "$TMP/archive/breaking.html"
-            git -C "$TMP" add archive/breaking.html
+            mkdir -p "$TMP/archive"; cp output/breaking.json "$TMP/archive/breaking.json"
+            git -C "$TMP" add archive/breaking.json
             if git -C "$TMP" -c user.email=action@github.com -c user.name=action commit -q -m "breaking: $(date -u +%FT%TZ) (+${NEW})"; then
               git -C "$TMP" push 2>&1 | tail -1 || { echo "push 冲突, rebase 重试"; git -C "$TMP" pull --rebase 2>&1 | tail -1; git -C "$TMP" push 2>&1 | tail -1 || echo "重试仍失败(下轮再补)"; }
-            else echo "breaking.html 无变化"; fi
+            else echo "breaking.json 无变化"; fi
           else echo "克隆部署仓失败"; fi
           rm -rf "$TMP"
-          # 2) 删旧推新: 窗口里只保留一条突发链接
-          URL="${BRIEFING_URL%/}/archive/breaking.html"
+          # 2) 删旧推新: 窗口里只保留一条突发提醒, 链接指向早报(顶部即突发区块)
+          URL="${BRIEFING_URL}"
           STATE=output/breaking_tg_state.json
           PREV=$(python3 -c "import json,os;p='$STATE';print(json.load(open(p)).get('msg_id','') if os.path.exists(p) else '')" 2>/dev/null || echo "")
           [ -n "$PREV" ] && curl -s "https://api.telegram.org/bot${TG_BOT_TOKEN}/deleteMessage" -d "chat_id=${TG_CHAT_ID}" -d "message_id=${PREV}" >/dev/null 2>&1 || true
-          TEXT="🚨 <b>AI 突发</b> · 近 24h 共 ${TOTAL} 条"$'\n\n'"<a href=\"${URL}\">📋 查看突发列表 →</a>"
+          TEXT="🚨 <b>AI 突发</b> · 近 24h 共 ${TOTAL} 条"$'\n\n'"<a href=\"${URL}\">📖 打开早报看突发（顶部）→</a>"
           RESP=$(curl -s "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d "chat_id=${TG_CHAT_ID}" --data-urlencode "text=${TEXT}" -d "parse_mode=HTML" -d "disable_web_page_preview=false") || RESP=""
           NEWID=$(printf '%s' "$RESP" | python3 -c "import sys,json;d=json.loads(sys.stdin.read() or '{}');print((d.get('result') or {}).get('message_id','') if isinstance(d,dict) else '')" 2>/dev/null || echo "")
           if [ -n "$NEWID" ]; then

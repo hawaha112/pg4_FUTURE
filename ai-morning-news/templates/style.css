@@ -238,6 +238,26 @@ body {
     background: rgba(255, 255, 255, 0.06);
     border-radius: 9px; padding: 0 7px;
 }
+/* 突发 banner —— 早报顶部, 前端从 archive/breaking.json 拉取渲染(有近24h突发才显示) */
+.breaking-banner {
+    max-width: 1120px; margin: 0 auto 18px; padding: 14px 16px;
+    background: rgba(255, 107, 107, 0.06);
+    border: 1px solid rgba(255, 107, 107, 0.30);
+    border-radius: 10px;
+}
+.bkb-head { font-size: 14px; font-weight: 700; color: #ff9b9b; margin-bottom: 10px; }
+.bkb-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.bkb-card {
+    display: block; text-decoration: none;
+    background: var(--bg-card, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.10));
+    border-left: 3px solid #ff6b6b; border-radius: 8px; padding: 10px 12px;
+    transition: border-color 0.15s, transform 0.15s;
+}
+.bkb-card:hover { border-color: #ff6b6b; transform: translateY(-1px); }
+.bkb-title { font-size: 14px; font-weight: 600; color: var(--text-100, #ecf0f5); line-height: 1.5; }
+.bkb-en { font-size: 11px; color: var(--text-50, #8a93a6); margin-top: 3px; font-style: italic; }
+.bkb-sig { font-size: 11px; color: var(--text-50, #8a93a6); margin-top: 5px; }
 .briefing .br-outro {
     max-width: 1120px;
     font-style: italic;

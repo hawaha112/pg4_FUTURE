@@ -101,8 +101,8 @@ SCRIPT_DIR = Path(__file__).parent
 PUSHED_PATH = SCRIPT_DIR / 'output' / 'pushed_breaking.json'
 # detect 阶段把"本次该推的新突发"写这里, push 阶段读它翻译后累积 (两段式, 见 main)
 PENDING_PATH = SCRIPT_DIR / 'output' / 'breaking_pending.json'
-# push 阶段渲染的突发卡片页(部署到 部署仓/archive/breaking.html, TG 只放一条它的链接)
-BREAKING_HTML_PATH = SCRIPT_DIR / 'output' / 'breaking.html'
+# push 阶段输出的突发数据(部署到 部署仓/archive/breaking.json, 早报页前端拉取渲染顶部突发区块)
+BREAKING_JSON_PATH = SCRIPT_DIR / 'output' / 'breaking.json'
 # workflow 读这个 flag 决定是否部署+更新 TG 链接: 内容 "新增数 窗口内总数"
 PUSH_FLAG_PATH = SCRIPT_DIR / 'output' / 'breaking_push.flag'
 # 突发页显示窗口(小时); 比 DEDUP_TTL(48h) 短, 页面只列近 24h
@@ -438,8 +438,25 @@ def _breaking_events_in_window(hours: int) -> list:
     return evs
 
 
-def _render_breaking_html(events: list, briefing_url: str = '') -> str:
-    """渲染突发卡片页(自包含 HTML, 暗色, 与早报风格一致)。"""
+def _breaking_payload(events: list) -> str:
+    """把近 N 小时突发事件序列化成 JSON, 部署到 archive/breaking.json,
+    供早报页前端拉取渲染顶部「🚨 突发」区块(打开早报时实时拉, 始终最新)。"""
+    out = []
+    for e in events:
+        out.append({
+            'zh': e.get('title_zh') or e.get('title') or '',
+            'en': e.get('title') or '',
+            'signal': e.get('signal') or '',
+            'url': e.get('url') or '',
+            'ts': e.get('pushed_at') or '',
+        })
+    return json.dumps(
+        {'updated_at': datetime.now(timezone.utc).isoformat(), 'count': len(out), 'events': out},
+        ensure_ascii=False)
+
+
+def _render_breaking_html(events: list, briefing_url: str = '') -> str:  # noqa: 暂留(未使用)
+    """[已弃用] 旧的独立突发页渲染; 现突发并入早报页前端渲染, 保留备用。"""
     now = datetime.now(timezone(timedelta(hours=8)))
 
     def _rel(iso: str) -> str:
@@ -526,11 +543,10 @@ def main() -> int:
         except OSError:
             pass
         events = _breaking_events_in_window(DISPLAY_WINDOW_HOURS)
-        BREAKING_HTML_PATH.parent.mkdir(parents=True, exist_ok=True)
-        BREAKING_HTML_PATH.write_text(
-            _render_breaking_html(events, BRIEFING_URL), encoding='utf-8')
+        BREAKING_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+        BREAKING_JSON_PATH.write_text(_breaking_payload(events), encoding='utf-8')
         PUSH_FLAG_PATH.write_text(f'{new_n} {len(events)}', encoding='utf-8')
-        log.info("✅ push: 新增 %d 条, 近 %dh 共 %d 条, 已渲染 breaking.html",
+        log.info("✅ push: 新增 %d 条, 近 %dh 共 %d 条, 已写 breaking.json",
                  new_n, DISPLAY_WINDOW_HOURS, len(events))
         return 0
 
@@ -552,10 +568,9 @@ def main() -> int:
     selected = _detect_and_select()
     new_n = _accumulate_signals(selected) if selected else 0
     events = _breaking_events_in_window(DISPLAY_WINDOW_HOURS)
-    BREAKING_HTML_PATH.parent.mkdir(parents=True, exist_ok=True)
-    BREAKING_HTML_PATH.write_text(
-        _render_breaking_html(events, BRIEFING_URL), encoding='utf-8')
-    log.info("✅ 完成: 新增 %d 条, 近 %dh 共 %d 条, breaking.html 已渲染",
+    BREAKING_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    BREAKING_JSON_PATH.write_text(_breaking_payload(events), encoding='utf-8')
+    log.info("✅ 完成: 新增 %d 条, 近 %dh 共 %d 条, breaking.json 已写",
              new_n, DISPLAY_WINDOW_HOURS, len(events))
     return 0
 

@@ -539,6 +539,32 @@ document.getElementById('searchBox').addEventListener('input', _debounce(functio
     _applyFilters();
 }, 150));
 
+// ═══ 突发 banner ═══
+// 打开早报时实时拉取 archive/breaking.json, 有近 24h 突发就渲染在页面最顶。
+// 始终拉最新 → 早班/晚班之间有突发, 随时打开早报都能看到, 不必等下一班出报。
+(function() {
+    var el = document.getElementById('breaking-banner');
+    if (!el) return;
+    fetch('archive/breaking.json?_=' + Date.now())
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(d) {
+            if (!d || !d.events || !d.events.length) return;
+            var cards = d.events.map(function(e) {
+                var zh = escHtml(e.zh || e.en || '(无标题)');
+                var en = (e.en && e.zh) ? '<div class="bkb-en">' + escHtml(e.en) + '</div>' : '';
+                var sig = escHtml(e.signal || '');
+                var url = e.url || '#';
+                return '<a class="bkb-card" href="' + url + '" target="_blank" rel="noopener">'
+                    + '<div class="bkb-title">🚨 ' + zh + '</div>' + en
+                    + (sig ? '<div class="bkb-sig">' + sig + '</div>' : '') + '</a>';
+            }).join('');
+            el.innerHTML = '<div class="bkb-head">🚨 突发 · 近 24h 共 ' + d.events.length + ' 条</div>'
+                + '<div class="bkb-cards">' + cards + '</div>';
+            el.hidden = false;
+        })
+        .catch(function() { /* 无 breaking.json / 网络失败 → 不显示, 不影响早报 */ });
+})();
+
 // ═══ Keyboard ═══
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeModal();

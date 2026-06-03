@@ -45,6 +45,9 @@ $css_content
 <!-- LLM coverage banner (rendered only when coverage < 50%) -->
 $llm_banner_html
 
+<!-- 突发 banner：前端从 archive/breaking.json 实时拉取，有近 24h 突发则显示在最顶（见 script.js） -->
+<section id="breaking-banner" class="breaking-banner" hidden></section>
+
 <!-- Briefing -->
 $briefing_html
 

@@ -207,12 +207,15 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 
 三项均 LLM 依赖、仅命中/出报时调用（token 小）；逻辑/渲染已本地桩测，最终文案需云端出报验证。
 
-### 改进 10: 突发改"单链接 + 卡片页"防轰炸（2026-06-02）
+### 改进 10: 突发并进早报、防轰炸（2026-06-02）
 
-用户反馈突发逐条推 = 消息轰炸。改成：突发命中 → 翻译累积进 `pushed_breaking`（含 `title_zh`+`signal`）→ 渲染 [breaking_news_detector.py](ai-morning-news/breaking_news_detector.py) `_render_breaking_html`（近 24h 卡片页 `output/breaking.html`）→ 部署到**部署仓 `archive/breaking.html`**（走 archive/** 白名单，无需改 deploy.yml）→ **删旧推新一条** TG「🚨 AI 突发 · 近24h N 条 · 链接」（msg_id 存 `breaking_tg_state.json`，actions/cache 持久化）。**TG 窗口里只剩 2 条链接：早晚报 + 突发列表**。
-- `push` 模式只累积+渲染+写 `breaking_push.flag`(新增数 总数)；**部署 + 删旧推新 TG 在 [breaking-news.yml](.github/workflows/breaking-news.yml) 的条件步骤**（仅 `NEW>0` 才部署/刷新）。
-- 窗口可调 `BREAKING_DISPLAY_HOURS`(默认 24)。`demo` 模式仍走旧的单卡推送（仅作翻译自检）。
-- ⚠️ 坑：`run: |` 块里**别写多行 `python3 -c`**——续行顶格会被 YAML 当 mapping 解析报错（本次踩过）。用单行。
+用户反馈突发逐条推 = 消息轰炸；要"只 2 个链接（早晚报 + 突发并进早报）"。最终方案：
+- **突发命中** → 翻译累积进 `pushed_breaking`（含 `title_zh`+`signal`）→ `push` 模式写 `output/breaking.json`（近 24h 事件数组，`_breaking_payload`）+ `breaking_push.flag`(新增数 总数)。不再逐条推 TG、不再渲染独立 HTML 页。
+- **[breaking-news.yml](.github/workflows/breaking-news.yml) 条件步骤**（仅 `NEW>0`）：部署 `breaking.json` → 部署仓 `archive/breaking.json`（走 archive/** 白名单）；**删旧推新一条** TG「🚨 AI 突发 · 近24h N 条」，**链接指向早报**（msg_id 存 `breaking_tg_state.json`，cache 持久化）。
+- **早报页前端**（[page.html](ai-morning-news/templates/page.html) `#breaking-banner` + [script.js](ai-morning-news/templates/script.js) IIFE）：打开早报时 `fetch('archive/breaking.json')`，有近 24h 突发就渲染**顶部「🚨 突发」卡片区**（判断之前）。**始终拉最新** → 早晚班之间有突发、随时打开早报都能看到，不必等下一班出报。
+- 结果：**TG 只 2 条消息（早晚报 + 突发提醒），1 个页面/URL（早报）**；突发卡片在早报顶部。
+- 窗口可调 `BREAKING_DISPLAY_HOURS`(默认 24)。`_render_breaking_html` 弃用保留。`demo` 仍走旧单卡推送(翻译自检)。
+- ⚠️ 坑：`run: |` 块里**别写多行 `python3 -c`**——续行顶格会被 YAML 当 mapping 解析报错。用单行。
 
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）
