@@ -45,34 +45,51 @@ $css_content
 <!-- LLM coverage banner (rendered only when coverage < 50%) -->
 $llm_banner_html
 
-<!-- 突发 banner：前端从 archive/breaking.json 实时拉取，有近 24h 突发则显示在最顶（见 script.js） -->
-<section id="breaking-banner" class="breaking-banner" hidden></section>
+<!-- 今日导览：一眼可记的版块地图 + 跳转。判断→突发→必读→更多→大V→实体→口播 -->
+$today_nav
 
-<!-- Briefing -->
+<!-- ① 今日判断（结论先行，全天头条） -->
+<section id="sec-judgment" class="page-sec">
 $briefing_html
+</section>
 
-<!-- Featured Articles (Importance >= 4) —— 重大事件 -->
+<!-- ② 突发动态（近 24h，时效提醒）：前端从 archive/breaking.json 实时拉取，
+     有突发才显示；放在判断之后，不抢头条（见 script.js） -->
+<section id="sec-breaking" class="page-sec">
+<div id="breaking-banner" class="breaking-banner" hidden></div>
+</section>
+
+<!-- ③ 今日必读（importance≥3，按主题分组） -->
+<section id="sec-featured" class="page-sec">
 $featured_html
+</section>
 
-<!-- Regular Articles (importance < 3) —— 普通资讯网格 -->
-<!-- 在 grid 上方加一个 section 标题,跟"今日必读"对应,视觉分界 -->
+<!-- ④ 更多资讯（importance<3，按主题分组的网格） -->
+<section id="sec-more" class="page-sec">
 <div class="grid-section-header">
-    <h2 class="grid-section-title">📰 其他资讯</h2>
-    <div class="grid-section-meta">按发布时间倒序 · 点击卡片展开详情</div>
+    <h2 class="grid-section-title">📚 更多资讯</h2>
+    <div class="grid-section-meta">按主题分类 · 点击卡片展开详情</div>
 </div>
 <!-- id="grid" 是 script.js bindCardClick(getElementById('grid')) 必须的，少了它点击 modal 会失效 -->
 <div id="grid" class="grid" aria-label="资讯列表">
 $cards_html
 </div>
+</section>
 
-<!-- 大V 动态：X-* / YouTube 等社交媒体条目（importance<4 但仍值得展示） -->
+<!-- ⑤ 大V 动态：X-* / YouTube 等社交媒体条目（importance<4 但仍值得展示） -->
+<section id="sec-vip" class="page-sec">
 $vip_html
+</section>
 
-<!-- Entity Tracker (P1) — 30 天动态时间线入口；移到新闻下方(二级导航, 不挤占头部内容) -->
+<!-- ⑥ 实体追踪 (P1) — 30 天动态时间线入口 -->
+<section id="sec-entity" class="page-sec">
 $entity_tracker_html
+</section>
 
-<!-- 今日口播稿 (C) — 60-90 秒口语稿, 供音频/短视频取用; 仅 meta.broadcast_script 有值时渲染 -->
+<!-- ⑦ 今日口播稿 (C) — 60-90 秒口语稿, 供音频/短视频取用; 仅 meta.broadcast_script 有值时渲染 -->
+<section id="sec-broadcast" class="page-sec">
 $broadcast_html
+</section>
 
 <!-- Modal -->
 <div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modalContent" onclick="if(event.target===this)closeModal()">

@@ -569,6 +569,9 @@ document.getElementById('searchBox').addEventListener('input', _debounce(functio
             el.innerHTML = '<div class="bkb-head">🚨 突发 · 近 24h 共 ' + evs.length + ' 条</div>'
                 + '<div class="bkb-cards">' + cards + '</div>';
             el.hidden = false;
+            // 确有突发 → 同时点亮"今日导览"里的突发 chip（默认 hidden）
+            var navChip = document.querySelector('.today-nav .tn-breaking');
+            if (navChip) navChip.hidden = false;
         })
         .catch(function() { /* 无 breaking.json / 网络失败 → 不显示, 不影响早报 */ });
 })();

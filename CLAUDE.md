@@ -222,6 +222,14 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 - **signal/中文标题在 DB 丢字段（2026-06-03 核心 bug）**：突发卡片 `signal`（"HN 89 分"）全空、中文标题退回英文。根因：breaking-news.yml **不带 events.db**（gitignored、注释"不依赖"）→ 每跑用全新空 DB → `_load_pushed()` 先读 JSON、但 `_accumulate_signals` 同时把 poor 记录写进新空 DB（旧 `mark_breaking_pushed` 只存 source/title/url/score）→ `_breaking_events_in_window` 再 `_load_pushed()` 发现 DB 非空就返回 **poor DB 数据**。修复：[state_store.py](ai-morning-news/state_store.py) `pushed_breaking` 加 `title_zh`/`signal` 两列（含对老 briefing-state DB 的幂等 `ALTER TABLE` 补列）+ `mark_breaking_pushed` 存这俩；detector `_mark_pushed_one`/`_accumulate_signals`/JSON→DB 迁移全程透传。**坑**：去重过滤在 `_detect_and_select`（`_id in pushed`），已推事件 re-run 时 `hits=0` → 不重部署，故富化后的 signal 要等"新事件"或清 actions/cache 才上线。
 - **前端客户端 24h 过滤（2026-06-03）**：[script.js](ai-morning-news/templates/script.js) banner 渲染前按 `e.ts` 再滤一道 24h —— 即便 `breaking.json` 滞后未重部署，页面也绝不显示过期突发、全过期自动隐藏。url 顺手补 `escHtml`。
 
+### 改进 11: 早报页信息架构重排（2026-06-04，用户反馈"没层次/记不住"）
+
+用户反馈：突发放在判断（看板）之前怪、必读卡片没归类、整页没逻辑层次记不住。三处改（仅模板层，逻辑未动）：
+1. **突发移到判断之后**（[page.html](ai-morning-news/templates/page.html)）：`#breaking-banner` 从页面最顶（判断之前）移到 `#sec-breaking`（判断之后）。判断仍是全天头条/结论先行，突发作为"近24h时效提醒"紧随、不抢头条。
+2. **「今日必读」也按主题分组**（[html_generator.py](ai-morning-news/html_generator.py)）：原本是平铺 `featured-grid`，现与"更多资讯"统一——`_GRID_CAT_ORDER`/`_cat_rank` 上移到 featured block 之前两处共用；必读按 `categories[0]` 分桶，每类一个 `grid-cat-head` 小标题 + 各自的 `featured-grid`。**data-idx 仍按 `enumerate(all_items)`**，分组只重排卡片 HTML，modal 不错位（已验证 0-5 对齐）。
+3. **顶部「今日导览」+ 版块锚点 + 编号顺序**：`$today_nav` 按"非空版块"生成跳转 chip（🎯判断 🚨突发 ⭐必读 📚更多 👤大V 🔗实体 🎙口播），每个 `<section id="sec-*" class="page-sec">` 做锚点。突发 chip 默认 `hidden`，由 [script.js](ai-morning-news/templates/script.js) 在确有近24h突发时点亮（与 banner 同步）。CSS `.today-nav`/`.tn-link`/`.tn-breaking` + `.page-sec{scroll-margin-top:84px}`（清 sticky header）。
+- "其他资讯"标题改"📚 更多资讯 · 按主题分类"。`grid-cat-head` 在 featured-section(非 grid 容器)里 `grid-column` 无副作用、`display:flex` 正常渲染，两处复用同款。
+
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）
 - **Cloudflare / Nitter 反爬**：[content_fetcher.py](ai-morning-news/content_fetcher.py) 对 X(Twitter) 走 Nitter 实例，经常 429。健康度由 [health_tracker.py](ai-morning-news/health_tracker.py) 跟踪，10+ 连续失败自动停用

@@ -275,11 +275,19 @@ def generate_html(all_items, config, digest=None, meta=None):
             top3_items.append((idx, item))
             seen_idx.add(idx)
 
-    # ── 构建必读卡片（featured block）──
-    featured_html = ""
-    if featured_items:
-        featured_html = '<div class="featured-section">\n<h2 class="featured-title">今日必读</h2>\n<div class="featured-grid">\n'
+    # ── 类别顺序（featured 必读 与 regular 更多资讯 共用，统一主题分组）──
+    _GRID_CAT_ORDER = [
+        ('大模型发布', '🧠'), ('开源生态', '🔓'), ('学术研究', '🔬'), ('AI编程', '💻'),
+        ('AI工具', '🛠️'), ('产品与应用', '📦'), ('芯片与算力', '⚡'), ('融资与商业', '💰'),
+        ('AI政策监管', '📜'), ('安全与对齐', '🛡️'), ('具身智能', '🤖'), ('自动驾驶', '🚗'),
+        ('行业观点', '💬'), ('其他', '📰'),
+    ]
+    _cat_rank = {c: i for i, (c, _) in enumerate(_GRID_CAT_ORDER)}
 
+    # ── 构建必读卡片（featured block）—— 按主题分组，每组一个小标题（与"更多资讯"同款）──
+    featured_html = ""
+    _feat_groups = {}   # {主类别: [featured_card_html, ...]}，组内保持 relevance 排序
+    if featured_items:
         for idx, item in featured_items:
             analysis = item.get('analysis', {})
             importance = analysis.get('importance', 1)
@@ -396,7 +404,7 @@ def generate_html(all_items, config, digest=None, meta=None):
             aud_data = '|'.join(a for a in aud_list if a in AUDIENCE_LABELS) or 'general'
 
             _iid = item.get('_event_id') or item.get('link') or f'i{idx}'
-            featured_html += f'''    <div class="featured-card" data-cat="{_safe_escape(cat_data)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_iid)}" style="border-left-color: {border_color}">
+            _feat_card = f'''    <div class="featured-card" data-cat="{_safe_escape(cat_data)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_iid)}" style="border-left-color: {border_color}">
         {img_html}
         <div class="featured-body">
             {hero_badge}
@@ -408,17 +416,27 @@ def generate_html(all_items, config, digest=None, meta=None):
         </div>
     </div>
 '''
+            _fcat = categories[0] if categories else '其他'
+            if _fcat not in _cat_rank:
+                _fcat = '其他'
+            _feat_groups.setdefault(_fcat, []).append(_feat_card)
 
-        featured_html += '</div>\n</div>\n'
+        # 按类别顺序拼接，每个非空组前插一个主题小标题(含计数)，组内独立 featured-grid
+        _fparts = ['<div class="featured-section">\n<h2 class="featured-title">⭐ 今日必读</h2>\n']
+        for _fc, _femoji in _GRID_CAT_ORDER:
+            _fcards = _feat_groups.get(_fc)
+            if not _fcards:
+                continue
+            _fparts.append(
+                f'<h3 class="grid-cat-head" data-gcat="{_safe_escape(_fc)}">'
+                f'{_femoji} {_safe_escape(_fc)}<span class="gc-n">{len(_fcards)}</span></h3>\n'
+                '<div class="featured-grid">\n' + ''.join(_fcards) + '</div>\n'
+            )
+        _fparts.append('</div>\n')
+        featured_html = ''.join(_fparts)
 
     # ── 构建普通卡片（regular grid）—— 按主类别分组，每组一个全宽小标题 ──
-    _GRID_CAT_ORDER = [
-        ('大模型发布', '🧠'), ('开源生态', '🔓'), ('学术研究', '🔬'), ('AI编程', '💻'),
-        ('AI工具', '🛠️'), ('产品与应用', '📦'), ('芯片与算力', '⚡'), ('融资与商业', '💰'),
-        ('AI政策监管', '📜'), ('安全与对齐', '🛡️'), ('具身智能', '🤖'), ('自动驾驶', '🚗'),
-        ('行业观点', '💬'), ('其他', '📰'),
-    ]
-    _cat_rank = {c: i for i, (c, _) in enumerate(_GRID_CAT_ORDER)}
+    # _GRID_CAT_ORDER / _cat_rank 已在 featured block 上方定义（两处共用，统一主题归类）
     _grid_groups = {}   # {主类别: [card_html, ...]}，组内保持原(relevance)排序
     for idx, item in regular_items:
         analysis = item.get('analysis', {})
@@ -926,7 +944,31 @@ def generate_html(all_items, config, digest=None, meta=None):
             '</section>'
         )
 
+    # ── 今日导览：按"非空版块"生成跳转 chip，给页面一个一眼可记的层次地图 ──
+    # 阅读顺序：判断 → 突发 → 必读 → 更多 → 大V → 实体 → 口播。
+    # 突发为客户端异步拉取，chip 默认 hidden，由 script.js 在确有近 24h 突发时显示。
+    _nav_items = [
+        ('sec-judgment', '🎯', '判断', bool(briefing_html and str(briefing_html).strip())),
+        ('sec-breaking', '🚨', '突发', True),
+        ('sec-featured', '⭐', '必读', bool(featured_html)),
+        ('sec-more', '📚', '更多', bool(cards_html)),
+        ('sec-vip', '👤', '大V', bool(vip_html)),
+        ('sec-entity', '🔗', '实体', bool(entity_tracker_html)),
+        ('sec-broadcast', '🎙', '口播', bool(broadcast_html)),
+    ]
+    _nav_links = []
+    for _sid, _emoji, _label, _present in _nav_items:
+        if not _present:
+            continue
+        if _sid == 'sec-breaking':
+            _nav_links.append(f'<a class="tn-link tn-breaking" href="#{_sid}" hidden>{_emoji} {_label}</a>')
+        else:
+            _nav_links.append(f'<a class="tn-link" href="#{_sid}">{_emoji} {_label}</a>')
+    today_nav = (f'<nav class="today-nav" aria-label="今日导览">{"".join(_nav_links)}</nav>'
+                 if _nav_links else '')
+
     html = page_template.safe_substitute(
+        today_nav=today_nav,
         broadcast_html=broadcast_html,
         vip_html=vip_html,
         date_str=date_str,

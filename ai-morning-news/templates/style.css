@@ -238,6 +238,33 @@ body {
     background: rgba(255, 255, 255, 0.06);
     border-radius: 9px; padding: 0 7px;
 }
+/* 今日导览 —— 版块地图 + 跳转 chip（给页面一个一眼可记的层次） */
+.today-nav {
+    max-width: 1120px; margin: 4px auto 18px; padding: 0 16px;
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+}
+.today-nav .tn-link {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 13px; font-weight: 600; text-decoration: none;
+    color: var(--text-70, #b6bdcb);
+    background: var(--bg-card, rgba(255,255,255,0.04));
+    border: 1px solid var(--border, rgba(255,255,255,0.10));
+    border-radius: 999px; padding: 6px 13px;
+    transition: border-color .15s, color .15s, background .15s;
+}
+.today-nav .tn-link:hover {
+    color: var(--text, #ecf0f5); border-color: var(--accent);
+    background: var(--bg-card-hover, rgba(255,255,255,0.055));
+}
+.today-nav .tn-breaking {
+    color: #ff8a8a; border-color: rgba(255,107,107,0.35);
+    background: rgba(255,107,107,0.07);
+}
+.today-nav .tn-breaking:hover { border-color: #ff6b6b; color: #ffb0b0; }
+/* 版块锚点：跳转时留出 sticky header 的高度，标题不被遮挡 */
+.page-sec { scroll-margin-top: 84px; }
+/* 空版块（如无突发时的 #sec-breaking）不占额外纵向空间 */
+.page-sec:empty { display: none; }
 /* 突发 banner —— 早报顶部, 前端从 archive/breaking.json 拉取渲染(有近24h突发才显示) */
 .breaking-banner {
     max-width: 1120px; margin: 0 auto 18px; padding: 14px 16px;
