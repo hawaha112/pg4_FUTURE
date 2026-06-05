@@ -107,7 +107,9 @@
         "color": "#D4A574",
         "description": "Anthropic Jack Clark 的 AI 行业周刊（jack-clark.net 镜像，含全文）",
         "ai_only": true,
-        "enabled": true
+        "enabled": false,
+        "_auto_disabled_at": "2026-06-05T05:55:17.362402+00:00",
+        "_auto_disabled_reason": "auto_fix_sources: 4 个候选全部不可用"
       },
       {
         "name": "Latent Space",
