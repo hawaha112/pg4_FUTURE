@@ -93,6 +93,23 @@ fi
 
 # Telegram 发送函数
 # 当 BRIEFING_SILENT_TG=true 时跳过推送 — 测试 dispatch 时避免轰炸 TG。
+# 构建 sendMessage JSON payload。给了 url 就附一个 inline 键盘按钮 —— TG 按钮链接
+# 一点直接打开、不弹"Open Link?"二次确认(正文里 <a href> 的文字≠URL 才会触发确认)。
+# text 经 json.dumps 转义; reply_markup 让链接成为可一键直达的按钮。
+_tg_payload() {
+    # $1=text  $2=url(可空)  $3=btn_label(可空)
+    TG_TEXT="$1" TG_URL="${2:-}" TG_BTN="${3:-📖 阅读全文}" TG_CHAT="$TG_CHAT_ID" \
+    "$PYTHON" -c '
+import os, json
+p = {"chat_id": os.environ.get("TG_CHAT", ""), "text": os.environ.get("TG_TEXT", ""),
+     "parse_mode": "HTML", "disable_web_page_preview": False}
+u = (os.environ.get("TG_URL", "") or "").strip()
+if u:
+    p["reply_markup"] = {"inline_keyboard": [[{"text": os.environ.get("TG_BTN", "打开"), "url": u}]]}
+print(json.dumps(p, ensure_ascii=False))
+'
+}
+
 send_tg() {
     if [ "${BRIEFING_SILENT_TG:-false}" = "true" ]; then
         echo "  🔇 silent_tg=true, 跳过 TG 推送" >> "$LOG_FILE"
@@ -101,10 +118,11 @@ send_tg() {
     if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
         return 0
     fi
-    local message="$1"
+    # $1=message  $2=url(可选→附按钮)  $3=按钮文字(可选)
+    local payload
+    payload=$(_tg_payload "$1" "${2:-}" "${3:-}")
     curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-        -H "Content-Type: application/json" \
-        -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": $(printf '%s' "$message" | "$PYTHON" -c 'import sys,json; print(json.dumps(sys.stdin.read()))'), \"parse_mode\": \"HTML\", \"disable_web_page_preview\": false}" \
+        -H "Content-Type: application/json" -d "$payload" \
         > /dev/null 2>&1 || true
 }
 
@@ -134,12 +152,12 @@ send_tg_capture() {
     if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
         return 0
     fi
-    local message="$1"
-    local resp
+    # $1=message  $2=url(可选→附 inline 按钮, 一点直达不弹确认)  $3=按钮文字(可选)
+    local payload resp
+    payload=$(_tg_payload "$1" "${2:-}" "${3:-}")
     # || resp="" 兜底: set -e 下 curl 网络失败会让赋值返回非零 → 整脚本在已部署后崩退
     resp=$(curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-        -H "Content-Type: application/json" \
-        -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": $(printf '%s' "$message" | "$PYTHON" -c 'import sys,json; print(json.dumps(sys.stdin.read()))'), \"parse_mode\": \"HTML\", \"disable_web_page_preview\": false}" \
+        -H "Content-Type: application/json" -d "$payload" \
         2>/dev/null) || resp=""
     printf '%s' "$resp" | "$PYTHON" -c 'import sys,json
 try:
@@ -528,13 +546,15 @@ if [ "$DEPLOY_OK" = true ]; then
     [ -f "$STATS_FILE" ] && HEADLINES=$("$PYTHON" "$PROJECT_DIR/_tg_headlines.py" "$STATS_FILE" 3 2>/dev/null || echo "")
     WARN_LINE=""
     [ -n "$NO_LLM" ] && WARN_LINE=$'\n'"⚠️ LLM 暂不可用，本班为规则兜底内容"
+    # 正文不再放 <a href> 链接(那会触发 TG"Open Link?"二次确认)。
+    # 链接改成下方 inline 按钮(send_tg_capture 第 2 参), 一点直达。
     BRIEFING_MSG="<b>📰 AI ${RPT} · $(date '+%m-%d') ${SHORT_SHIFT}</b>
 ${HEADLINES:+
 ${HEADLINES}
 }
-共 <b>${ARTICLE_COUNT}</b> 条 · <a href=\"${BRIEFING_URL}\">📖 阅读全文 →</a>${WARN_LINE}"
+共 <b>${ARTICLE_COUNT}</b> 条${WARN_LINE}"
     tg_delete "$PREV_MSG_ID"
-    NEW_MSG_ID=$(send_tg_capture "$BRIEFING_MSG")
+    NEW_MSG_ID=$(send_tg_capture "$BRIEFING_MSG" "$BRIEFING_URL" "📖 阅读全文")
     if [ -n "$NEW_MSG_ID" ]; then
         # 只更新本班次(am/pm)的槽，保留另一班次的 id —— 早报/晚报各一条、互不顶替、各自每天刷新
         "$PYTHON" - "$TG_STATE_FILE" "$SHIFT" "$NEW_MSG_ID" <<'PYEOF' 2>>"$LOG_FILE" || \
