@@ -225,7 +225,8 @@ class EventStore:
                 importance      INTEGER DEFAULT 0,
                 cluster_size    INTEGER DEFAULT 1,
                 analysis        TEXT,
-                rendered_at     TEXT
+                rendered_at     TEXT,
+                rendered_shift  TEXT
             );
 
             CREATE INDEX IF NOT EXISTS idx_ce_status
@@ -309,6 +310,20 @@ class EventStore:
                 self.db.execute("DROP TABLE IF EXISTS events")
                 self.db.commit()
                 log.info("📦 迁移: 清理残留的旧 events 表")
+            except sqlite3.OperationalError:
+                pass
+
+        # canonical_events 增加 rendered_shift 列(老库幂等补列)。
+        # dashboard"本周重要事件"靠它定位归档页(am/pm), 不存就只能按渲染小时猜 → 猜错就 404。
+        try:
+            self.db.execute("SELECT rendered_shift FROM canonical_events LIMIT 0")
+        except sqlite3.OperationalError:
+            try:
+                self.db.execute(
+                    "ALTER TABLE canonical_events ADD COLUMN rendered_shift TEXT"
+                )
+                self.db.commit()
+                log.info("📦 迁移: canonical_events 增加 rendered_shift 列")
             except sqlite3.OperationalError:
                 pass
 
@@ -802,13 +817,16 @@ class EventStore:
             )
         self.db.commit()
 
-    def mark_canonical_rendered(self, event_ids: List[str]):
-        """标记 canonical events 已被渲染"""
+    def mark_canonical_rendered(self, event_ids: List[str], shift: str = ''):
+        """标记 canonical events 已被渲染。shift(am/pm)记录这批落到哪个班次的归档页,
+        供 dashboard"本周重要事件"生成正确的 {date}-{shift}.html 深链(不靠猜小时, 避免 404)。"""
         now = datetime.now(timezone.utc).isoformat()
+        shift = (shift or '').lower()
+        shift = shift if shift in ('am', 'pm') else None
         for eid in event_ids:
             self.db.execute(
-                "UPDATE canonical_events SET rendered_at = ? WHERE event_id = ?",
-                (now, eid)
+                "UPDATE canonical_events SET rendered_at = ?, rendered_shift = ? WHERE event_id = ?",
+                (now, shift, eid)
             )
         self.db.commit()
 

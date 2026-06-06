@@ -927,12 +927,13 @@ def main():
     except Exception as e:
         log.warning("⚠️ 每日归档写入失败: %s", e)
 
-    # 标记已渲染
+    # 标记已渲染（带本班次 am/pm，供 dashboard 生成正确的归档深链，不靠猜小时）
     if use_canonical:
         ce_ids = [item['_canonical_event_id'] for item in all_items
                   if item.get('_canonical_event_id')]
         if ce_ids:
-            store.mark_canonical_rendered(ce_ids)
+            store.mark_canonical_rendered(
+                ce_ids, shift=_os.environ.get('BRIEFING_SHIFT', ''))
 
     event_ids = [item['_event_id'] for item in all_items if item.get('_event_id')]
     if event_ids:

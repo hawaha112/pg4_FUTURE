@@ -281,7 +281,8 @@ def _render_week_important(script_dir: Path) -> str:
                 event_id,
                 rendered_at,
                 (SELECT a.source_name FROM articles a
-                  WHERE a.canonical_event_id = e.event_id LIMIT 1) AS src
+                  WHERE a.canonical_event_id = e.event_id LIMIT 1) AS src,
+                rendered_shift
             FROM canonical_events e
             WHERE rendered_at >= datetime('now','-7 days')
               AND importance >= 4
@@ -306,7 +307,7 @@ def _render_week_important(script_dir: Path) -> str:
     by_date = OrderedDict()
     earliest_pub = None
     latest_pub = None
-    for pub_iso, title, eid, rendered_at, src in rows:
+    for pub_iso, title, eid, rendered_at, src, rendered_shift in rows:
         pub_dt = _parse_dt(pub_iso)
         rendered_dt = _parse_dt(rendered_at)
         if pub_dt is None:
@@ -316,8 +317,11 @@ def _render_week_important(script_dir: Path) -> str:
         if latest_pub is None or pub_dt > latest_pub:
             latest_pub = pub_dt
         d_key = pub_dt.strftime('%Y-%m-%d')
-        # 用 rendered_at 推断这条事件落到哪个班次的归档页
-        shift = 'pm' if (rendered_dt and rendered_dt.hour >= 12) else 'am'
+        # 班次优先用渲染时真实记录的 rendered_shift(准); 老数据无此字段时回退按渲染小时猜。
+        if rendered_shift in ('am', 'pm'):
+            shift = rendered_shift
+        else:
+            shift = 'pm' if (rendered_dt and rendered_dt.hour >= 12) else 'am'
         rendered_date_key = (
             rendered_dt.strftime('%Y-%m-%d') if rendered_dt else d_key
         )
