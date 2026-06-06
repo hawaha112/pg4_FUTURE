@@ -972,10 +972,35 @@ def generate_html(all_items, config, digest=None, meta=None):
             '</section>'
         )
 
+    # ── 今日速览：top N 一行一条 TL;DR，30 秒扫完全天（对标 TLDR/Rundown 的"5 分钟扫读"）──
+    # 放在判断之前，让快速扫读的人先拿到全貌；点任一条直接开该事件 modal（data-idx）。
+    _cat_emoji = {c: e for c, e in _GRID_CAT_ORDER}
+    _glance_rows = []
+    for _gidx, _gitem in featured_items[:10]:
+        _ga = _gitem.get('analysis', {}) or {}
+        _gt = (_ga.get('chinese_title') or _gitem.get('title') or '').strip()
+        if not _gt:
+            continue
+        _gg = (_ga.get('summary') or '').strip()
+        _gcats = _ga.get('categories') or ['其他']
+        _ge = _cat_emoji.get(_gcats[0] if _gcats else '其他', '📰')
+        _glance_rows.append(
+            f'<li class="glance-item" data-idx="{_gidx}">'
+            f'<span class="gl-cat">{_ge}</span>'
+            f'<span class="gl-title">{_safe_escape(_gt[:42])}</span>'
+            f'<span class="gl-gist">{_safe_escape(_gg[:48])}</span>'
+            f'</li>'
+        )
+    today_glance = (
+        f'<h2 class="glance-title">⚡ 今日速览<span class="gl-n">{len(_glance_rows)}</span></h2>'
+        f'<ol class="glance-list">{"".join(_glance_rows)}</ol>'
+    ) if _glance_rows else ''
+
     # ── 今日导览：按"非空版块"生成跳转 chip，给页面一个一眼可记的层次地图 ──
-    # 阅读顺序：判断 → 突发 → 必读 → 更多 → 大V → 实体 → 口播。
+    # 阅读顺序：速览 → 判断 → 突发 → 必读 → 更多 → 大V → 实体 → 口播。
     # 突发为客户端异步拉取，chip 默认 hidden，由 script.js 在确有近 24h 突发时显示。
     _nav_items = [
+        ('sec-glance', '⚡', '速览', bool(today_glance)),
         ('sec-judgment', '🎯', '判断', bool(briefing_html and str(briefing_html).strip())),
         ('sec-breaking', '🚨', '突发', True),
         ('sec-featured', '⭐', '必读', bool(featured_html)),
@@ -1002,6 +1027,7 @@ def generate_html(all_items, config, digest=None, meta=None):
 
     html = page_template.safe_substitute(
         today_nav=today_nav,
+        today_glance=today_glance,
         broadcast_html=broadcast_html,
         vip_html=vip_html,
         date_str=date_str,

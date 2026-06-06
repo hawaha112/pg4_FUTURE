@@ -465,7 +465,10 @@ document.addEventListener('click', function(e) {
         }, {passive: false});
     }
     bindCardClick(document.getElementById('grid'));
-    bindCardClick(document.querySelector('.featured-grid'));
+    // 绑 .featured-section(而非 .featured-grid): 必读按主题分组后有多个 .featured-grid,
+    // 只绑第一个会让其余组的必读卡点不开 modal。section 容器 + 事件委托覆盖全部。
+    bindCardClick(document.querySelector('.featured-section'));
+    bindCardClick(document.querySelector('.glance-list'));   // 今日速览条目点开对应 modal
     bindCardClick(document.querySelector('.top3-grid'));
     bindCardClick(document.querySelector('.vip-list'));
 })();

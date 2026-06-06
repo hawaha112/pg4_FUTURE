@@ -784,6 +784,7 @@ def main():
             if a.get('importance', 0) >= 4:
                 important_events_list.append({
                     'title': a.get('chinese_title') or item.get('title') or '',
+                    'summary': a.get('summary', '') or '',   # 一句话概括, 供 TG 速览/仪表盘展示
                     'event_id': item.get('_canonical_event_id', '') or item.get('link', ''),
                     'importance': int(a.get('importance', 0)),
                     'source_name': item.get('source_name', ''),

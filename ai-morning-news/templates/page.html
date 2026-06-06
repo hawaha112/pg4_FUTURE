@@ -45,8 +45,13 @@ $css_content
 <!-- LLM coverage banner (rendered only when coverage < 50%) -->
 $llm_banner_html
 
-<!-- 今日导览：一眼可记的版块地图 + 跳转。判断→突发→必读→更多→大V→实体→口播 -->
+<!-- 今日导览：一眼可记的版块地图 + 跳转。速览→判断→突发→必读→更多→大V→实体→口播 -->
 $today_nav
+
+<!-- ⚡ 今日速览：一行一条 TL;DR，30 秒扫完全天；点任一条开对应事件 -->
+<section id="sec-glance" class="page-sec">
+$today_glance
+</section>
 
 <!-- ① 今日判断（结论先行，全天头条） -->
 <section id="sec-judgment" class="page-sec">

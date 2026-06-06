@@ -548,7 +548,7 @@ if [ "$DEPLOY_OK" = true ]; then
     # 窗口里只保留这一条, 每班"删旧→推新"刷新。
     if [ "$SHIFT" = "am" ]; then RPT="早报"; SHORT_SHIFT="早班"; else RPT="晚报"; SHORT_SHIFT="晚班"; fi
     HEADLINES=""
-    [ -f "$STATS_FILE" ] && HEADLINES=$("$PYTHON" "$PROJECT_DIR/_tg_headlines.py" "$STATS_FILE" 3 2>/dev/null || echo "")
+    [ -f "$STATS_FILE" ] && HEADLINES=$("$PYTHON" "$PROJECT_DIR/_tg_headlines.py" "$STATS_FILE" 5 2>/dev/null || echo "")
     WARN_LINE=""
     [ -n "$NO_LLM" ] && WARN_LINE=$'\n'"⚠️ LLM 暂不可用，本班为规则兜底内容"
     # 正文不放 <a href> 伪装链接 / inline 按钮(频道里都会触发 TG"Open Link?"二次确认)。
