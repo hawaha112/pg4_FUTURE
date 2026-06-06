@@ -236,7 +236,7 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 2. **实体时间线主语纠错**（[entity_coverage.py](ai-morning-news/entity_coverage.py) `tag_items(require_title=)`）：旧逻辑标题或摘要含关键词就打实体标签 → "OpenAI 回应 Anthropic"因正文含 anthropic 错挂进 Anthropic 时间线。给时间线传 `require_title=True`（[entity_timeline_generator.py](ai-morning-news/entity_timeline_generator.py)）**只认标题主语**，丢正文顺带提及；采集/覆盖/聚类路径默认 False 不变。
 3. **突发纳入官方源**（[hot_signals.py](ai-morning-news/extractors/hot_signals.py) `fetch_official_rss` + [breaking_news_detector.py](ai-morning-news/breaking_news_detector.py)）：突发原只扫 HN/HF/Reddit 社交热度，抓不到官方发布。新增 5 个 tier-0 官方 feed（OpenAI/Google AI/DeepMind/Microsoft/NVIDIA），近 `BREAKING_OFFICIAL_HOURS`(默认6h) 新发布 + 过噪声闸+事件闸（只放行 launch/introduce/announce 型，滤掉回顾/观点/招聘）≈ importance≥4，signal 显示「🏢 官方发布 · X」。官方源发布频率低、天然不刷屏。`BREAKING_OFFICIAL=false` 可关。
 4. **历史可发现性**（[html_generator.py](ai-morning-news/html_generator.py)）：往期早晚报其实**都在仪表盘**（`archive/dashboard.html` 有完整往期列表），但入口太隐蔽。在「今日导览」加显眼「📅 往期」chip 直达。
-- ⚠️ **Anthropic 官方 RSS 已死**（同批发现）：config `sources.english` 的 Anthropic 源是 GitHub 镜像 `taobojlen/anthropic-rss-feed`，现 **404**；官网无 RSS、rsshub 403。**采集器也受影响**（拿不到 Anthropic 官方新闻，靠 HN+二手源兜底）。待修：找可用 Anthropic feed 或换 Google News RSS。
+- ⚠️ **Anthropic 官方 RSS 死链**（同批发现）：config `sources.english` 的 Anthropic 源原是 GitHub 镜像 `taobojlen/anthropic-rss-feed`，官网无 RSS、rsshub 403。**✅ 已修，见 [改进 14](#改进-14-anthropic-死链替换为活跃镜像2026-06-06)。**
 
 ### 改进 13: 判断"逻辑链"重构 — 治"深度不够/看不懂"（2026-06-06）
 
@@ -247,6 +247,15 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 - 保留"老炮主编"人格但加约束：**狠是结论、硬逻辑链是地基，缺地基的狠话最掉价；让人信服 > 让人觉得猛**。
 - 加了一组「逻辑链 软 vs 硬」对照示例（用真实判断示范"事实→机制→对照→结论→预测"每步可点头）。
 - ⚠️ 纯 prompt 改，逻辑/渲染未动；最终效果需云端出报验证（body 变长，判断卡渲染无截断）。
+
+### 改进 14: Anthropic 死链替换为活跃镜像（2026-06-06）
+
+承 [改进 12 ⚠️](#改进-12-用户四连反馈2026-06-06)：原 `taobojlen/anthropic-rss-feed` 镜像虽偶尔 HTTP 200，但**最新条目停在 4/7**（scraper 早炸、内容停更 ~2 个月），采集器实际拿不到 Anthropic 官方新闻。GitHub 搜 `anthropic rss feed` 找到活跃替代：
+- **[config.json](ai-morning-news/config.json) `Anthropic News` → `https://tim-hilde.github.io/anthropic-rss/rss.xml`**（社区镜像 `tim-hilde/anthropic-rss`，每日 cron 同步 `claude.com/blog`，`python-feedgen` 生成标准 RSS 2.0；选 GitHub Pages 而非 raw 以避 raw.githubusercontent 的 transient 404）。
+- 实测：`hot_signals._http_get_text` 抓 339KB → 真实 `rss_parser.parse_rss` 解出 **20 条，title/link/pubDate 全 20/20**，日期真实分布（6/3→5/28），非抓取时间。
+- ⚠️ **未纳入突发 `_OFFICIAL_FEEDS`**（[hot_signals.py](ai-morning-news/extractors/hot_signals.py) 注释已同步）：该镜像 pubDate 只精确到「日」(00:00:00) 且每天才刷一次 → 与「近 6h 实时新发布」语义不匹配（新条目出现时其 00:00:00 戳早超 6h 窗口、几乎永不触发）。Anthropic 实时突发仍靠 HN 兜底。
+- 候选对比记录：`akao47/yuna-feeds-bridge/anthropic.xml` 虽指向 `anthropic.com/news` 且更新更勤，但**所有条目共用一个 pubDate=抓取时间**、标题是 mush 块（"Introducing Claude Opus 4.8 Product May 28..."）→ 弃用。`openrss.org` 返回 343KB 但 `<item>`/`<entry>` 正则解 0 条 → 弃用。Google News RSS（二手新闻）留作未来兜底、不入 official tier。
+- ⚠️ 仍是**单人社区镜像**（⭐1），有再次停更风险；health_tracker 会在 10+ 连续失败后自动停用，届时回看本条另寻镜像。
 
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）
