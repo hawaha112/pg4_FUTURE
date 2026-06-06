@@ -151,81 +151,77 @@ def _trust_badge(item):
     return ('trust-weak', '◦ 单源')
 
 
-# ── 「层面」维度: 5 层, 从主题(category)确定性派生 (无 LLM、稳定) ──
-# (emoji, 名称, css_key)。读者扫一眼即知这条是模型/应用/算力/研究/政策商业哪一层。
-_CATEGORY_TO_LAYER = {
-    '大模型发布': ('🧠', '模型层', 'model'),
-    '开源生态':   ('🧠', '模型层', 'model'),
-    '学术研究':   ('🔬', '研究层', 'research'),
-    '安全与对齐': ('🔬', '研究层', 'research'),
-    'AI编程':     ('🛠️', '应用层', 'app'),
-    'AI工具':     ('🛠️', '应用层', 'app'),
-    '产品与应用': ('🛠️', '应用层', 'app'),
-    '具身智能':   ('🛠️', '应用层', 'app'),
-    '自动驾驶':   ('🛠️', '应用层', 'app'),
-    '芯片与算力': ('⚙️', '算力层', 'compute'),
-    '融资与商业': ('💼', '政策商业', 'biz'),
-    'AI政策监管': ('💼', '政策商业', 'biz'),
-    '行业观点':   ('💼', '政策商业', 'biz'),
-    # '其他' 不映射 → 不打层面标签
-}
+# ── MECE 主题树: 单维度(新闻核心主题域)、互斥、穷尽。每条归到唯一叶子。──
+# 页面按顶层 6 域分组, 叶子作为卡片子标签。(emoji, 域名, key, [叶子...])
+_TOPIC_TREE = [
+    ('🧠', '模型与算法',    'model',    ['旗舰模型', '开源模型与权重', '训练·算法·架构', '多模态与专用模型']),
+    ('⚙️', '算力与基础设施', 'infra',    ['芯片与硬件', '云·数据中心·能源', '推理·部署·优化']),
+    ('🛠️', '应用与产品',    'app',      ['智能体 Agent', '编程与开发', '企业·行业应用', '消费级产品', '具身·机器人·自动驾驶']),
+    ('🔬', '研究与评测',    'research', ['前沿论文', '评测·基准', '安全·对齐研究']),
+    ('📜', '治理与安全',    'gov',      ['政策·监管·法律', '安全事件·风险·滥用', '伦理·社会影响']),
+    ('💼', '商业与产业',    'biz',      ['融资·投资', '并购·合作·商业策略', '市场·产业格局', '人事·组织']),
+]
+_DOMAIN_ORDER = [(e, n, k) for e, n, k, _ in _TOPIC_TREE]
+_DOMAIN_BY_NAME = {n: (e, n, k) for e, n, k, _ in _TOPIC_TREE}
+_DOMAIN_BY_KEY = {k: (e, n, k) for e, n, k, _ in _TOPIC_TREE}
+_LEAF_TO_DOMAIN = {leaf: (e, n, k) for e, n, k, leaves in _TOPIC_TREE for leaf in leaves}
+_OTHER_DOMAIN = ('📰', '其他', 'other')
 
-
-# 关键词兜底: LLM 有时返回非标准类名(如"AI政策"/"军事AI"/"AI治理"), 精确匹配不上时
-# 用关键词归到层面, 保证"每条都有层面标签"。顺序=优先级(技术层在前)。
-_LAYER_KEYWORDS = [
-    ('model',    '🧠', '模型层',  ['大模型', '模型', '开源', '开放权重', 'llm', '算法', '训练', '微调', '权重']),
-    ('compute',  '⚙️', '算力层',  ['芯片', '算力', 'gpu', 'tpu', '硬件', '数据中心', '基础设施', '半导体']),
-    ('app',      '🛠️', '应用层',  ['应用', '产品', 'agent', '智能体', '编程', '工具', '驾驶', '机器人', '具身', '场景', '落地']),
-    ('research', '🔬', '研究层',  ['研究', '论文', '学术', 'benchmark', '基准', '安全', '对齐', '理论']),
-    ('biz',      '💼', '政策商业', ['政策', '监管', '法', '军事', '治理', '融资', '投资', '商业', '收购', '估值', '市场', 'ipo']),
+# 兜底: LLM 未给 topic_domain 时, 从 categories+标题 关键词归域(保证不漏)。
+# 顺序=优先级: 先判"事件性质"强信号(商业/治理/算力/研究), 再应用, 模型最泛放最后。
+_DOMAIN_KEYWORDS = [
+    ('biz',      ['融资', '投资', '估值', '并购', '收购', '商业', '营收', '市场', 'ipo', '人事', '裁员', '招聘', '上市']),
+    ('gov',      ['政策', '监管', '治理', '合规', '伦理', '滥用', '审查', '军事', '隐私', '版权', '法案', '诉讼']),
+    ('infra',    ['芯片', '算力', 'gpu', 'tpu', '硬件', '数据中心', '半导体', '推理', '部署', '能源', '集群', '显卡']),
+    ('research', ['论文', '研究', '学术', 'benchmark', '基准', '评测', '对齐', '理论', 'arxiv']),
+    ('app',      ['应用', '产品', 'agent', '智能体', '编程', '开发', '工具', '驾驶', '机器人', '具身', '场景', '企业', '消费']),
+    ('model',    ['大模型', '模型', '开源', '权重', '训练', '算法', '架构', '多模态', '视觉', '语音', '视频']),
 ]
 
 
-def _layer_of(categories):
-    """取首个能映射到层面的主题 → (emoji, 名称, css_key); 都映射不到返回 None。
-    先精确匹配标准 14 类, 再用关键词兜底非标准类名。"""
-    cats = categories or []
-    for c in cats:
-        if c in _CATEGORY_TO_LAYER:
-            return _CATEGORY_TO_LAYER[c]
-    blob = ' '.join(str(c) for c in cats).lower()
-    for key, emoji, name, kws in _LAYER_KEYWORDS:
+def _domain_of(item):
+    """返回 (emoji, 域名, key) —— 每条唯一主题域(MECE)。
+    优先用 LLM 的 topic_domain(单叶, 最准); 否则 叶子→域 / categories+标题 关键词兜底。"""
+    a = item.get('analysis', {}) or {}
+    d = (a.get('topic_domain') or '').strip()
+    if d in _DOMAIN_BY_NAME:
+        return _DOMAIN_BY_NAME[d]
+    leaf = (a.get('topic_leaf') or '').strip()
+    if leaf in _LEAF_TO_DOMAIN:
+        return _LEAF_TO_DOMAIN[leaf]
+    blob = (' '.join(str(c) for c in (a.get('categories') or [])) + ' '
+            + str(a.get('chinese_title') or '')).lower()
+    for key, kws in _DOMAIN_KEYWORDS:
         if any(k in blob for k in kws):
-            return (emoji, name, key)
-    return None
+            return _DOMAIN_BY_KEY[key]
+    return _OTHER_DOMAIN
 
 
-# 按「层面」分组的顺序(粗维度, 5 层 + 其他)。比 14 个细主题更不易碎成一堆单条。
-_LAYER_ORDER = [
-    ('🧠', '模型层', 'model'), ('🛠️', '应用层', 'app'), ('⚙️', '算力层', 'compute'),
-    ('🔬', '研究层', 'research'), ('💼', '政策商业', 'biz'), ('📰', '其他', 'other'),
-]
+def _domain_key(item):
+    """卡片 data-layer/筛选用的域 key。"""
+    return _domain_of(item)[2]
 
 
-def _layer_group(categories):
-    """把一条映射成层面分组键 (emoji, 名称, key); 无法判定 → 其他。用于按层面分组。"""
-    L = _layer_of(categories)
-    return L if L else ('📰', '其他', 'other')
-
-
-def _layer_key(categories):
-    """卡片 data-layer 用的层面 key, 与 _layer_group 一致(不可判定=other), 保证筛选对得上。"""
-    return _layer_group(categories)[2]
-
-
-def _dim_tags(categories):
-    """卡片主题标签(可点筛选)。层面已作为分组小标题, 不在卡上重复;
-    来源类型走 tier 徽章。只展示主题(细维度), 让读者在"层面"分组下进一步看是哪类。"""
-    parts = []
-    for c in (categories or [])[:2]:
+def _leaf_of(item):
+    """该条的叶子(子类)名 —— LLM 的 topic_leaf, 否则退回首个 category。"""
+    a = item.get('analysis', {}) or {}
+    leaf = (a.get('topic_leaf') or '').strip()
+    if leaf:
+        return leaf
+    for c in (a.get('categories') or []):
         if c and c != '其他':
-            ce = _safe_escape(c)
-            parts.append(
-                f'<span class="dim dim-topic" data-fcat="{ce}" '
-                f'role="button" tabindex="0" title="只看{ce}">{ce}</span>'
-            )
-    return ''.join(parts)
+            return str(c)
+    return ''
+
+
+def _dim_tags(item):
+    """卡片子标签: 叶子(细类, 可点筛选)。域已作为分组小标题、来源类型走 tier 徽章, 不重复。"""
+    leaf = _leaf_of(item)
+    if not leaf:
+        return ''
+    le = _safe_escape(leaf)
+    return (f'<span class="dim dim-topic" data-fcat="{le}" '
+            f'role="button" tabindex="0" title="只看{le}">{le}</span>')
 
 
 def _importance_dots(level):
@@ -527,12 +523,12 @@ def generate_html(all_items, config, digest=None, meta=None):
             # 优先用 canonical_event_id —— dashboard"本周重要事件"深链(#evt-)用的就是它,
             # 必须一致才能滚到卡片/展开 modal。退回 _event_id(文章id) / link。
             _iid = item.get('_canonical_event_id') or item.get('_event_id') or item.get('link') or f'i{idx}'
-            _feat_card = f'''    <div class="featured-card" data-cat="{_safe_escape(cat_data)}" data-layer="{_layer_key(categories)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_iid)}" style="border-left-color: {border_color}">
+            _feat_card = f'''    <div class="featured-card" data-cat="{_safe_escape(_leaf_of(item))}" data-layer="{_domain_key(item)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_iid)}" style="border-left-color: {border_color}">
         {img_html}
         <div class="featured-body">
             {hero_badge}
             {multi_pill}
-            <div class="featured-dims">{_dim_tags(categories)}</div>
+            <div class="featured-dims">{_dim_tags(item)}</div>
             {title_html}
             {why_html}
             {src_html}
@@ -540,12 +536,12 @@ def generate_html(all_items, config, digest=None, meta=None):
         </div>
     </div>
 '''
-            _, _flname, _ = _layer_group(categories)   # 按层面分组(粗维度, 不碎)
+            _, _flname, _ = _domain_of(item)   # 按层面分组(粗维度, 不碎)
             _feat_groups.setdefault(_flname, []).append(_feat_card)
 
         # 按层面顺序拼接, 每层一个小标题(可点筛选), 组内独立 featured-grid
         _fparts = ['<div class="featured-section">\n<h2 class="featured-title">⭐ 今日必读</h2>\n']
-        for _femoji, _flname, _flkey in _LAYER_ORDER:
+        for _femoji, _flname, _flkey in _DOMAIN_ORDER:
             _fcards = _feat_groups.get(_flname)
             if not _fcards:
                 continue
@@ -606,7 +602,7 @@ def generate_html(all_items, config, digest=None, meta=None):
 
         # Z1: 多维标签(层面 + 主题) + 阅读时间。来源类型走下方 tier 徽章, 不重复。
         z1_html = f'''<div class="z1">
-            <span class="z1-left">{_dim_tags(categories)}</span>
+            <span class="z1-left">{_dim_tags(item)}</span>
             <span class="z1-meta">{reading_minutes} min</span>
         </div>'''
 
@@ -689,7 +685,7 @@ def generate_html(all_items, config, digest=None, meta=None):
 
         _riid = item.get('_canonical_event_id') or item.get('_event_id') or item.get('link') or f'r{idx}'
         _card_html = f'''
-        <div class="card" data-cat="{_safe_escape(cat_data)}" data-layer="{_layer_key(categories)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_riid)}"
+        <div class="card" data-cat="{_safe_escape(_leaf_of(item))}" data-layer="{_domain_key(item)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_riid)}"
              style="animation-delay:{min(idx * 25, 500)}ms">
             {img_html}
             <div class="card-body">
@@ -701,12 +697,12 @@ def generate_html(all_items, config, digest=None, meta=None):
                 {z5_html}
             </div>
         </div>'''
-        _, _glname, _ = _layer_group(categories)   # 按层面分组(粗维度, 不碎)
+        _, _glname, _ = _domain_of(item)   # 按层面分组(粗维度, 不碎)
         _grid_groups.setdefault(_glname, []).append(_card_html)
 
     # 按层面顺序拼接 cards_html，每层一个全宽小标题(可点筛选)
     cards_html = ""
-    for _emoji, _glname, _glkey in _LAYER_ORDER:
+    for _emoji, _glname, _glkey in _DOMAIN_ORDER:
         _cards = _grid_groups.get(_glname)
         if not _cards:
             continue
@@ -1018,20 +1014,20 @@ def generate_html(all_items, config, digest=None, meta=None):
             _viid = item.get('_canonical_event_id') or item.get('_event_id') or item.get('link') or f'vip{idx}'
             _vcats = a.get('categories') or ['其他']
             _vrow = (
-                f'<div class="vip-item" data-cat="{_safe_escape("|".join(_vcats))}" '
-                f'data-layer="{_layer_key(_vcats)}" data-aud="general" '
+                f'<div class="vip-item" data-cat="{_safe_escape(_leaf_of(item))}" '
+                f'data-layer="{_domain_key(item)}" data-aud="general" '
                 f'data-idx="{idx}" data-iid="{_safe_escape(_viid)}">'
                 f'<div class="vip-meta">{icon} {src}</div>'
                 f'<div class="vip-title-txt">{ct}</div>'
                 f'{why_html}'
                 f'</div>'
             )
-            _, _vlname, _ = _layer_group(_vcats)   # 按层面分组
+            _, _vlname, _ = _domain_of(item)   # 按主题域分组(MECE)
             _vip_groups.setdefault(_vlname, []).append(_vrow)
         # 若只剩一个层面(常见于条目少)就不加多余小标题, 直接平铺
         _single = len(_vip_groups) <= 1
         _vparts = []
-        for _vemoji, _vlname, _vlkey in _LAYER_ORDER:
+        for _vemoji, _vlname, _vlkey in _DOMAIN_ORDER:
             _vrows = _vip_groups.get(_vlname)
             if not _vrows:
                 continue
@@ -1093,11 +1089,11 @@ def generate_html(all_items, config, digest=None, meta=None):
         _gt = (_ga.get('chinese_title') or _gitem.get('title') or '').strip()
         if not _gt:
             continue
-        _, _gname, _ = _layer_group(_ga.get('categories') or [])
+        _, _gname, _ = _domain_of(_gitem)
         _glance_groups.setdefault(_gname, []).append((_gidx, _gt))
     _glance_n = sum(len(v) for v in _glance_groups.values())
     _gparts = []
-    for _gemoji, _gname, _gkey in _LAYER_ORDER:
+    for _gemoji, _gname, _gkey in _DOMAIN_ORDER:
         _gitems = _glance_groups.get(_gname)
         if not _gitems:
             continue

@@ -517,7 +517,7 @@ function _applyFilters() {
 }
 
 // ═══ 点卡片上的「层面/主题」标签 → 只看该维度(再点同一标签或点状态条清除) ═══
-var _LAYER_NAMES = {model:'🧠 模型层', app:'🛠️ 应用层', compute:'⚙️ 算力层', research:'🔬 研究层', biz:'💼 政策商业', other:'📰 其他'};
+var _LAYER_NAMES = {model:'🧠 模型与算法', infra:'⚙️ 算力与基础设施', app:'🛠️ 应用与产品', research:'🔬 研究与评测', gov:'📜 治理与安全', biz:'💼 商业与产业', other:'📰 其他'};
 function _renderFilterBar() {
     var bar = document.getElementById('filter-active');
     if (!bar) return;

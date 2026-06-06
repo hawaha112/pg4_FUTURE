@@ -228,6 +228,8 @@ ARTICLE_SCHEMA = {
             "type": "array",
             "items": {"type": "string"}
         },
+        "topic_domain": {"type": "string"},
+        "topic_leaf": {"type": "string"},
         "source_type": {"type": "string"},
         "event_signature": {"type": "string"},
         "audience": {
@@ -675,6 +677,10 @@ class LLMAnalyzer:
             result["categories"] = [str(c) for c in raw_cats[:2]]
         else:
             result["categories"] = ["其他"]
+
+        # topic_domain / topic_leaf (MECE 单叶主题域; 渲染层据此分组, 非法值由渲染层关键词兜底)
+        result["topic_domain"] = str(data.get("topic_domain", "") or "").strip()[:20]
+        result["topic_leaf"] = str(data.get("topic_leaf", "") or "").strip()[:30]
 
         # source_type 校验
         valid_types = {"paper", "news", "official", "opinion", "community", "video"}
