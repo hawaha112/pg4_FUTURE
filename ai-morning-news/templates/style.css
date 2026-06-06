@@ -264,7 +264,7 @@ body {
 /* 空版块（如无突发时的 #sec-breaking）不占额外纵向空间 */
 .page-sec:empty { display: none; }
 
-/* ═════ 今日速览 — 一行一条 TL;DR, 30 秒扫完全天 (对标 TLDR 5 分钟扫读) ═════ */
+/* ═════ 今日速览 — 30 秒扫完, 按主题细分(一眼知道读哪方面) ═════ */
 .glance-title {
     max-width: 1120px; margin: 10px auto 6px; padding: 0 20px;
     font-family: var(--serif); font-size: 18px; font-weight: 700;
@@ -274,28 +274,31 @@ body {
     font-size: 12px; font-weight: 600; color: var(--text-50, #8a93a6);
     background: rgba(255,255,255,0.06); border-radius: 9px; padding: 0 7px;
 }
-.glance-list { max-width: 1120px; margin: 0 auto 8px; padding: 0 20px; list-style: none; }
+.glance-groups { max-width: 1120px; margin: 0 auto 10px; padding: 0 20px; }
+.glance-group { margin-bottom: 6px; }
+/* 主题小标题: 比卡片网格的小标题更轻量 */
+.gl-grp-head {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.3px;
+    color: var(--text-70, #b6bdcb); margin: 10px 0 2px;
+}
+.gl-grp-n {
+    font-size: 10px; font-weight: 600; color: var(--text-50, #8a93a6);
+    background: rgba(255,255,255,0.06); border-radius: 8px; padding: 0 6px;
+}
+.glance-list { list-style: none; margin: 0; padding: 0; }
 .glance-item {
-    display: flex; align-items: baseline; gap: 9px;
-    padding: 7px 0; border-bottom: 1px solid var(--border);
-    cursor: pointer; line-height: 1.5; transition: background 0.12s;
+    padding: 5px 0 5px 16px; border-bottom: 1px solid var(--border);
+    cursor: pointer; line-height: 1.5; transition: background 0.12s; position: relative;
+}
+.glance-item::before {
+    content: '·'; position: absolute; left: 4px; color: var(--text-35); font-weight: 700;
 }
 .glance-item:hover { background: rgba(255,255,255,0.03); }
-.gl-cat { flex: 0 0 auto; font-size: 13px; }
-.gl-title {
-    flex: 0 0 auto; max-width: 46%; font-weight: 600; font-size: 14px;
-    color: var(--text-100); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.gl-gist {
-    flex: 1 1 auto; color: var(--text-50, #8a93a6); font-size: 13px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
+.gl-title { font-weight: 500; font-size: 14px; color: var(--text-90, #cdd3de); }
 @media (max-width: 640px) {
     .glance-title { padding: 0 14px; font-size: 16px; }
-    .glance-list { padding: 0 14px; }
-    .glance-item { flex-wrap: wrap; gap: 3px 8px; }
-    .gl-title { max-width: none; white-space: normal; }
-    .gl-gist { flex-basis: 100%; white-space: normal; }
+    .glance-groups { padding: 0 14px; }
 }
 
 /* ═════ 信任信号徽章 — 多源证实 / 官方 / 单源, 让读者一眼判断可信度 ═════ */

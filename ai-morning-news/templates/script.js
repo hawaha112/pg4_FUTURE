@@ -465,12 +465,12 @@ document.addEventListener('click', function(e) {
         }, {passive: false});
     }
     bindCardClick(document.getElementById('grid'));
-    // 绑 .featured-section(而非 .featured-grid): 必读按主题分组后有多个 .featured-grid,
-    // 只绑第一个会让其余组的必读卡点不开 modal。section 容器 + 事件委托覆盖全部。
+    // 绑容器(而非单个 list): 必读/速览/大V 按主题分组后各有多个子 list,
+    // 只绑第一个会让其余组点不开 modal。容器 + 事件委托覆盖全部。
     bindCardClick(document.querySelector('.featured-section'));
-    bindCardClick(document.querySelector('.glance-list'));   // 今日速览条目点开对应 modal
+    bindCardClick(document.querySelector('.glance-groups'));   // 今日速览(分主题)
     bindCardClick(document.querySelector('.top3-grid'));
-    bindCardClick(document.querySelector('.vip-list'));
+    bindCardClick(document.querySelector('.vip-section'));     // 大V(分主题)
 })();
 
 // ═══ Filters (category AND audience AND search) ═══

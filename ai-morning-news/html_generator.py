@@ -936,7 +936,7 @@ def generate_html(all_items, config, digest=None, meta=None):
 
     vip_html = ''
     if vip_candidates:
-        rows = []
+        _vip_groups = {}   # {主类别: [vip_item_html, ...]}, 与必读/更多同款主题细分
         for idx, item, _imp in vip_candidates:
             a = item.get('analysis', {}) or {}
             ct = _safe_escape(a.get('chinese_title', '') or item.get('title', '')[:70])
@@ -945,17 +945,33 @@ def generate_html(all_items, config, digest=None, meta=None):
             icon = item.get('source_icon', '🎙️')
             why_html = f'<div class="vip-why">{why}</div>' if why else ''
             _viid = item.get('_canonical_event_id') or item.get('_event_id') or item.get('link') or f'vip{idx}'
-            rows.append(
+            _vrow = (
                 f'<div class="vip-item" data-idx="{idx}" data-iid="{_safe_escape(_viid)}">'
                 f'<div class="vip-meta">{icon} {src}</div>'
                 f'<div class="vip-title-txt">{ct}</div>'
                 f'{why_html}'
                 f'</div>'
             )
+            _vcats = a.get('categories') or ['其他']
+            _vc = _vcats[0] if (_vcats and _vcats[0] in _cat_rank) else '其他'
+            _vip_groups.setdefault(_vc, []).append(_vrow)
+        _vip_groups = _merge_small_groups(_vip_groups, min_size=2)
+        # 若只剩一个组(常见于条目少)就不加多余小标题, 直接平铺
+        _single = len(_vip_groups) <= 1
+        _vparts = []
+        for _vc, _vemoji in _GRID_CAT_ORDER:
+            _vrows = _vip_groups.get(_vc)
+            if not _vrows:
+                continue
+            _head = '' if _single else (
+                f'<h3 class="grid-cat-head" data-gcat="{_safe_escape(_vc)}">'
+                f'{_vemoji} {_safe_escape(_vc)}<span class="gc-n">{len(_vrows)}</span></h3>'
+            )
+            _vparts.append(_head + '<div class="vip-list">' + ''.join(_vrows) + '</div>')
         vip_html = (
             '<section class="vip-section" aria-label="大V 动态">'
             '<h2 class="vip-heading">🎙️ 大V 动态</h2>'
-            '<div class="vip-list">' + ''.join(rows) + '</div>'
+            + ''.join(_vparts) +
             '</section>'
         )
 
@@ -996,28 +1012,41 @@ def generate_html(all_items, config, digest=None, meta=None):
             '</section>'
         )
 
-    # ── 今日速览：top N 一行一条 TL;DR，30 秒扫完全天（对标 TLDR/Rundown 的"5 分钟扫读"）──
-    # 放在判断之前，让快速扫读的人先拿到全貌；点任一条直接开该事件 modal（data-idx）。
-    # 速览只留"图标 + 标题", 不再附概括(那和下方卡片重复); 一行一条、干净可扫。
+    # ── 今日速览：top N 标题, 30 秒扫完全天, 但按主题细分(用户要"一眼知道读哪方面")。──
+    # 放在判断之前先拿全貌; 点任一条直接开该事件 modal（data-idx）。只留标题不附概括。
     _cat_emoji = {c: e for c, e in _GRID_CAT_ORDER}
-    _glance_rows = []
+    _glance_groups = {}   # {主类别: [(idx, title), ...]}
     for _gidx, _gitem in featured_items[:10]:
         _ga = _gitem.get('analysis', {}) or {}
         _gt = (_ga.get('chinese_title') or _gitem.get('title') or '').strip()
         if not _gt:
             continue
         _gcats = _ga.get('categories') or ['其他']
-        _ge = _cat_emoji.get(_gcats[0] if _gcats else '其他', '📰')
-        _glance_rows.append(
-            f'<li class="glance-item" data-idx="{_gidx}">'
-            f'<span class="gl-cat">{_ge}</span>'
-            f'<span class="gl-title">{_safe_escape(_gt[:60])}</span>'
-            f'</li>'
+        _gc = _gcats[0] if (_gcats and _gcats[0] in _cat_rank) else '其他'
+        _glance_groups.setdefault(_gc, []).append((_gidx, _gt))
+    # 单条小类并入"其他", 避免一堆 1 条的小标题(速览要干净)
+    _glance_groups = _merge_small_groups(_glance_groups, min_size=2)
+    _glance_n = sum(len(v) for v in _glance_groups.values())
+    _gparts = []
+    for _gc, _gemoji in _GRID_CAT_ORDER:
+        _gitems = _glance_groups.get(_gc)
+        if not _gitems:
+            continue
+        _rows = ''.join(
+            f'<li class="glance-item" data-idx="{_i}">'
+            f'<span class="gl-title">{_safe_escape(_t[:60])}</span></li>'
+            for _i, _t in _gitems
+        )
+        _gparts.append(
+            f'<div class="glance-group">'
+            f'<div class="gl-grp-head">{_gemoji} {_safe_escape(_gc)}'
+            f'<span class="gl-grp-n">{len(_gitems)}</span></div>'
+            f'<ul class="glance-list">{_rows}</ul></div>'
         )
     today_glance = (
-        f'<h2 class="glance-title">⚡ 今日速览<span class="gl-n">{len(_glance_rows)}</span></h2>'
-        f'<ol class="glance-list">{"".join(_glance_rows)}</ol>'
-    ) if _glance_rows else ''
+        f'<h2 class="glance-title">⚡ 今日速览<span class="gl-n">{_glance_n}</span></h2>'
+        f'<div class="glance-groups">{"".join(_gparts)}</div>'
+    ) if _gparts else ''
 
     # ── 今日导览：按"非空版块"生成跳转 chip，给页面一个一眼可记的层次地图 ──
     # 阅读顺序：速览 → 判断 → 必读 → 更多 → 大V → 实体 → 口播。
