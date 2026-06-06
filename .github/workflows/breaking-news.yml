@@ -126,10 +126,10 @@ jobs:
           STATE=output/breaking_tg_state.json
           PREV=$(python3 -c "import json,os;p='$STATE';print(json.load(open(p)).get('msg_id','') if os.path.exists(p) else '')" 2>/dev/null || echo "")
           [ -n "$PREV" ] && curl -s "https://api.telegram.org/bot${TG_BOT_TOKEN}/deleteMessage" -d "chat_id=${TG_CHAT_ID}" -d "message_id=${PREV}" >/dev/null 2>&1 || true
-          # 正文不放 <a href>(会触发 TG"Open Link?"二次确认); 链接改成 inline 按钮, 一点直达。
-          TEXT="🚨 <b>AI 突发</b> · 近 24h 共 ${TOTAL} 条"
-          MARKUP="{\"inline_keyboard\":[[{\"text\":\"📖 打开早报看突发（顶部）\",\"url\":\"${URL}\"}]]}"
-          RESP=$(curl -s "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d "chat_id=${TG_CHAT_ID}" --data-urlencode "text=${TEXT}" -d "parse_mode=HTML" -d "disable_web_page_preview=false" --data-urlencode "reply_markup=${MARKUP}") || RESP=""
+          # ⚠️ 一点直达不弹"Open Link?"的唯一办法: 裸 URL 纯文本(显示==URL, 无伪装)。
+          # <a href> 伪装链接 / inline 按钮(文字≠URL) 在频道里都会触发反钓鱼二次确认。
+          TEXT=$'🚨 <b>AI 突发</b> · 近 24h 共 '"${TOTAL}"$' 条\n\n📖 打开早报看突发（顶部）：\n'"${URL}"
+          RESP=$(curl -s "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d "chat_id=${TG_CHAT_ID}" --data-urlencode "text=${TEXT}" -d "parse_mode=HTML" -d "disable_web_page_preview=true") || RESP=""
           NEWID=$(printf '%s' "$RESP" | python3 -c "import sys,json;d=json.loads(sys.stdin.read() or '{}');print((d.get('result') or {}).get('message_id','') if isinstance(d,dict) else '')" 2>/dev/null || echo "")
           if [ -n "$NEWID" ]; then
             printf '{"msg_id": %s, "updated_at": "%s"}' "$NEWID" "$(date -u +%FT%TZ)" > "$STATE"

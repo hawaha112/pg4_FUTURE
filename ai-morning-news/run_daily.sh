@@ -93,19 +93,24 @@ fi
 
 # Telegram 发送函数
 # 当 BRIEFING_SILENT_TG=true 时跳过推送 — 测试 dispatch 时避免轰炸 TG。
-# 构建 sendMessage JSON payload。给了 url 就附一个 inline 键盘按钮 —— TG 按钮链接
-# 一点直接打开、不弹"Open Link?"二次确认(正文里 <a href> 的文字≠URL 才会触发确认)。
-# text 经 json.dumps 转义; reply_markup 让链接成为可一键直达的按钮。
+# 构建 sendMessage JSON payload。给了 url 就把"裸 URL 纯文本"附在正文末尾。
+# ⚠️ TG"Open Link?"二次确认是反钓鱼: 只要"可见文字 ≠ 真实 URL"就弹 ——
+#    正文 <a href>(文字≠URL)、inline 按钮(按钮文字≠URL)在频道里都会触发确认。
+#    唯一一点直达的是裸 URL 纯文本(显示的就是 URL 本身、无伪装), TG 自动识别、点了直接开。
+#    (web_app 按钮能免确认, 但仅私聊可用; 本项目推到频道, 用不了。)
 _tg_payload() {
-    # $1=text  $2=url(可空)  $3=btn_label(可空)
+    # $1=text  $2=url(可空)  $3=链接前的标签文字(可空)
     TG_TEXT="$1" TG_URL="${2:-}" TG_BTN="${3:-📖 阅读全文}" TG_CHAT="$TG_CHAT_ID" \
     "$PYTHON" -c '
 import os, json
-p = {"chat_id": os.environ.get("TG_CHAT", ""), "text": os.environ.get("TG_TEXT", ""),
-     "parse_mode": "HTML", "disable_web_page_preview": False}
+text = os.environ.get("TG_TEXT", "")
 u = (os.environ.get("TG_URL", "") or "").strip()
 if u:
-    p["reply_markup"] = {"inline_keyboard": [[{"text": os.environ.get("TG_BTN", "打开"), "url": u}]]}
+    label = (os.environ.get("TG_BTN", "") or "").strip()
+    # 标签是纯文本(不伪装链接); URL 单独成行、保持裸文本 → 一点直达不弹确认
+    text = text + "\n\n" + (label + "：\n" if label else "") + u
+p = {"chat_id": os.environ.get("TG_CHAT", ""), "text": text,
+     "parse_mode": "HTML", "disable_web_page_preview": True}
 print(json.dumps(p, ensure_ascii=False))
 '
 }
@@ -546,8 +551,8 @@ if [ "$DEPLOY_OK" = true ]; then
     [ -f "$STATS_FILE" ] && HEADLINES=$("$PYTHON" "$PROJECT_DIR/_tg_headlines.py" "$STATS_FILE" 3 2>/dev/null || echo "")
     WARN_LINE=""
     [ -n "$NO_LLM" ] && WARN_LINE=$'\n'"⚠️ LLM 暂不可用，本班为规则兜底内容"
-    # 正文不再放 <a href> 链接(那会触发 TG"Open Link?"二次确认)。
-    # 链接改成下方 inline 按钮(send_tg_capture 第 2 参), 一点直达。
+    # 正文不放 <a href> 伪装链接 / inline 按钮(频道里都会触发 TG"Open Link?"二次确认)。
+    # URL 由 _tg_payload 以"裸 URL 纯文本"附在末尾(send_tg_capture 第 2 参), 一点直达。
     BRIEFING_MSG="<b>📰 AI ${RPT} · $(date '+%m-%d') ${SHORT_SHIFT}</b>
 ${HEADLINES:+
 ${HEADLINES}
