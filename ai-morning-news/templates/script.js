@@ -517,7 +517,7 @@ function _applyFilters() {
 }
 
 // ═══ 点卡片上的「层面/主题」标签 → 只看该维度(再点同一标签或点状态条清除) ═══
-var _LAYER_NAMES = {model:'🧠 模型层', app:'🛠️ 应用层', compute:'⚙️ 算力层', research:'🔬 研究层', biz:'💼 政策商业'};
+var _LAYER_NAMES = {model:'🧠 模型层', app:'🛠️ 应用层', compute:'⚙️ 算力层', research:'🔬 研究层', biz:'💼 政策商业', other:'📰 其他'};
 function _renderFilterBar() {
     var bar = document.getElementById('filter-active');
     if (!bar) return;
@@ -531,7 +531,8 @@ function _clearTagFilter() {
     _applyFilters(); _renderFilterBar();
 }
 document.addEventListener('click', function(e) {
-    var t = e.target.closest('.dim[data-flayer],.dim[data-fcat]');
+    // 点 主题标签(.dim[data-fcat]) 或 层面分组小标题(.grid-cat-head[data-flayer]) → 筛选
+    var t = e.target.closest('.dim[data-fcat], .grid-cat-head[data-flayer]');
     if (!t) return;
     e.stopPropagation();
     if (t.dataset.flayer) {

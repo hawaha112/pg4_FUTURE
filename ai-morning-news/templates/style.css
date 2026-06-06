@@ -340,6 +340,9 @@ body {
     transition: background 0.15s;
 }
 .filter-active:hover { background: rgba(107,138,253,0.18); }
+/* 层面分组小标题可点 → 按层面筛选 */
+.grid-cat-head[data-flayer] { cursor: pointer; }
+.grid-cat-head[data-flayer]:hover { color: var(--accent); }
 .dim-topic { color: var(--text-50, #8a93a6); background: rgba(255,255,255,0.05); }
 /* 层面五色: 模型/应用/算力/研究/政策商业 */
 .dim-model    { color: #a5b4fc; background: rgba(129,140,248,0.16); }

@@ -196,22 +196,28 @@ def _layer_of(categories):
     return None
 
 
+# 按「层面」分组的顺序(粗维度, 5 层 + 其他)。比 14 个细主题更不易碎成一堆单条。
+_LAYER_ORDER = [
+    ('🧠', '模型层', 'model'), ('🛠️', '应用层', 'app'), ('⚙️', '算力层', 'compute'),
+    ('🔬', '研究层', 'research'), ('💼', '政策商业', 'biz'), ('📰', '其他', 'other'),
+]
+
+
+def _layer_group(categories):
+    """把一条映射成层面分组键 (emoji, 名称, key); 无法判定 → 其他。用于按层面分组。"""
+    L = _layer_of(categories)
+    return L if L else ('📰', '其他', 'other')
+
+
 def _layer_key(categories):
-    """卡片 data-layer 用的层面 key (model/app/...); 无则空串。"""
-    layer = _layer_of(categories)
-    return layer[2] if layer else ''
+    """卡片 data-layer 用的层面 key, 与 _layer_group 一致(不可判定=other), 保证筛选对得上。"""
+    return _layer_group(categories)[2]
 
 
 def _dim_tags(categories):
-    """多维标签行: [层面] + [主题×1-2]。来源类型走卡片自带的 tier 徽章, 不在此重复。
-    标签可点击筛选(data-flayer / data-fcat); 让读者扫标签即知维度、并据此只看某维度。"""
+    """卡片主题标签(可点筛选)。层面已作为分组小标题, 不在卡上重复;
+    来源类型走 tier 徽章。只展示主题(细维度), 让读者在"层面"分组下进一步看是哪类。"""
     parts = []
-    layer = _layer_of(categories)
-    if layer:
-        parts.append(
-            f'<span class="dim dim-{layer[2]}" data-flayer="{layer[2]}" '
-            f'role="button" tabindex="0" title="只看{layer[1]}">{layer[0]} {layer[1]}</span>'
-        )
     for c in (categories or [])[:2]:
         if c and c != '其他':
             ce = _safe_escape(c)
@@ -534,22 +540,19 @@ def generate_html(all_items, config, digest=None, meta=None):
         </div>
     </div>
 '''
-            _fcat = categories[0] if categories else '其他'
-            if _fcat not in _cat_rank:
-                _fcat = '其他'
-            _feat_groups.setdefault(_fcat, []).append(_feat_card)
+            _, _flname, _ = _layer_group(categories)   # 按层面分组(粗维度, 不碎)
+            _feat_groups.setdefault(_flname, []).append(_feat_card)
 
-        # 小分类(<3 张)并入"其他"，避免必读被拆成一堆 1-2 张的碎块
-        _feat_groups = _merge_small_groups(_feat_groups, min_size=3)
-        # 按类别顺序拼接，每个非空组前插一个主题小标题(含计数)，组内独立 featured-grid
+        # 按层面顺序拼接, 每层一个小标题(可点筛选), 组内独立 featured-grid
         _fparts = ['<div class="featured-section">\n<h2 class="featured-title">⭐ 今日必读</h2>\n']
-        for _fc, _femoji in _GRID_CAT_ORDER:
-            _fcards = _feat_groups.get(_fc)
+        for _femoji, _flname, _flkey in _LAYER_ORDER:
+            _fcards = _feat_groups.get(_flname)
             if not _fcards:
                 continue
             _fparts.append(
-                f'<h3 class="grid-cat-head" data-gcat="{_safe_escape(_fc)}">'
-                f'{_femoji} {_safe_escape(_fc)}<span class="gc-n">{len(_fcards)}</span></h3>\n'
+                f'<h3 class="grid-cat-head" data-flayer="{_flkey}" role="button" '
+                f'title="只看{_flname}">{_femoji} {_flname}'
+                f'<span class="gc-n">{len(_fcards)}</span></h3>\n'
                 '<div class="featured-grid">\n' + ''.join(_fcards) + '</div>\n'
             )
         _fparts.append('</div>\n')
@@ -698,22 +701,19 @@ def generate_html(all_items, config, digest=None, meta=None):
                 {z5_html}
             </div>
         </div>'''
-        _gcat = categories[0] if categories else '其他'
-        if _gcat not in _cat_rank:
-            _gcat = '其他'
-        _grid_groups.setdefault(_gcat, []).append(_card_html)
+        _, _glname, _ = _layer_group(categories)   # 按层面分组(粗维度, 不碎)
+        _grid_groups.setdefault(_glname, []).append(_card_html)
 
-    # 小分类(<3 张)并入"其他"，与必读同款去碎
-    _grid_groups = _merge_small_groups(_grid_groups, min_size=3)
-    # 按类别顺序拼接 cards_html，每个非空组前插一个全宽小标题(含计数)
+    # 按层面顺序拼接 cards_html，每层一个全宽小标题(可点筛选)
     cards_html = ""
-    for _cat, _emoji in _GRID_CAT_ORDER:
-        _cards = _grid_groups.get(_cat)
+    for _emoji, _glname, _glkey in _LAYER_ORDER:
+        _cards = _grid_groups.get(_glname)
         if not _cards:
             continue
         cards_html += (
-            f'<h3 class="grid-cat-head" data-gcat="{_safe_escape(_cat)}">'
-            f'{_emoji} {_safe_escape(_cat)}<span class="gc-n">{len(_cards)}</span></h3>'
+            f'<h3 class="grid-cat-head" data-flayer="{_glkey}" role="button" '
+            f'title="只看{_glname}">{_emoji} {_glname}'
+            f'<span class="gc-n">{len(_cards)}</span></h3>'
             + ''.join(_cards)
         )
 
@@ -1026,19 +1026,18 @@ def generate_html(all_items, config, digest=None, meta=None):
                 f'{why_html}'
                 f'</div>'
             )
-            _vc = _vcats[0] if (_vcats and _vcats[0] in _cat_rank) else '其他'
-            _vip_groups.setdefault(_vc, []).append(_vrow)
-        _vip_groups = _merge_small_groups(_vip_groups, min_size=2)
-        # 若只剩一个组(常见于条目少)就不加多余小标题, 直接平铺
+            _, _vlname, _ = _layer_group(_vcats)   # 按层面分组
+            _vip_groups.setdefault(_vlname, []).append(_vrow)
+        # 若只剩一个层面(常见于条目少)就不加多余小标题, 直接平铺
         _single = len(_vip_groups) <= 1
         _vparts = []
-        for _vc, _vemoji in _GRID_CAT_ORDER:
-            _vrows = _vip_groups.get(_vc)
+        for _vemoji, _vlname, _vlkey in _LAYER_ORDER:
+            _vrows = _vip_groups.get(_vlname)
             if not _vrows:
                 continue
             _head = '' if _single else (
-                f'<h3 class="grid-cat-head" data-gcat="{_safe_escape(_vc)}">'
-                f'{_vemoji} {_safe_escape(_vc)}<span class="gc-n">{len(_vrows)}</span></h3>'
+                f'<h3 class="grid-cat-head" data-flayer="{_vlkey}" role="button" '
+                f'title="只看{_vlname}">{_vemoji} {_vlname}<span class="gc-n">{len(_vrows)}</span></h3>'
             )
             _vparts.append(_head + '<div class="vip-list">' + ''.join(_vrows) + '</div>')
         vip_html = (
@@ -1085,24 +1084,21 @@ def generate_html(all_items, config, digest=None, meta=None):
             '</section>'
         )
 
-    # ── 今日速览：top N 标题, 30 秒扫完全天, 但按主题细分(用户要"一眼知道读哪方面")。──
-    # 放在判断之前先拿全貌; 点任一条直接开该事件 modal（data-idx）。只留标题不附概括。
-    _cat_emoji = {c: e for c, e in _GRID_CAT_ORDER}
-    _glance_groups = {}   # {主类别: [(idx, title), ...]}
+    # ── 今日速览：top N 标题, 30 秒扫完全天, 按「层面」(粗维度)分组。──
+    # 用层面而非 14 个细主题: 少而杂的内容(每个细主题常 1 条)按细主题会全碎进"其他",
+    # 按 5 个层面则摊得开、每层有好几条, 分组才有意义。放在判断前先拿全貌; 点条目开 modal。
+    _glance_groups = {}   # {层面名: [(idx, title), ...]}
     for _gidx, _gitem in featured_items[:10]:
         _ga = _gitem.get('analysis', {}) or {}
         _gt = (_ga.get('chinese_title') or _gitem.get('title') or '').strip()
         if not _gt:
             continue
-        _gcats = _ga.get('categories') or ['其他']
-        _gc = _gcats[0] if (_gcats and _gcats[0] in _cat_rank) else '其他'
-        _glance_groups.setdefault(_gc, []).append((_gidx, _gt))
-    # 单条小类并入"其他", 避免一堆 1 条的小标题(速览要干净)
-    _glance_groups = _merge_small_groups(_glance_groups, min_size=2)
+        _, _gname, _ = _layer_group(_ga.get('categories') or [])
+        _glance_groups.setdefault(_gname, []).append((_gidx, _gt))
     _glance_n = sum(len(v) for v in _glance_groups.values())
     _gparts = []
-    for _gc, _gemoji in _GRID_CAT_ORDER:
-        _gitems = _glance_groups.get(_gc)
+    for _gemoji, _gname, _gkey in _LAYER_ORDER:
+        _gitems = _glance_groups.get(_gname)
         if not _gitems:
             continue
         _rows = ''.join(
@@ -1112,7 +1108,7 @@ def generate_html(all_items, config, digest=None, meta=None):
         )
         _gparts.append(
             f'<div class="glance-group">'
-            f'<div class="gl-grp-head">{_gemoji} {_safe_escape(_gc)}'
+            f'<div class="gl-grp-head">{_gemoji} {_gname}'
             f'<span class="gl-grp-n">{len(_gitems)}</span></div>'
             f'<ul class="glance-list">{_rows}</ul></div>'
         )
