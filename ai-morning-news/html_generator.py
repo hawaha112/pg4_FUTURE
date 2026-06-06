@@ -425,7 +425,9 @@ def generate_html(all_items, config, digest=None, meta=None):
             aud_list = analysis.get('audience', []) or ['general']
             aud_data = '|'.join(a for a in aud_list if a in AUDIENCE_LABELS) or 'general'
 
-            _iid = item.get('_event_id') or item.get('link') or f'i{idx}'
+            # 优先用 canonical_event_id —— dashboard"本周重要事件"深链(#evt-)用的就是它,
+            # 必须一致才能滚到卡片/展开 modal。退回 _event_id(文章id) / link。
+            _iid = item.get('_canonical_event_id') or item.get('_event_id') or item.get('link') or f'i{idx}'
             _feat_card = f'''    <div class="featured-card" data-cat="{_safe_escape(cat_data)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_iid)}" style="border-left-color: {border_color}">
         {img_html}
         <div class="featured-body">
@@ -587,7 +589,7 @@ def generate_html(all_items, config, digest=None, meta=None):
         aud_list = analysis.get('audience', []) or ['general']
         aud_data = '|'.join(a for a in aud_list if a in AUDIENCE_LABELS) or 'general'
 
-        _riid = item.get('_event_id') or item.get('link') or f'r{idx}'
+        _riid = item.get('_canonical_event_id') or item.get('_event_id') or item.get('link') or f'r{idx}'
         _card_html = f'''
         <div class="card" data-cat="{_safe_escape(cat_data)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_riid)}"
              style="animation-delay:{min(idx * 25, 500)}ms">
@@ -689,7 +691,7 @@ def generate_html(all_items, config, digest=None, meta=None):
             "extra_images": item.get('extra_images', []),
             "reading_minutes": reading_minutes,
             "audience": analysis.get('audience', ['general']) or ['general'],
-            "item_id": item.get('_event_id', '') or item.get('link', '') or f'i{idx}',
+            "item_id": item.get('_canonical_event_id', '') or item.get('_event_id', '') or item.get('link', '') or f'i{idx}',
         }
         if analysis.get('causal_matches'):
             modal_entry['causal_matches'] = analysis['causal_matches']
@@ -918,7 +920,7 @@ def generate_html(all_items, config, digest=None, meta=None):
             src = _safe_escape(item.get("source_name", ""))
             icon = item.get('source_icon', '🎙️')
             why_html = f'<div class="vip-why">{why}</div>' if why else ''
-            _viid = item.get('_event_id') or item.get('link') or f'vip{idx}'
+            _viid = item.get('_canonical_event_id') or item.get('_event_id') or item.get('link') or f'vip{idx}'
             rows.append(
                 f'<div class="vip-item" data-idx="{idx}" data-iid="{_safe_escape(_viid)}">'
                 f'<div class="vip-meta">{icon} {src}</div>'
