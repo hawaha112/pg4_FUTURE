@@ -310,6 +310,20 @@ body {
 .trust-strong { color: #4ade80; background: rgba(74,222,128,0.12); }
 .trust-ok     { color: #7dd3a8; background: rgba(125,211,168,0.10); }
 .trust-weak   { color: var(--text-50, #8a93a6); background: rgba(255,255,255,0.04); }
+
+/* ═════ 多维标签 — 层面(彩色) + 主题(中性), 让读者扫标签即知信息维度 ═════ */
+.dim {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    padding: 1px 7px; border-radius: 5px; white-space: nowrap; line-height: 1.7;
+}
+.dim-topic { color: var(--text-50, #8a93a6); background: rgba(255,255,255,0.05); }
+/* 层面五色: 模型/应用/算力/研究/政策商业 */
+.dim-model    { color: #a5b4fc; background: rgba(129,140,248,0.16); }
+.dim-app      { color: #6ee7b7; background: rgba(52,211,153,0.14); }
+.dim-compute  { color: #fbbf77; background: rgba(245,158,66,0.15); }
+.dim-research { color: #7dd3fc; background: rgba(56,189,248,0.14); }
+.dim-biz      { color: #f0abfc; background: rgba(232,121,249,0.14); }
+.featured-dims { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
 /* (突发 banner 样式已移除: 突发并入早晚报正文, 不再做独立 banner) */
 .briefing .br-outro {
     max-width: 1120px;
@@ -531,10 +545,12 @@ body {
     margin-bottom: 10px;
 }
 .z1-left {
+    display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
     font-size: 11px; color: var(--text-35); letter-spacing: 0.2px;
+    flex: 1 1 auto; min-width: 0;
 }
 .z1-meta {
-    font-size: 11px; color: var(--text-35); white-space: nowrap;
+    font-size: 11px; color: var(--text-35); white-space: nowrap; flex: 0 0 auto;
 }
 
 /* Card title — 中文标题 */

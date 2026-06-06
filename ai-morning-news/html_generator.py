@@ -151,6 +151,47 @@ def _trust_badge(item):
     return ('trust-weak', '◦ 单源')
 
 
+# ── 「层面」维度: 5 层, 从主题(category)确定性派生 (无 LLM、稳定) ──
+# (emoji, 名称, css_key)。读者扫一眼即知这条是模型/应用/算力/研究/政策商业哪一层。
+_CATEGORY_TO_LAYER = {
+    '大模型发布': ('🧠', '模型层', 'model'),
+    '开源生态':   ('🧠', '模型层', 'model'),
+    '学术研究':   ('🔬', '研究层', 'research'),
+    '安全与对齐': ('🔬', '研究层', 'research'),
+    'AI编程':     ('🛠️', '应用层', 'app'),
+    'AI工具':     ('🛠️', '应用层', 'app'),
+    '产品与应用': ('🛠️', '应用层', 'app'),
+    '具身智能':   ('🛠️', '应用层', 'app'),
+    '自动驾驶':   ('🛠️', '应用层', 'app'),
+    '芯片与算力': ('⚙️', '算力层', 'compute'),
+    '融资与商业': ('💼', '政策商业', 'biz'),
+    'AI政策监管': ('💼', '政策商业', 'biz'),
+    '行业观点':   ('💼', '政策商业', 'biz'),
+    # '其他' 不映射 → 不打层面标签
+}
+
+
+def _layer_of(categories):
+    """取首个能映射到层面的主题 → (emoji, 名称, css_key); 都映射不到返回 None。"""
+    for c in (categories or []):
+        if c in _CATEGORY_TO_LAYER:
+            return _CATEGORY_TO_LAYER[c]
+    return None
+
+
+def _dim_tags(categories):
+    """多维标签行: [层面] + [主题×1-2]。来源类型走卡片自带的 tier 徽章, 不在此重复。
+    让读者扫标签即知这条信息属于哪些维度。返回内联 span 串(无外层容器)。"""
+    parts = []
+    layer = _layer_of(categories)
+    if layer:
+        parts.append(f'<span class="dim dim-{layer[2]}">{layer[0]} {layer[1]}</span>')
+    for c in (categories or [])[:2]:
+        if c and c != '其他':
+            parts.append(f'<span class="dim dim-topic">{_safe_escape(c)}</span>')
+    return ''.join(parts)
+
+
 def _importance_dots(level):
     """生成重要性圆点 HTML — Tufte 风格，最小有效差异"""
     filled = min(max(level, 1), 5)
@@ -455,6 +496,7 @@ def generate_html(all_items, config, digest=None, meta=None):
         <div class="featured-body">
             {hero_badge}
             {multi_pill}
+            <div class="featured-dims">{_dim_tags(categories)}</div>
             {title_html}
             {why_html}
             {src_html}
@@ -529,10 +571,9 @@ def generate_html(all_items, config, digest=None, meta=None):
         cat_data = '|'.join(categories)
         image_url = _safe_escape(item.get("image", ""))
 
-        # Z1: 分类 + 阅读时间
-        cat_text = ' · '.join(_safe_escape(c) for c in categories[:2])
+        # Z1: 多维标签(层面 + 主题) + 阅读时间。来源类型走下方 tier 徽章, 不重复。
         z1_html = f'''<div class="z1">
-            <span class="z1-left">{cat_text}</span>
+            <span class="z1-left">{_dim_tags(categories)}</span>
             <span class="z1-meta">{reading_minutes} min</span>
         </div>'''
 
