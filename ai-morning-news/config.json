@@ -443,7 +443,9 @@
         "color": "#E1B12C",
         "description": "Ben Thompson 顶级科技/商业战略评论(覆盖 AI 但不限)",
         "ai_only": false,
-        "enabled": true
+        "enabled": false,
+        "_auto_disabled_at": "2026-06-06T05:11:22.710662+00:00",
+        "_auto_disabled_reason": "auto_fix_sources: 6 个候选全部不可用"
       },
       {
         "name": "Last Week in AI",
