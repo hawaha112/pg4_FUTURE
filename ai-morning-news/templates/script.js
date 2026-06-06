@@ -560,6 +560,11 @@ document.getElementById('searchBox').addEventListener('input', _debounce(functio
                 return isNaN(t) || (now - t) <= WINDOW_MS;
             });
             if (!evs.length) return;                    // 全部过期 → 不显示 banner
+            // 控量: 突发只显示"最新 N 条", 避免密密麻麻(真正重要的事每天没那么多)
+            var MAX_SHOW = 5;
+            var total = evs.length;
+            evs.sort(function(a, b) { return (Date.parse(b.ts) || 0) - (Date.parse(a.ts) || 0); });
+            evs = evs.slice(0, MAX_SHOW);
             var cards = evs.map(function(e) {
                 var zh = escHtml(e.zh || e.en || '(无标题)');
                 // 一句话概括直接展示 —— "只看大概"不必点进去跳转
@@ -574,7 +579,10 @@ document.getElementById('searchBox').addEventListener('input', _debounce(functio
                 return '<div class="bkb-card">'
                     + '<div class="bkb-title">🚨 ' + zh + '</div>' + gist + meta + '</div>';
             }).join('');
-            el.innerHTML = '<div class="bkb-head">🚨 突发 · 近 24h 共 ' + evs.length + ' 条</div>'
+            var head = (total > evs.length)
+                ? '🚨 突发 · 近 24h ' + total + ' 条 · 显示最新 ' + evs.length
+                : '🚨 突发 · 近 24h ' + evs.length + ' 条';
+            el.innerHTML = '<div class="bkb-head">' + head + '</div>'
                 + '<div class="bkb-cards">' + cards + '</div>';
             el.hidden = false;
             // 确有突发 → 同时点亮"今日导览"里的突发 chip（默认 hidden）

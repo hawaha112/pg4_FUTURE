@@ -148,6 +148,8 @@ BREAKING_JSON_PATH = SCRIPT_DIR / 'output' / 'breaking.json'
 PUSH_FLAG_PATH = SCRIPT_DIR / 'output' / 'breaking_push.flag'
 # 突发页显示窗口(小时); 比 DEDUP_TTL(48h) 短, 页面只列近 24h
 DISPLAY_WINDOW_HOURS = int(os.environ.get('BREAKING_DISPLAY_HOURS', '24'))
+# 突发显示条数上限: 控量, 避免密密麻麻(真正重要的事每天没那么多)。前端再兜一道同款上限。
+DISPLAY_MAX = int(os.environ.get('BREAKING_DISPLAY_MAX', '5'))
 
 # ── TG 凭据 ──
 TG_BOT_TOKEN = os.environ.get('TG_BOT_TOKEN', '')
@@ -562,13 +564,14 @@ def _accumulate_signals(signals: list) -> int:
 
 
 def _breaking_events_in_window(hours: int) -> list:
-    """从 pushed_breaking 取近 N 小时的突发事件, 按时间倒序, 供渲染突发页。"""
+    """从 pushed_breaking 取近 N 小时的突发事件, 按时间倒序、截到上限, 供渲染突发页。
+    截 DISPLAY_MAX 条控量(真正重要的事每天没那么多), 避免页面密密麻麻。"""
     pushed = _load_pushed()
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     evs = [info for info in pushed.values()
            if isinstance(info, dict) and info.get('pushed_at', '') >= cutoff]
     evs.sort(key=lambda e: e.get('pushed_at', ''), reverse=True)
-    return evs
+    return evs[:DISPLAY_MAX]
 
 
 def _breaking_payload(events: list) -> str:
