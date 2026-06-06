@@ -259,6 +259,15 @@ def generate_html(all_items, config, digest=None, meta=None):
         return -(imp + multi_bonus + today_bonus)
     featured_items.sort(key=_feat_key)
 
+    # ── 必读"少而精"：按分排序后只取 Top N 进必读，其余降到"更多"(保留分类) ──
+    # 不动 importance≥3 的入选门槛(不漏 LLM 低估的)，只限制必读的展示量；被降级的
+    # 条目带着 categories 回流 regular，"更多"的主题分布也随之更丰富(不再 77% 堆在其他)。
+    FEATURED_CAP = int((config.get('settings', {}) or {}).get('featured_cap', 15))
+    if len(featured_items) > FEATURED_CAP:
+        _demoted = featured_items[FEATURED_CAP:]
+        featured_items = featured_items[:FEATURED_CAP]
+        regular_items = _demoted + regular_items   # prepend: 重要的排在各自分类组前面
+
     # ── 今日三件大事：importance >= 4 且 cluster_size >= 2 的前 3 条 ──
     top3_items = []
     seen_idx = set()
