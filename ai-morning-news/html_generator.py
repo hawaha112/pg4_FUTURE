@@ -171,11 +171,28 @@ _CATEGORY_TO_LAYER = {
 }
 
 
+# 关键词兜底: LLM 有时返回非标准类名(如"AI政策"/"军事AI"/"AI治理"), 精确匹配不上时
+# 用关键词归到层面, 保证"每条都有层面标签"。顺序=优先级(技术层在前)。
+_LAYER_KEYWORDS = [
+    ('model',    '🧠', '模型层',  ['大模型', '模型', '开源', '开放权重', 'llm', '算法', '训练', '微调', '权重']),
+    ('compute',  '⚙️', '算力层',  ['芯片', '算力', 'gpu', 'tpu', '硬件', '数据中心', '基础设施', '半导体']),
+    ('app',      '🛠️', '应用层',  ['应用', '产品', 'agent', '智能体', '编程', '工具', '驾驶', '机器人', '具身', '场景', '落地']),
+    ('research', '🔬', '研究层',  ['研究', '论文', '学术', 'benchmark', '基准', '安全', '对齐', '理论']),
+    ('biz',      '💼', '政策商业', ['政策', '监管', '法', '军事', '治理', '融资', '投资', '商业', '收购', '估值', '市场', 'ipo']),
+]
+
+
 def _layer_of(categories):
-    """取首个能映射到层面的主题 → (emoji, 名称, css_key); 都映射不到返回 None。"""
-    for c in (categories or []):
+    """取首个能映射到层面的主题 → (emoji, 名称, css_key); 都映射不到返回 None。
+    先精确匹配标准 14 类, 再用关键词兜底非标准类名。"""
+    cats = categories or []
+    for c in cats:
         if c in _CATEGORY_TO_LAYER:
             return _CATEGORY_TO_LAYER[c]
+    blob = ' '.join(str(c) for c in cats).lower()
+    for key, emoji, name, kws in _LAYER_KEYWORDS:
+        if any(k in blob for k in kws):
+            return (emoji, name, key)
     return None
 
 
