@@ -238,6 +238,16 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 4. **历史可发现性**（[html_generator.py](ai-morning-news/html_generator.py)）：往期早晚报其实**都在仪表盘**（`archive/dashboard.html` 有完整往期列表），但入口太隐蔽。在「今日导览」加显眼「📅 往期」chip 直达。
 - ⚠️ **Anthropic 官方 RSS 已死**（同批发现）：config `sources.english` 的 Anthropic 源是 GitHub 镜像 `taobojlen/anthropic-rss-feed`，现 **404**；官网无 RSS、rsshub 403。**采集器也受影响**（拿不到 Anthropic 官方新闻，靠 HN+二手源兜底）。待修：找可用 Anthropic feed 或换 Google News RSS。
 
+### 改进 13: 判断"逻辑链"重构 — 治"深度不够/看不懂"（2026-06-06）
+
+用户反馈"今日三个判断太水：深度不够、逻辑链条不硬、让人看不懂"。根因：digest prompt（3 阶段：主笔→编辑→核查）一味追"放狠话/凑数字/可证伪预测"，产出"甩 3 个事实 + 硬跳一个大结论"，中间"为什么 A→B"的推理被跳过 → 读者跟不上、觉得空。改 [prompts/digest_system.txt](ai-morning-news/prompts/digest_system.txt) + [digest_editor.txt](ai-morning-news/prompts/digest_editor.txt)：
+- **把"必须有的三件套(公司+数字+预测)"换成"逻辑链硬骨架"**：body 必须走 事实 → 机制(为什么，最关键，深度全在这) → 结论与二阶影响，**不许跳步**；自检标准"把 body 读给没看新闻的人，他能复述你的推理链吗"。
+- **数字必须当天 evidence 有据**，找不到不许编（治判断里"超 10 万 B 端客户""90 天"这种为凑要求硬造的假精确）。
+- body 80→**160 字**（容下推理链）。编辑环节评分从"立场鲜明度+数字密度"改成"**逻辑链成不成立 + 能否一遍读懂 + 有没有讲清机制**"，专毙"罗列事实+硬甩结论"那条。
+- 保留"老炮主编"人格但加约束：**狠是结论、硬逻辑链是地基，缺地基的狠话最掉价；让人信服 > 让人觉得猛**。
+- 加了一组「逻辑链 软 vs 硬」对照示例（用真实判断示范"事实→机制→对照→结论→预测"每步可点头）。
+- ⚠️ 纯 prompt 改，逻辑/渲染未动；最终效果需云端出报验证（body 变长，判断卡渲染无截断）。
+
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）
 - **Cloudflare / Nitter 反爬**：[content_fetcher.py](ai-morning-news/content_fetcher.py) 对 X(Twitter) 走 Nitter 实例，经常 429。健康度由 [health_tracker.py](ai-morning-news/health_tracker.py) 跟踪，10+ 连续失败自动停用
