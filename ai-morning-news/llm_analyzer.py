@@ -183,6 +183,27 @@ ARTICLE_RETRY_TEMPLATE = _loaded_retry if _loaded_retry else (
     '，无关返回{{"ai_relevant":false}}'
 )
 
+# ---------------------------------------------------------------------------
+# A1 防幻觉: 重要条目上线前, 把卡片要点(摘要/意义/要点)对照原文逐句校验,
+# 不被原文支持的事实声明(尤其数字/时间/人名/机构/因果)→ 重写或删除。
+# 仅对 importance >= GROUNDING_MIN_IMPORTANCE 的条目跑(控成本); 无原文/失败 → 原样放行。
+# ---------------------------------------------------------------------------
+GROUNDING_MIN_IMPORTANCE = int(os.environ.get('GROUNDING_MIN_IMPORTANCE', '4'))
+
+_loaded_grounding = _load_prompt('grounding')
+GROUNDING_PROMPT = _loaded_grounding if _loaded_grounding else (
+    "你是事实校对编辑。下面是新闻【原文】和基于它生成的【分析】。"
+    "逐条核对【分析】里的事实声明是否被【原文】直接支持：\n"
+    "- 原文支持的 → 保持原样, 尽量别改措辞。\n"
+    "- 原文未提及/无法支持的(尤其数字、时间、人名、机构、因果断言) → 删除, 或改写成原文支持的说法。\n"
+    "- 与原文矛盾的 → 改成原文的说法。\n"
+    "- 绝不要引入原文里没有的新信息。宁可保守、少说, 也不要编。\n\n"
+    "只输出 JSON, 不要解释: "
+    '{{"summary":"校对后摘要","why_it_matters":"校对后意义","key_details":["要点1","要点2"],'
+    '"fixed":true或false(是否改过),"notes":["改了什么及原因","..."]}}\n\n'
+    "【原文】\n{source}\n\n【分析】\n{analysis}"
+)
+
 
 # ---------------------------------------------------------------------------
 # JSON Schema 定义（用于 --json-schema 强制有效 JSON 输出）
@@ -818,11 +839,61 @@ class LLMAnalyzer:
                         validated, title, summary, full_text, source_name
                     )
 
+            # A1 防幻觉: 重要条目上线前把要点对照原文校验, 不被支持的声明重写/剥离
+            try:
+                if (validated.get('ai_relevant')
+                        and int(validated.get('importance', 0) or 0) >= GROUNDING_MIN_IMPORTANCE):
+                    validated = self._ground_check(validated, full_text, title)
+            except Exception as e:
+                log.warning("⚠️ grounding 校验跳过(原样放行): %s", e)
+
             return validated
 
         except RuntimeError as e:
             log.error("❌ LLM 分析失败 [%s]: %s", title[:30], e)
             return self._fallback(title)
+
+    def _ground_check(self, validated: dict, full_text: str, title: str) -> dict:
+        """把卡片要点(summary/why_it_matters/key_details)对照原文逐句校验, 防幻觉。
+
+        原文不足(抓取失败/太短)→ 无可对照, 原样放行(不误伤)。校验失败 → 原样放行。
+        校验结果写入 validated['_grounding'] = {checked, fixed, notes} 供透明展示/评测。
+        """
+        src = (full_text or '').strip()
+        if len(src) < 120:
+            return validated   # 没有足够原文可对照, 跳过(避免误删真内容)
+
+        payload = json.dumps({
+            'summary': validated.get('summary', ''),
+            'why_it_matters': validated.get('why_it_matters', ''),
+            'key_details': validated.get('key_details', []),
+        }, ensure_ascii=False)
+        prompt = GROUNDING_PROMPT.format(source=src[:3000], analysis=payload)
+
+        resp = self._call_api([{"role": "user", "content": prompt}])
+        d = self._extract_json(resp)
+        if not isinstance(d, dict):
+            return validated
+
+        # 应用校对后的字段(非空才覆盖, 避免把内容清空)
+        for k in ('summary', 'why_it_matters'):
+            v = d.get(k)
+            if isinstance(v, str) and v.strip():
+                validated[k] = v.strip()
+        kd = d.get('key_details')
+        if isinstance(kd, list) and kd:
+            validated['key_details'] = [str(x).strip() for x in kd[:5] if str(x).strip()]
+
+        validated['_grounding'] = {
+            'checked': True,
+            'fixed': bool(d.get('fixed')),
+            'notes': [str(n)[:120] for n in (d.get('notes') or [])[:4]],
+        }
+        if validated['_grounding']['fixed']:
+            log.info("🛡️ grounding 修正 [%s]: %s",
+                     (validated.get('chinese_title') or title)[:30],
+                     '; '.join(validated['_grounding']['notes'])[:120])
+        return validated
 
     def _supplement_missing_fields(
         self, base: dict, title: str, summary: str, full_text: str, source_name: str,

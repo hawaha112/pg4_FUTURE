@@ -131,6 +131,26 @@ def _source_badge(item):
     return SOURCE_TIER_BADGES["media"]
 
 
+def _trust_badge(item):
+    """信任信号徽章: 多源证实 / 官方单源 / 单源 → (css_class, text)。
+
+    准确性是核心: 让读者一眼判断这条的可信度。数据来自 _evidence_chain(多源去重)
+    + source_tier。多源相互印证最可信; 单源(非官方)提示"自行多看一眼"。
+    """
+    ev = item.get('_evidence_chain', []) or []
+    srcs = {(e.get('source_name') or '').strip() for e in ev}
+    srcs.add((item.get('source_name') or '').strip())
+    srcs.discard('')
+    n = len(srcs)
+    if n >= 3:
+        return ('trust-strong', f'✅ {n} 源证实')
+    if n == 2:
+        return ('trust-ok', '✅ 2 源证实')
+    if item.get('source_tier', 2) == 0:
+        return ('trust-ok', '🏢 官方单源')
+    return ('trust-weak', '◦ 单源')
+
+
 def _importance_dots(level):
     """生成重要性圆点 HTML — Tufte 风格，最小有效差异"""
     filled = min(max(level, 1), 5)
@@ -374,9 +394,11 @@ def generate_html(all_items, config, digest=None, meta=None):
             )
             time_part = f' · {pub_str}' if pub_str else ''
 
+            _ftb = _trust_badge(item)
+            _ftrust = f'<span class="trust-badge {_ftb[0]}">{_ftb[1]}</span> ' if _ftb else ''
             src_html = (
                 f'<div class="featured-source">'
-                f'{tier_badge_html} {icon} {source_name}{time_part}'
+                f'{_ftrust}{tier_badge_html} {icon} {source_name}{time_part}'
                 f'</div>'
             )
 
@@ -538,7 +560,9 @@ def generate_html(all_items, config, digest=None, meta=None):
         if item.get('_event_status_display'):
             st = item['_event_status_display']
             status_badge = f' <span style="color:{st.get("color","#888")};font-size:9px;font-weight:600">{st.get("icon","")} {st.get("label","")}</span>'
-        z5_html = f'<div class="z5">{tier_badge_html} {icon} {source_name}{time_part}{status_badge}</div>'
+        _tb = _trust_badge(item)
+        trust_html = f'<span class="trust-badge {_tb[0]}">{_tb[1]}</span> ' if _tb else ''
+        z5_html = f'<div class="z5">{trust_html}{tier_badge_html} {icon} {source_name}{time_part}{status_badge}</div>'
 
         # 多源报道 pill（普通卡片右上角）
         cluster_size = item.get('_cluster_size', 1) or 1
