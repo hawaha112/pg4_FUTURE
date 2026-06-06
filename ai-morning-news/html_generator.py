@@ -998,6 +998,7 @@ def generate_html(all_items, config, digest=None, meta=None):
 
     # ── 今日速览：top N 一行一条 TL;DR，30 秒扫完全天（对标 TLDR/Rundown 的"5 分钟扫读"）──
     # 放在判断之前，让快速扫读的人先拿到全貌；点任一条直接开该事件 modal（data-idx）。
+    # 速览只留"图标 + 标题", 不再附概括(那和下方卡片重复); 一行一条、干净可扫。
     _cat_emoji = {c: e for c, e in _GRID_CAT_ORDER}
     _glance_rows = []
     for _gidx, _gitem in featured_items[:10]:
@@ -1005,14 +1006,12 @@ def generate_html(all_items, config, digest=None, meta=None):
         _gt = (_ga.get('chinese_title') or _gitem.get('title') or '').strip()
         if not _gt:
             continue
-        _gg = (_ga.get('summary') or '').strip()
         _gcats = _ga.get('categories') or ['其他']
         _ge = _cat_emoji.get(_gcats[0] if _gcats else '其他', '📰')
         _glance_rows.append(
             f'<li class="glance-item" data-idx="{_gidx}">'
             f'<span class="gl-cat">{_ge}</span>'
-            f'<span class="gl-title">{_safe_escape(_gt[:42])}</span>'
-            f'<span class="gl-gist">{_safe_escape(_gg[:48])}</span>'
+            f'<span class="gl-title">{_safe_escape(_gt[:60])}</span>'
             f'</li>'
         )
     today_glance = (
@@ -1021,12 +1020,11 @@ def generate_html(all_items, config, digest=None, meta=None):
     ) if _glance_rows else ''
 
     # ── 今日导览：按"非空版块"生成跳转 chip，给页面一个一眼可记的层次地图 ──
-    # 阅读顺序：速览 → 判断 → 突发 → 必读 → 更多 → 大V → 实体 → 口播。
-    # 突发为客户端异步拉取，chip 默认 hidden，由 script.js 在确有近 24h 突发时显示。
+    # 阅读顺序：速览 → 判断 → 必读 → 更多 → 大V → 实体 → 口播。
+    # 突发已并入早晚报正文(12h 报道一次足够实时), 不再做独立版块。
     _nav_items = [
         ('sec-glance', '⚡', '速览', bool(today_glance)),
         ('sec-judgment', '🎯', '判断', bool(briefing_html and str(briefing_html).strip())),
-        ('sec-breaking', '🚨', '突发', True),
         ('sec-featured', '⭐', '必读', bool(featured_html)),
         ('sec-more', '📚', '更多', bool(cards_html)),
         ('sec-vip', '👤', '大V', bool(vip_html)),
@@ -1037,10 +1035,7 @@ def generate_html(all_items, config, digest=None, meta=None):
     for _sid, _emoji, _label, _present in _nav_items:
         if not _present:
             continue
-        if _sid == 'sec-breaking':
-            _nav_links.append(f'<a class="tn-link tn-breaking" href="#{_sid}" hidden>{_emoji} {_label}</a>')
-        else:
-            _nav_links.append(f'<a class="tn-link" href="#{_sid}">{_emoji} {_label}</a>')
+        _nav_links.append(f'<a class="tn-link" href="#{_sid}">{_emoji} {_label}</a>')
     # 往期早晚报：始终可达的历史入口（指向仪表盘的归档列表），解决"查不到历史"。
     # 不是页内锚点而是真实链接，故单独追加、靠右分隔。
     _nav_links.append(

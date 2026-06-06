@@ -542,55 +542,7 @@ document.getElementById('searchBox').addEventListener('input', _debounce(functio
     _applyFilters();
 }, 150));
 
-// ═══ 突发 banner ═══
-// 打开早报时实时拉取 archive/breaking.json, 有近 24h 突发就渲染在页面最顶。
-// 始终拉最新 → 早班/晚班之间有突发, 随时打开早报都能看到, 不必等下一班出报。
-(function() {
-    var el = document.getElementById('breaking-banner');
-    if (!el) return;
-    var WINDOW_MS = 24 * 3600 * 1000;   // 客户端再过滤一道 24h: 即便 breaking.json 滞后未重部署, 也绝不显示过期突发
-    fetch('archive/breaking.json?_=' + Date.now())
-        .then(function(r) { return r.ok ? r.json() : null; })
-        .then(function(d) {
-            if (!d || !d.events || !d.events.length) return;
-            var now = Date.now();
-            var evs = d.events.filter(function(e) {
-                if (!e.ts) return true;                 // 无时间戳 → 保留(宽松)
-                var t = Date.parse(e.ts);
-                return isNaN(t) || (now - t) <= WINDOW_MS;
-            });
-            if (!evs.length) return;                    // 全部过期 → 不显示 banner
-            // 控量: 突发只显示"最新 N 条", 避免密密麻麻(真正重要的事每天没那么多)
-            var MAX_SHOW = 5;
-            var total = evs.length;
-            evs.sort(function(a, b) { return (Date.parse(b.ts) || 0) - (Date.parse(a.ts) || 0); });
-            evs = evs.slice(0, MAX_SHOW);
-            var cards = evs.map(function(e) {
-                var zh = escHtml(e.zh || e.en || '(无标题)');
-                // 一句话概括直接展示 —— "只看大概"不必点进去跳转
-                var gist = e.gist ? '<div class="bkb-gist">' + escHtml(e.gist) + '</div>' : '';
-                var sig = escHtml(e.signal || '');
-                var url = escHtml(e.url || '#');
-                // 原文标题降级成可选"核对/查看原文"小链接, 不再是必须点的主入口
-                var src = (e.url) ? '<a class="bkb-src" href="' + url + '" target="_blank" rel="noopener">查看原文 ↗</a>' : '';
-                var meta = (sig || src)
-                    ? '<div class="bkb-meta">' + (sig ? '<span class="bkb-sig">' + sig + '</span>' : '') + src + '</div>'
-                    : '';
-                return '<div class="bkb-card">'
-                    + '<div class="bkb-title">🚨 ' + zh + '</div>' + gist + meta + '</div>';
-            }).join('');
-            var head = (total > evs.length)
-                ? '🚨 突发 · 近 24h ' + total + ' 条 · 显示最新 ' + evs.length
-                : '🚨 突发 · 近 24h ' + evs.length + ' 条';
-            el.innerHTML = '<div class="bkb-head">' + head + '</div>'
-                + '<div class="bkb-cards">' + cards + '</div>';
-            el.hidden = false;
-            // 确有突发 → 同时点亮"今日导览"里的突发 chip（默认 hidden）
-            var navChip = document.querySelector('.today-nav .tn-breaking');
-            if (navChip) navChip.hidden = false;
-        })
-        .catch(function() { /* 无 breaking.json / 网络失败 → 不显示, 不影响早报 */ });
-})();
+// 突发已并入早晚报正文(12h 报道一次足够实时), 不再做独立 banner / 拉 breaking.json。
 
 // ═══ Keyboard ═══
 document.addEventListener('keydown', function(e) {

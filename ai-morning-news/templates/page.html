@@ -58,13 +58,9 @@ $today_glance
 $briefing_html
 </section>
 
-<!-- ② 突发动态（近 24h，时效提醒）：前端从 archive/breaking.json 实时拉取，
-     有突发才显示；放在判断之后，不抢头条（见 script.js） -->
-<section id="sec-breaking" class="page-sec">
-<div id="breaking-banner" class="breaking-banner" hidden></div>
-</section>
+<!-- 突发已并入早晚报正文(12h 报道一次足够实时), 不再做独立版块/实时 banner -->
 
-<!-- ③ 今日必读（importance≥3，按主题分组） -->
+<!-- ② 今日必读（importance≥3，按主题分组） -->
 <section id="sec-featured" class="page-sec">
 $featured_html
 </section>

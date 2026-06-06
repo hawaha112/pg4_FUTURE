@@ -1,14 +1,11 @@
 name: AI 突发热点检测
-# P1: 24 小时突发推送
-# 每小时扫一次外部热度源 (HN/HF/GitHub), 命中阈值即推 TG.
-# 不依赖 events.db / 不跑 collector — 只消费 hot_signals, 跑得快 (< 30s).
+# ⚠️ 已停用(2026-06-06): 用户反馈独立突发模块"别扭/密密麻麻"。突发改为"并入下一班早/晚报"——
+#    采集器(briefing 管线)本就用 hot_signals(HN/HF importance 加权)+ 扫 16 个 tier-0 官方源,
+#    12h 报道一次足够实时, 热点照样进早晚报。故停掉这条独立的每小时突发推送(省 token/Actions)。
+#    早报页的突发 banner / breaking.json 拉取 / 突发 TG 提醒均已移除。
+#    保留本文件 + 仅 workflow_dispatch(手动), 便于将来需要时再启用; schedule cron 已注释。
 #
-# 触发:
-#   - workflow_dispatch (手动 / Anthropic Routine 调)
-#   - schedule cron (兜底, 万一 routine 失效仍然有保护)
-#
-# 状态文件 output/pushed_breaking.json 通过 GH Actions Cache 持久化,
-# 实现 24h 去重 (同事件不重复推).
+# 状态文件 output/pushed_breaking.json 通过 GH Actions Cache 持久化, 实现 24h 去重.
 
 on:
   workflow_dispatch:
@@ -21,10 +18,9 @@ on:
         description: '翻译卡片演示: 填一条标题即推一张[演示]卡片(走真实翻译, 不进去重)'
         type: string
         default: ''
-  # 兜底 cron — 主触发由 Anthropic Routine 提供 (更准时)
-  # 这条 cron 只在 routine 长期失效时拯救; 平时大概率被 routine 抢先执行
-  schedule:
-    - cron: '15 * * * *'   # 每小时第 15 分钟 (避开整点拥堵)
+  # 已停用: 突发并入早晚报, 不再每小时独立推送。需要时取消下面两行注释即可恢复。
+  # schedule:
+  #   - cron: '15 * * * *'   # 每小时第 15 分钟 (避开整点拥堵)
 
 concurrency:
   group: breaking-news
