@@ -623,12 +623,21 @@ class LLMAnalyzer:
         except (TypeError, ValueError):
             result["importance"] = 1
 
-        # reading_minutes
+        # reading_minutes: prompt 不要求此字段, LLM 不返回 → 旧逻辑恒为 1(假信号)。
+        # 改成从正文长度确定性估算(中文约 400 字/分钟), 让卡片的"N min"真实有用。
         try:
-            rm = int(data.get("reading_minutes", 1))
-            result["reading_minutes"] = max(1, min(30, rm))
+            rm = int(data.get("reading_minutes", 0))
         except (TypeError, ValueError):
-            result["reading_minutes"] = 1
+            rm = 0
+        if rm <= 1:
+            _rt_text = (
+                str(data.get("detailed_content", "") or "") +
+                str(data.get("summary", "") or "") +
+                str(data.get("background", "") or "") +
+                str(data.get("deep_analysis", "") or "")
+            )
+            rm = max(1, len(_rt_text) // 400)
+        result["reading_minutes"] = max(1, min(30, rm))
 
         # key_details
         raw_details = data.get("key_details", [])

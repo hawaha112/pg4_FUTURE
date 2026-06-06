@@ -149,6 +149,19 @@ def _importance_label(level):
     return labels.get(level, "")
 
 
+def _merge_small_groups(groups, min_size=3, catchall='其他'):
+    """把卡片数 < min_size 的类别并入 catchall，避免"1-2 张就单起一个小标题"导致版面过碎。
+
+    实测一版"今日必读"40 张被拆成 11 个分类、其中 7 个只有 1-2 张，反而更难读。
+    合并后只保留有规模的主题分组 + 一个兜底"其他"。groups 是 {类别: [card_html,...]}。
+    """
+    small = [c for c, cards in list(groups.items())
+             if c != catchall and len(cards) < min_size]
+    for c in small:
+        groups.setdefault(catchall, []).extend(groups.pop(c))
+    return groups
+
+
 def generate_html(all_items, config, digest=None, meta=None):
     """生成重要性分层的 HTML 页面 — 必读区块 + 普通卡片网格
 
@@ -421,6 +434,8 @@ def generate_html(all_items, config, digest=None, meta=None):
                 _fcat = '其他'
             _feat_groups.setdefault(_fcat, []).append(_feat_card)
 
+        # 小分类(<3 张)并入"其他"，避免必读被拆成一堆 1-2 张的碎块
+        _feat_groups = _merge_small_groups(_feat_groups, min_size=3)
         # 按类别顺序拼接，每个非空组前插一个主题小标题(含计数)，组内独立 featured-grid
         _fparts = ['<div class="featured-section">\n<h2 class="featured-title">⭐ 今日必读</h2>\n']
         for _fc, _femoji in _GRID_CAT_ORDER:
@@ -582,6 +597,8 @@ def generate_html(all_items, config, digest=None, meta=None):
             _gcat = '其他'
         _grid_groups.setdefault(_gcat, []).append(_card_html)
 
+    # 小分类(<3 张)并入"其他"，与必读同款去碎
+    _grid_groups = _merge_small_groups(_grid_groups, min_size=3)
     # 按类别顺序拼接 cards_html，每个非空组前插一个全宽小标题(含计数)
     cards_html = ""
     for _cat, _emoji in _GRID_CAT_ORDER:
