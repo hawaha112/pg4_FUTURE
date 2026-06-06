@@ -199,7 +199,11 @@ def fetch_reddit_hot(subreddits: Optional[List[str]] = None, limit_per_sub: int 
 # ─────────────────────────────────────────────────────────
 
 # 镜像 config.json sources.english 里 tier=0 且 stdlib 可抓的官方 feed。
-# ⚠️ Anthropic 官方无可用 RSS (config 的 GitHub 镜像已 404), 其官方发布走 HN 兜底。
+# ⚠️ Anthropic 不入此列 (但已入采集器): 唯一可用的 Anthropic RSS 是社区每日镜像
+#    (tim-hilde/anthropic-rss → claude.com/blog), pubDate 只精确到「日」(00:00:00)
+#    且 mirror 每天才刷新一次 —— 与本表「近 6h 实时新发布」的突发语义不匹配
+#    (新条目出现时其 00:00:00 戳早已超出 6h 窗口, 几乎永不触发), 故只放进 config.json
+#    供采集器(去重/范围足够宽)用。Anthropic 的实时突发仍靠 HN 兜底。
 _OFFICIAL_FEEDS = [
     ('OpenAI', 'https://openai.com/blog/rss.xml'),
     ('Google AI', 'https://blog.google/technology/ai/rss/'),

@@ -32,10 +32,10 @@
         "name": "Anthropic News",
         "tier": 0,
         "category": "official",
-        "url": "https://raw.githubusercontent.com/taobojlen/anthropic-rss-feed/main/anthropic_news_rss.xml",
+        "url": "https://tim-hilde.github.io/anthropic-rss/rss.xml",
         "icon": "🧠",
         "color": "#D4A574",
-        "description": "Anthropic官方动态",
+        "description": "Anthropic 官方博客（claude.com/blog 每日镜像）",
         "ai_only": true
       },
       {
