@@ -278,16 +278,23 @@ body {
 .bkb-head { font-size: 14px; font-weight: 700; color: #ff9b9b; margin-bottom: 10px; }
 .bkb-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
 .bkb-card {
-    display: block; text-decoration: none;
     background: var(--bg-card, rgba(255, 255, 255, 0.04));
     border: 1px solid var(--border, rgba(255, 255, 255, 0.10));
-    border-left: 3px solid #ff6b6b; border-radius: 8px; padding: 10px 12px;
-    transition: border-color 0.15s, transform 0.15s;
+    border-left: 3px solid #ff6b6b; border-radius: 8px; padding: 11px 13px;
 }
-.bkb-card:hover { border-color: #ff6b6b; transform: translateY(-1px); }
-.bkb-title { font-size: 14px; font-weight: 600; color: var(--text-100, #ecf0f5); line-height: 1.5; }
-.bkb-en { font-size: 11px; color: var(--text-50, #8a93a6); margin-top: 3px; font-style: italic; }
-.bkb-sig { font-size: 11px; color: var(--text-50, #8a93a6); margin-top: 5px; }
+.bkb-title { font-size: 14px; font-weight: 700; color: var(--text-100, #ecf0f5); line-height: 1.5; }
+/* 一句话概括 —— 突发卡片的主体, 读者扫一眼即得大概 */
+.bkb-gist { font-size: 13px; color: var(--text-80, #cdd3de); line-height: 1.6; margin-top: 6px; }
+.bkb-meta {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-top: 8px; flex-wrap: wrap;
+}
+.bkb-sig { font-size: 11px; color: var(--text-50, #8a93a6); }
+.bkb-src {
+    font-size: 11px; color: #ff9b9b; text-decoration: none; white-space: nowrap;
+    opacity: 0.85; transition: opacity 0.15s;
+}
+.bkb-src:hover { opacity: 1; text-decoration: underline; }
 .briefing .br-outro {
     max-width: 1120px;
     font-style: italic;

@@ -559,12 +559,17 @@ document.getElementById('searchBox').addEventListener('input', _debounce(functio
             if (!evs.length) return;                    // 全部过期 → 不显示 banner
             var cards = evs.map(function(e) {
                 var zh = escHtml(e.zh || e.en || '(无标题)');
-                var en = (e.en && e.zh) ? '<div class="bkb-en">' + escHtml(e.en) + '</div>' : '';
+                // 一句话概括直接展示 —— "只看大概"不必点进去跳转
+                var gist = e.gist ? '<div class="bkb-gist">' + escHtml(e.gist) + '</div>' : '';
                 var sig = escHtml(e.signal || '');
                 var url = escHtml(e.url || '#');
-                return '<a class="bkb-card" href="' + url + '" target="_blank" rel="noopener">'
-                    + '<div class="bkb-title">🚨 ' + zh + '</div>' + en
-                    + (sig ? '<div class="bkb-sig">' + sig + '</div>' : '') + '</a>';
+                // 原文标题降级成可选"核对/查看原文"小链接, 不再是必须点的主入口
+                var src = (e.url) ? '<a class="bkb-src" href="' + url + '" target="_blank" rel="noopener">查看原文 ↗</a>' : '';
+                var meta = (sig || src)
+                    ? '<div class="bkb-meta">' + (sig ? '<span class="bkb-sig">' + sig + '</span>' : '') + src + '</div>'
+                    : '';
+                return '<div class="bkb-card">'
+                    + '<div class="bkb-title">🚨 ' + zh + '</div>' + gist + meta + '</div>';
             }).join('');
             el.innerHTML = '<div class="bkb-head">🚨 突发 · 近 24h 共 ' + evs.length + ' 条</div>'
                 + '<div class="bkb-cards">' + cards + '</div>';

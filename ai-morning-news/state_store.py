@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS pushed_breaking (
     source TEXT NOT NULL,
     title TEXT,
     title_zh TEXT,
+    summary_zh TEXT,
     signal TEXT,
     url TEXT,
     score INTEGER DEFAULT 0,
@@ -64,9 +65,9 @@ CREATE TABLE IF NOT EXISTS pushed_breaking (
 )
 """
 
-# 既有 DB(briefing-state 分支)早于 title_zh/signal 列, 需幂等补列。
-# 否则突发卡片 signal/中文标题 取不到 (DB 是 SOT, load_pushed_breaking 返回它)。
-_PUSHED_BREAKING_ADD_COLUMNS = ['title_zh', 'signal']
+# 既有 DB(briefing-state 分支)早于 title_zh/summary_zh/signal 列, 需幂等补列。
+# 否则突发卡片 概括/signal/中文标题 取不到 (DB 是 SOT, load_pushed_breaking 返回它)。
+_PUSHED_BREAKING_ADD_COLUMNS = ['title_zh', 'summary_zh', 'signal']
 
 _INDICES = [
     "CREATE INDEX IF NOT EXISTS idx_source_health_status ON source_health(status)",
@@ -191,15 +192,17 @@ class StateStore:
     def mark_breaking_pushed(
         self, sig_id: str, source: str, title: str = '',
         url: str = '', score: int = 0, title_zh: str = '', signal: str = '',
+        summary_zh: str = '',
     ) -> None:
         with sqlite3.connect(str(self.db_path)) as con:
             con.execute("""
                 INSERT OR REPLACE INTO pushed_breaking
-                (sig_id, source, title, title_zh, signal, url, score, pushed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (sig_id, source, title, title_zh, summary_zh, signal, url, score, pushed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 sig_id, source, str(title)[:200],
-                str(title_zh or '')[:200], str(signal or '')[:120],
+                str(title_zh or '')[:200], str(summary_zh or '')[:200],
+                str(signal or '')[:120],
                 str(url)[:500], int(score or 0),
                 datetime.now(timezone.utc).isoformat(),
             ))

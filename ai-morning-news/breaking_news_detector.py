@@ -202,6 +202,7 @@ def _load_pushed() -> dict:
                             score=info.get('score', 0),
                             title_zh=info.get('title_zh', ''),
                             signal=info.get('signal', ''),
+                            summary_zh=info.get('summary_zh', ''),
                         )
                     log.info("✓ 首次升级: 已迁 %d 条突发去重历史从 JSON → DB",
                              len(valid))
@@ -230,12 +231,13 @@ def _save_pushed(pushed: dict) -> None:
 
 
 def _mark_pushed_one(sig_id: str, source: str, title: str, url: str, score: int,
-                     title_zh: str = '', signal: str = '') -> None:
-    """单条推送后立即写 DB (主路径). title_zh/signal 一并入库 —— 突发卡片渲染靠它们,
+                     title_zh: str = '', signal: str = '', summary_zh: str = '') -> None:
+    """单条推送后立即写 DB (主路径). title_zh/summary_zh/signal 一并入库 —— 突发卡片渲染靠它们,
     而 DB 是 SOT(_load_pushed 优先读 DB), 不存就会丢字段(踩过: signal 全空/中文退回英文)。"""
     try:
         _get_state_store().mark_breaking_pushed(
-            sig_id, source, title, url, score, title_zh=title_zh, signal=signal)
+            sig_id, source, title, url, score,
+            title_zh=title_zh, signal=signal, summary_zh=summary_zh)
     except Exception as e:
         log.warning("⚠️ DB mark_breaking_pushed 失败: %s", e)
 
@@ -356,6 +358,56 @@ def _translate_title(title: str) -> str:
     except Exception as e:
         log.warning("⚠️ 标题翻译失败(回退英文原标题): %s", e)
         return ''
+
+
+def _translate_breaking(title: str, description: str = '') -> tuple:
+    """一次 LLM 调用同时产出 (中文标题, 一句话概括)。
+
+    突发卡片直接展示概括 → 读者"只看大概"不必点进去跳转。description 有值时
+    (官方 RSS 的 <description>) 给概括提供依据; 否则据标题+模型常识。
+    失败/超时 → ('', '')，调用方回退英文原标题、概括留空，永不阻塞推送。
+    """
+    title = (title or '').strip()
+    if not title:
+        return '', ''
+    base = os.environ.get('LLM_BASE_URL', 'http://localhost:3456/v1').rstrip('/')
+    ctx = ''
+    if (description or '').strip():
+        ctx = "\n补充摘要(可参考, 勿照抄): " + description.strip()[:300]
+    prompt = (
+        "你在为 AI 突发快讯做卡片。读下面这条外文新闻, 输出 JSON 一行: "
+        '{"title":"简洁准确的中文标题, 保留 GPT-5/Claude/OpenAI/NVIDIA 等原名, ≤40字, 不加引号",'
+        '"gist":"一句话概括, 说清发生了什么+对谁重要, ≤45字中文。只据已知信息, '
+        '不要编造具体数字/估值, 没把握就给方向性判断"}。'
+        "只输出 JSON, 不要解释。\n\n标题: " + title + ctx
+    )
+    payload = json.dumps({
+        'model': 'claude-sonnet-4',
+        'messages': [{'role': 'user', 'content': prompt}],
+        'max_tokens': 240,
+        'temperature': 0,
+    }).encode('utf-8')
+    req = urllib.request.Request(
+        base + '/chat/completions', data=payload, method='POST',
+        headers={'Content-Type': 'application/json'},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            body = json.loads(resp.read().decode('utf-8'))
+        txt = ((body.get('choices') or [{}])[0].get('message') or {}).get('content', '') or ''
+        m = re.search(r'\{.*\}', txt, re.S)
+        if m:
+            try:
+                d = json.loads(m.group(0))
+                return (str(d.get('title', '')).strip().strip('"\'')[:60],
+                        str(d.get('gist', '')).strip().strip('"\'')[:90])
+            except json.JSONDecodeError:
+                pass
+        # JSON 抽取失败 → 整段当标题、概括留空
+        return (txt.strip().strip('"\'').splitlines()[0][:60] if txt.strip() else ''), ''
+    except Exception as e:
+        log.warning("⚠️ 突发翻译/概括失败(回退英文原标题): %s", e)
+        return '', ''
 
 
 def _format_breaking_msg(sig: dict) -> str:
@@ -482,24 +534,29 @@ def _accumulate_signals(signals: list) -> int:
         if not sid or sid in pushed:
             continue
         title_en = (sig.get('title') or '').strip()
-        zh = _translate_title(title_en)   # best-effort, 失败回退英文
+        # 一次 LLM 调用拿 中文标题 + 一句话概括(卡片直接展示, 读者不必点进去)。
+        # 官方源带 description → 给概括做依据。best-effort, 失败回退英文/概括留空。
+        desc = (sig.get('description') or sig.get('summary') or '').strip()
+        zh, gist = _translate_breaking(title_en, desc)
         score_val = sig.get('points') or sig.get('likes') or sig.get('stars') or 0
         signal_txt = _signal_text(sig)
         title_zh = (zh or '')[:80]
+        summary_zh = (gist or '')[:120]
         pushed[sid] = {
             'pushed_at': datetime.now(timezone.utc).isoformat(),
             'source': sig.get('_source'),
             'title': title_en[:160],
             'title_zh': title_zh,
+            'summary_zh': summary_zh,
             'signal': signal_txt,
             'url': sig.get('url', ''),
             'score': score_val,
         }
         _mark_pushed_one(sig_id=sid, source=sig.get('_source', 'unknown'),
                          title=title_en, url=sig.get('url', ''), score=score_val,
-                         title_zh=title_zh, signal=signal_txt)
+                         title_zh=title_zh, signal=signal_txt, summary_zh=summary_zh)
         n += 1
-        log.info("  ➕ 收录突发: %s", (zh or title_en)[:50])
+        log.info("  ➕ 收录突发: %s | %s", (zh or title_en)[:40], summary_zh[:40])
     _save_pushed(pushed)
     return n
 
@@ -521,6 +578,7 @@ def _breaking_payload(events: list) -> str:
     for e in events:
         out.append({
             'zh': e.get('title_zh') or e.get('title') or '',
+            'gist': e.get('summary_zh') or '',     # 一句话概括, 卡片直接展示(不必点进去)
             'en': e.get('title') or '',
             'signal': e.get('signal') or '',
             'url': e.get('url') or '',

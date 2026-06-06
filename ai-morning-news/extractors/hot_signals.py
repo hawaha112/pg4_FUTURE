@@ -270,11 +270,20 @@ def fetch_official_rss(hours: int = 6, max_per_feed: int = 5) -> List[Dict]:
             pub = _parse_feed_date(block)
             if pub is None or pub < cutoff:
                 continue
+            # 摘要(RSS <description> / Atom <summary>) → 给突发"一句话概括"做依据
+            d_match = re.search(r'<description[^>]*>(.*?)</description>', block, re.S) or \
+                re.search(r'<summary[^>]*>(.*?)</summary>', block, re.S)
+            desc = ''
+            if d_match:
+                desc = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', d_match.group(1))
+                desc = re.sub(r'<[^>]+>', ' ', desc)           # 去 HTML 标签
+                desc = re.sub(r'\s+', ' ', desc).strip()[:400]
             results.append({
                 'source': 'official',
                 'source_name': name,
                 'title': title,
                 'url': link,
+                'description': desc,
                 'published': pub.isoformat(),
                 'signal_score': 500,   # 官方公告强信号
             })
