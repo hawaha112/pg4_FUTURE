@@ -36,6 +36,7 @@ from extractors.hot_signals import (
     fetch_hn_top,
     fetch_hf_trending,
     fetch_reddit_hot,
+    fetch_official_rss,
 )
 
 log = get_logger('breaking')
@@ -55,6 +56,12 @@ REDDIT_ENABLED = os.environ.get('BREAKING_REDDIT', 'true').lower() == 'true'
 REDDIT_SUBS = [s.strip() for s in os.environ.get(
     'BREAKING_REDDIT_SUBS',
     'LocalLLaMA,MachineLearning,StableDiffusion,singularity,OpenAI').split(',') if s.strip()]
+
+# 官方大厂博客 RSS: 官方重大发布第一时间进突发(不必等早晚报, 每天 2 次)。
+# 近 N 小时新发布 + 过事件闸(只放行 launch/release/announce 型, 滤掉回顾/观点/招聘) = "importance≥4"近似。
+# 官方源发布频率低, 天然不刷屏。BREAKING_OFFICIAL=false 可关。
+OFFICIAL_ENABLED = os.environ.get('BREAKING_OFFICIAL', 'true').lower() == 'true'
+OFFICIAL_WINDOW_HOURS = int(os.environ.get('BREAKING_OFFICIAL_HOURS', '6'))
 
 # 单次最多推几条 (防冷启动 / 大新闻日一次性轰炸)
 MAX_PUSH_PER_RUN = int(os.environ.get('BREAKING_MAX_PER_RUN', '5'))
@@ -292,6 +299,26 @@ def _detect_breaking() -> list:
         except Exception as e:
             log.warning("Reddit 抓取异常: %s", e)
 
+    # 官方大厂博客 — 近 N 小时官方重大发布(timely, 不必等早晚报)
+    if OFFICIAL_ENABLED:
+        log.info("🔍 检查官方源 RSS (近 %dh)...", OFFICIAL_WINDOW_HOURS)
+        try:
+            for sig in fetch_official_rss(hours=OFFICIAL_WINDOW_HOURS):
+                title = sig.get('title', '')
+                # 官方源也过 噪声闸 + 事件闸: 只放行 launch/release/announce 型公告,
+                # 滤掉"回顾/观点/招聘/客户故事"(近似 importance≥4, 防刷屏)
+                if _is_noise(title):
+                    continue
+                if HN_EVENT_ONLY and not _HN_EVENT_RE.search(title):
+                    log.info("  ⏭️ 官方跳过(非事件类): %s", title[:50])
+                    continue
+                sig['_source'] = 'official'
+                sig['_id'] = f"official:{sig.get('url', '')}"
+                breaking.append(sig)
+                log.info("  🏢 官方命中: %s — %s", sig.get('source_name', ''), title[:55])
+        except Exception as e:
+            log.warning("官方源抓取异常: %s", e)
+
     return breaking
 
 
@@ -440,6 +467,8 @@ def _signal_text(sig: dict) -> str:
         return f"HuggingFace 爆款{tz} · {int(sig.get('likes') or 0)} 赞"
     if src == 'reddit':
         return f"r/{sig.get('subreddit', '')} 热榜"
+    if src == 'official':
+        return f"🏢 官方发布 · {sig.get('source_name', '')}"
     return ''
 
 

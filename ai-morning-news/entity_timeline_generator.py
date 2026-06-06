@@ -94,7 +94,9 @@ def _tag_events_with_entities(events: List[Dict]) -> Dict[str, List[Dict]]:
         }
         items.append(item)
 
-    tagged = matrix.tag_items(items)
+    # require_title=True：实体时间线只收"标题主语是该实体"的事件，
+    # 避免"OpenAI 回应 Anthropic"这类仅正文提及就错挂进别家时间线（质量把控）。
+    tagged = matrix.tag_items(items, require_title=True)
 
     by_entity = defaultdict(list)
     for t in tagged:

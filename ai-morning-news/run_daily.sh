@@ -512,10 +512,11 @@ print(f'{ok} {fail} {dead}')
 fi
 SRC_LINE="📡 源健康: ${SRC_OK} OK / ${SRC_FAIL} 告警 / ${SRC_DEAD} 死源"
 
-# 读取上一条早报消息 id（云端跑由 briefing-state 持久化），用于"删旧推新"单条更新
+# 读取"本班次"上一条消息 id（早报/晚报各自独立的槽 briefing_msg_id_{am,pm}，互不删除）。
+# 云端跑由 briefing-state 持久化 tg_state.json。兼容旧版单键 briefing_msg_id（首次升级时回退读它）。
 PREV_MSG_ID=""
 if [ -f "$TG_STATE_FILE" ]; then
-    PREV_MSG_ID=$("$PYTHON" -c "import json;print(json.load(open('$TG_STATE_FILE')).get('briefing_msg_id',''))" 2>/dev/null || echo "")
+    PREV_MSG_ID=$("$PYTHON" -c "import json;d=json.load(open('$TG_STATE_FILE'));print(d.get('briefing_msg_id_$SHIFT') or d.get('briefing_msg_id') or '')" 2>/dev/null || echo "")
 fi
 
 if [ "$DEPLOY_OK" = true ]; then
@@ -535,9 +536,26 @@ ${HEADLINES}
     tg_delete "$PREV_MSG_ID"
     NEW_MSG_ID=$(send_tg_capture "$BRIEFING_MSG")
     if [ -n "$NEW_MSG_ID" ]; then
-        printf '{"briefing_msg_id": %s, "updated_at": "%s"}\n' \
-            "$NEW_MSG_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$TG_STATE_FILE"
-        echo "  📌 早报单条更新: 删旧(${PREV_MSG_ID:-无}) → 新 msg_id=${NEW_MSG_ID}" >> "$LOG_FILE"
+        # 只更新本班次(am/pm)的槽，保留另一班次的 id —— 早报/晚报各一条、互不顶替、各自每天刷新
+        "$PYTHON" - "$TG_STATE_FILE" "$SHIFT" "$NEW_MSG_ID" <<'PYEOF' 2>>"$LOG_FILE" || \
+            printf '{"briefing_msg_id_%s": %s}\n' "$SHIFT" "$NEW_MSG_ID" > "$TG_STATE_FILE"
+import json, os, sys
+from datetime import datetime, timezone
+path, shift, mid = sys.argv[1], sys.argv[2], sys.argv[3]
+d = {}
+if os.path.exists(path):
+    try:
+        d = json.load(open(path))
+    except Exception:
+        d = {}
+if not isinstance(d, dict):
+    d = {}
+d.pop('briefing_msg_id', None)   # 清理旧版单键，迁移到 am/pm 双槽
+d['briefing_msg_id_' + shift] = int(mid)
+d['updated_at'] = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+json.dump(d, open(path, 'w'), ensure_ascii=False)
+PYEOF
+        echo "  📌 ${SHIFT} 单条更新: 删旧(${PREV_MSG_ID:-无}) → 新 msg_id=${NEW_MSG_ID}（另一班次保留）" >> "$LOG_FILE"
     else
         echo "  ⚠️ 未取到新 msg_id（silent 或发送失败），保留旧 id 不变" >> "$LOG_FILE"
     fi

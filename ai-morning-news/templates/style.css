@@ -261,6 +261,9 @@ body {
     background: rgba(255,107,107,0.07);
 }
 .today-nav .tn-breaking:hover { border-color: #ff6b6b; color: #ffb0b0; }
+/* 往期入口：靠右分隔，读作"离开本页去归档" */
+.today-nav .tn-history { margin-left: auto; }
+@media (max-width: 640px) { .today-nav .tn-history { margin-left: 0; } }
 /* 版块锚点：跳转时留出 sticky header 的高度，标题不被遮挡 */
 .page-sec { scroll-margin-top: 84px; }
 /* 空版块（如无突发时的 #sec-breaking）不占额外纵向空间 */

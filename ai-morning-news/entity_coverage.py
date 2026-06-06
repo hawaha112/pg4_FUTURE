@@ -98,27 +98,34 @@ class EntityCoverageMatrix:
 
     # ─── 条目实体标记 ──────────────────────────────────────────
 
-    def tag_items(self, items: List[dict]) -> List[dict]:
+    def tag_items(self, items: List[dict], require_title: bool = False) -> List[dict]:
         """给每条 item 打实体标记
 
         在 item 上添加 _entities 字段（匹配到的实体 ID 列表）
         和 _entity_protected 字段（是否受实体保护不被截断）
+
+        require_title=True（实体时间线用）：只认"标题里出现的实体"（= 这条的主语），
+        丢掉仅在正文顺带提及的实体 —— 否则"OpenAI 回应 Anthropic"会因正文含
+        anthropic 而错挂进 Anthropic 时间线。采集/覆盖默认 False（行为不变，不影响聚类）。
         """
         for item in items:
-            text = (
+            title_l = (item.get('title') or '').lower()
+            full_l = (
                 (item.get('title') or '') + ' ' +
                 (item.get('summary') or '')[:500]
             ).lower()
+            # 主语判定文本：严格模式只看标题，否则看 标题+摘要
+            match_text = title_l if require_title else full_l
             source = item.get('source_name', '')
 
             matched_entities = []
             for entity in self.entities:
                 eid = entity['id']
-                # 来源匹配
+                # 来源匹配（官方源直挂，强信号）
                 is_primary = source in entity.get('primary_sources', [])
-                # 关键词匹配
+                # 关键词匹配（严格模式仅标题）
                 pattern = self._entity_patterns.get(eid)
-                keyword_match = pattern.search(text) if pattern else False
+                keyword_match = pattern.search(match_text) if pattern else False
 
                 if is_primary or keyword_match:
                     matched_entities.append(eid)

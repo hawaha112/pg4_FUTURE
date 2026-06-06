@@ -195,6 +195,91 @@ def fetch_reddit_hot(subreddits: Optional[List[str]] = None, limit_per_sub: int 
 
 
 # ─────────────────────────────────────────────────────────
+# 官方 AI 大厂博客 RSS (突发用: 官方重大发布第一时间进突发, 不必等早晚报)
+# ─────────────────────────────────────────────────────────
+
+# 镜像 config.json sources.english 里 tier=0 且 stdlib 可抓的官方 feed。
+# ⚠️ Anthropic 官方无可用 RSS (config 的 GitHub 镜像已 404), 其官方发布走 HN 兜底。
+_OFFICIAL_FEEDS = [
+    ('OpenAI', 'https://openai.com/blog/rss.xml'),
+    ('Google AI', 'https://blog.google/technology/ai/rss/'),
+    ('Google DeepMind', 'https://deepmind.google/blog/rss.xml'),
+    ('Microsoft AI', 'https://blogs.microsoft.com/ai/feed/'),
+    ('NVIDIA AI', 'https://blogs.nvidia.com/blog/category/deep-learning/feed/'),
+]
+
+
+def _parse_feed_date(block: str) -> Optional[datetime]:
+    """从 RSS <item>/Atom <entry> 块抽发布时间, 返回带 tz 的 datetime 或 None。"""
+    m = re.search(r'<pubDate[^>]*>(.*?)</pubDate>', block, re.S)
+    if m:
+        try:
+            from email.utils import parsedate_to_datetime
+            dt = parsedate_to_datetime(m.group(1).strip())
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+        except (ValueError, TypeError, IndexError):
+            pass
+    m = re.search(r'<(?:published|updated)[^>]*>(.*?)</(?:published|updated)>', block, re.S)
+    if m:
+        try:
+            dt = datetime.fromisoformat(m.group(1).strip().replace('Z', '+00:00'))
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+        except ValueError:
+            pass
+    return None
+
+
+def fetch_official_rss(hours: int = 6, max_per_feed: int = 5) -> List[Dict]:
+    """抓 tier-0 官方大厂博客近 N 小时的新发布 (突发用)。
+
+    官方源发布频率低、几乎条条是真公告 → 用"近 N 小时新 entry"做时效信号。
+    feed 反时序, 故只扫每个 feed 最新 ~25 条、按发布时间过滤。无日期的条目跳过
+    (避免把历史条目误当突发)。返回 [{source, source_name, title, url, published}]。
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    results = []
+    for name, url in _OFFICIAL_FEEDS:
+        txt = _http_get_text(url, headers={'User-Agent': _DEFAULT_UA})
+        if not txt:
+            continue
+        blocks = re.findall(r'<item>(.*?)</item>', txt, re.S)
+        is_atom = False
+        if not blocks:
+            blocks = re.findall(r'<entry>(.*?)</entry>', txt, re.S)
+            is_atom = True
+        kept = 0
+        for block in blocks[:25]:
+            if kept >= max_per_feed:
+                break
+            t_match = re.search(r'<title[^>]*>(.*?)</title>', block, re.S)
+            if is_atom:
+                l_match = re.search(r'<link[^>]*href="([^"]+)"', block)
+            else:
+                l_match = re.search(r'<link[^>]*>(.*?)</link>', block, re.S)
+            if not (t_match and l_match):
+                continue
+            title = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', t_match.group(1)).strip()
+            title = re.sub(r'<[^>]+>', '', title).strip()
+            link = (l_match.group(1) or '').strip()
+            if not title or not link:
+                continue
+            pub = _parse_feed_date(block)
+            if pub is None or pub < cutoff:
+                continue
+            results.append({
+                'source': 'official',
+                'source_name': name,
+                'title': title,
+                'url': link,
+                'published': pub.isoformat(),
+                'signal_score': 500,   # 官方公告强信号
+            })
+            kept += 1
+    log.info("  ✅ 官方源: 近 %dh 抓到 %d 条新发布 (扫 %d feed)", hours, len(results), len(_OFFICIAL_FEEDS))
+    return results
+
+
+# ─────────────────────────────────────────────────────────
 # HuggingFace Trending (models / datasets / spaces)
 # ─────────────────────────────────────────────────────────
 

@@ -230,6 +230,14 @@ LLM 偶尔把 JSON 包在 ` ```json ... ``` ` 里、或在字符串值里塞 ASC
 3. **顶部「今日导览」+ 版块锚点 + 编号顺序**：`$today_nav` 按"非空版块"生成跳转 chip（🎯判断 🚨突发 ⭐必读 📚更多 👤大V 🔗实体 🎙口播），每个 `<section id="sec-*" class="page-sec">` 做锚点。突发 chip 默认 `hidden`，由 [script.js](ai-morning-news/templates/script.js) 在确有近24h突发时点亮（与 banner 同步）。CSS `.today-nav`/`.tn-link`/`.tn-breaking` + `.page-sec{scroll-margin-top:84px}`（清 sticky header）。
 - "其他资讯"标题改"📚 更多资讯 · 按主题分类"。`grid-cat-head` 在 featured-section(非 grid 容器)里 `grid-column` 无副作用、`display:flex` 正常渲染，两处复用同款。
 
+### 改进 12: 用户四连反馈（2026-06-06）
+
+1. **晚报"没看到"= 单条更新把它顶掉了**（[run_daily.sh](ai-morning-news/run_daily.sh)）：旧逻辑 `tg_state.json` 单键 `briefing_msg_id`，每班删旧推新 → 早报会删掉晚报。改成 **am/pm 双槽** `briefing_msg_id_{am,pm}`，各班次只删自己那条、保留另一班 → **任何时候都能看到最新早报+最新晚报，最多 2 条不堆积**。兼容旧单键（首班回退读、写时清理迁移）。
+2. **实体时间线主语纠错**（[entity_coverage.py](ai-morning-news/entity_coverage.py) `tag_items(require_title=)`）：旧逻辑标题或摘要含关键词就打实体标签 → "OpenAI 回应 Anthropic"因正文含 anthropic 错挂进 Anthropic 时间线。给时间线传 `require_title=True`（[entity_timeline_generator.py](ai-morning-news/entity_timeline_generator.py)）**只认标题主语**，丢正文顺带提及；采集/覆盖/聚类路径默认 False 不变。
+3. **突发纳入官方源**（[hot_signals.py](ai-morning-news/extractors/hot_signals.py) `fetch_official_rss` + [breaking_news_detector.py](ai-morning-news/breaking_news_detector.py)）：突发原只扫 HN/HF/Reddit 社交热度，抓不到官方发布。新增 5 个 tier-0 官方 feed（OpenAI/Google AI/DeepMind/Microsoft/NVIDIA），近 `BREAKING_OFFICIAL_HOURS`(默认6h) 新发布 + 过噪声闸+事件闸（只放行 launch/introduce/announce 型，滤掉回顾/观点/招聘）≈ importance≥4，signal 显示「🏢 官方发布 · X」。官方源发布频率低、天然不刷屏。`BREAKING_OFFICIAL=false` 可关。
+4. **历史可发现性**（[html_generator.py](ai-morning-news/html_generator.py)）：往期早晚报其实**都在仪表盘**（`archive/dashboard.html` 有完整往期列表），但入口太隐蔽。在「今日导览」加显眼「📅 往期」chip 直达。
+- ⚠️ **Anthropic 官方 RSS 已死**（同批发现）：config `sources.english` 的 Anthropic 源是 GitHub 镜像 `taobojlen/anthropic-rss-feed`，现 **404**；官网无 RSS、rsshub 403。**采集器也受影响**（拿不到 Anthropic 官方新闻，靠 HN+二手源兜底）。待修：找可用 Anthropic feed 或换 Google News RSS。
+
 ### 通用脆弱点
 - **LLM JSON 解析**：`llm_analyzer._extract_json` 已处理 markdown 围栏 + 行内换行 + 截断容错，但**值内未转义双引号**只能源头修（prompt 约束）
 - **Cloudflare / Nitter 反爬**：[content_fetcher.py](ai-morning-news/content_fetcher.py) 对 X(Twitter) 走 Nitter 实例，经常 429。健康度由 [health_tracker.py](ai-morning-news/health_tracker.py) 跟踪，10+ 连续失败自动停用

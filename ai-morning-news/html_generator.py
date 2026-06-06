@@ -964,6 +964,11 @@ def generate_html(all_items, config, digest=None, meta=None):
             _nav_links.append(f'<a class="tn-link tn-breaking" href="#{_sid}" hidden>{_emoji} {_label}</a>')
         else:
             _nav_links.append(f'<a class="tn-link" href="#{_sid}">{_emoji} {_label}</a>')
+    # 往期早晚报：始终可达的历史入口（指向仪表盘的归档列表），解决"查不到历史"。
+    # 不是页内锚点而是真实链接，故单独追加、靠右分隔。
+    _nav_links.append(
+        '<a class="tn-link tn-history" href="archive/dashboard.html" '
+        'title="浏览往期早报 / 晚报归档">📅 往期</a>')
     today_nav = (f'<nav class="today-nav" aria-label="今日导览">{"".join(_nav_links)}</nav>'
                  if _nav_links else '')
 
