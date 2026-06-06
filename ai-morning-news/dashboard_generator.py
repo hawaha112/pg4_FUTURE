@@ -611,6 +611,25 @@ def main():
         elif sh == 'pm' and (today_pm is None or r.get('run_id', '') > today_pm.get('run_id', '')):
             today_pm = r
 
+    # 跨班次去重: 同一事件(event_id)若早晚两班都收录(常见于手动重跑 / 跨窗口持续事件),
+    # 只留在"先出报"的那班、另一班移除 —— 切换 早班/晚班 tab 不再看到一模一样的内容。
+    if today_am and today_pm:
+        _am_ids = {ev.get('event_id') for ev in (today_am.get('important_events') or []) if ev.get('event_id')}
+        _pm_ids = {ev.get('event_id') for ev in (today_pm.get('important_events') or []) if ev.get('event_id')}
+        _dup = _am_ids & _pm_ids
+        if _dup:
+            # run_id 是 UTC ISO 串, 字典序=时间序; 先出报(run_id 更小)的那班保留重复事件
+            _am_first = today_am.get('run_id', '') <= today_pm.get('run_id', '')
+            _trim = dict(today_pm if _am_first else today_am)   # 复制, 不改 runs 原记录
+            _kept = [ev for ev in (_trim.get('important_events') or [])
+                     if ev.get('event_id') not in _dup]
+            _trim['important_events'] = _kept
+            _trim['important_count'] = len(_kept)               # 数字与列表保持一致
+            if _am_first:
+                today_pm = _trim
+            else:
+                today_am = _trim
+
     def _today_card(run, shift: str, label: str, emoji: str) -> str:
         if not run:
             return (
