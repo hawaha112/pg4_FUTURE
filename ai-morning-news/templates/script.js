@@ -449,6 +449,7 @@ document.addEventListener('click', function(e) {
         var sx = 0, sy = 0, st = 0;
         container.addEventListener('click', function(e) {
             if ('ontouchstart' in window) return;
+            if (e.target.closest('.dim[data-flayer],.dim[data-fcat]')) return;  // 标签点击 → 交给筛选, 不开 modal
             var card = e.target.closest('[data-idx]');
             if (card) openModal(parseInt(card.dataset.idx, 10));
         });
@@ -457,6 +458,7 @@ document.addEventListener('click', function(e) {
         }, {passive: true});
         container.addEventListener('touchend', function(e) {
             if (!e.changedTouches || e.changedTouches.length !== 1) return;
+            if (e.target.closest('.dim[data-flayer],.dim[data-fcat]')) return;   // 标签 tap → 筛选
             var dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
             if (Math.sqrt(dx*dx+dy*dy) < 10 && Date.now() - st < 300) {
                 var card = e.target.closest('[data-idx]');
@@ -476,39 +478,75 @@ document.addEventListener('click', function(e) {
 // ═══ Filters (category AND audience AND search) ═══
 var _activeCat = 'all';
 var _activeAud = 'all';
+var _activeLayer = 'all';
 var _activeQuery = '';
 
-// 「其他资讯」分组小标题：本组下方(到下一个组头之间)无可见卡片时, 隐藏该组头,
-// 避免筛选/阅后即焚把卡片隐去后留下空标题。offsetParent 判可见, 兼容两种隐藏机制。
+// 分组小标题：本组下方(到下一个组头之间)无可见卡片时隐藏该组头,
+// 避免筛选/阅后即焚隐去卡片后留下空标题。覆盖 更多/必读/大V 三处分组容器。
 function _updateGridHeaders() {
-    var grid = document.getElementById('grid');
-    if (!grid) return;
-    grid.querySelectorAll('.grid-cat-head').forEach(function(h) {
-        var anyVisible = false;
-        var el = h.nextElementSibling;
-        while (el && !el.classList.contains('grid-cat-head')) {
-            if (el.classList.contains('card') && el.offsetParent !== null) {
-                anyVisible = true;
-                break;
+    ['#grid', '.featured-section', '.vip-section'].forEach(function(sel) {
+        var root = document.querySelector(sel);
+        if (!root) return;
+        root.querySelectorAll('.grid-cat-head').forEach(function(h) {
+            var anyVisible = false, el = h.nextElementSibling;
+            while (el && !(el.classList && el.classList.contains('grid-cat-head'))) {
+                var cards = (el.classList && (el.classList.contains('card') || el.classList.contains('featured-card') || el.classList.contains('vip-item')))
+                    ? [el]
+                    : (el.querySelectorAll ? [].slice.call(el.querySelectorAll('.card,.featured-card,.vip-item')) : []);
+                if (cards.some(function(x) { return x.offsetParent !== null; })) { anyVisible = true; break; }
+                el = el.nextElementSibling;
             }
-            el = el.nextElementSibling;
-        }
-        h.classList.toggle('hidden', !anyVisible);
+            h.classList.toggle('hidden', !anyVisible);
+        });
     });
 }
 
 function _applyFilters() {
     var q = _activeQuery;
-    document.querySelectorAll('.card,[class*="featured-card"]').forEach(function(c) {
+    document.querySelectorAll('.card,[class*="featured-card"],.vip-item').forEach(function(c) {
         var cat = c.dataset.cat || '';
         var aud = c.dataset.aud || 'general';
+        var layer = c.dataset.layer || '';
         var catOk = (_activeCat === 'all') || cat.includes(_activeCat);
         var audOk = (_activeAud === 'all') || aud.split('|').indexOf(_activeAud) >= 0;
+        var layerOk = (_activeLayer === 'all') || layer === _activeLayer;
         var qOk   = !q || c.textContent.toLowerCase().includes(q);
-        c.classList.toggle('hidden', !(catOk && audOk && qOk));
+        c.classList.toggle('hidden', !(catOk && audOk && layerOk && qOk));
     });
     _updateGridHeaders();
 }
+
+// ═══ 点卡片上的「层面/主题」标签 → 只看该维度(再点同一标签或点状态条清除) ═══
+var _LAYER_NAMES = {model:'🧠 模型层', app:'🛠️ 应用层', compute:'⚙️ 算力层', research:'🔬 研究层', biz:'💼 政策商业'};
+function _renderFilterBar() {
+    var bar = document.getElementById('filter-active');
+    if (!bar) return;
+    var label = (_activeLayer !== 'all') ? (_LAYER_NAMES[_activeLayer] || _activeLayer)
+              : (_activeCat !== 'all') ? _activeCat : '';
+    if (label) { bar.innerHTML = '🔍 只看「' + escHtml(label) + '」 · 点此清除 ✕'; bar.hidden = false; }
+    else { bar.hidden = true; }
+}
+function _clearTagFilter() {
+    _activeLayer = 'all'; _activeCat = 'all';
+    _applyFilters(); _renderFilterBar();
+}
+document.addEventListener('click', function(e) {
+    var t = e.target.closest('.dim[data-flayer],.dim[data-fcat]');
+    if (!t) return;
+    e.stopPropagation();
+    if (t.dataset.flayer) {
+        _activeLayer = (_activeLayer === t.dataset.flayer) ? 'all' : t.dataset.flayer;
+        _activeCat = 'all';          // 层面与主题互斥, 保持简单
+    } else if (t.dataset.fcat) {
+        _activeCat = (_activeCat === t.dataset.fcat) ? 'all' : t.dataset.fcat;
+        _activeLayer = 'all';
+    }
+    _applyFilters(); _renderFilterBar();
+});
+(function() {
+    var bar = document.getElementById('filter-active');
+    if (bar) bar.addEventListener('click', _clearTagFilter);
+})();
 
 document.querySelectorAll('.f-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
@@ -541,6 +579,39 @@ document.getElementById('searchBox').addEventListener('input', _debounce(functio
     _activeQuery = this.value.toLowerCase();
     _applyFilters();
 }, 150));
+
+// ═══ 导览条: 贴在 header 下方 + 滚动高亮当前所在板块(scroll-spy) ═══
+(function() {
+    var nav = document.querySelector('.today-nav');
+    if (!nav) return;
+    var header = document.querySelector('.header');
+    function position() {
+        var h = header ? header.offsetHeight : 56;
+        nav.style.top = h + 'px';
+        // 锚点跳转留白 = header + 导览 高度, 标题不被两条 sticky 遮住
+        document.documentElement.style.setProperty('--sec-offset', (h + nav.offsetHeight + 14) + 'px');
+    }
+    position();
+    window.addEventListener('load', position);
+    window.addEventListener('resize', _debounce(position, 100));
+
+    var links = [].slice.call(nav.querySelectorAll('.tn-link[href^="#"]'));
+    function spy() {
+        var probe = (header ? header.offsetHeight : 56) + nav.offsetHeight + 24;
+        var cur = null;
+        links.forEach(function(a) {
+            var el = document.getElementById(a.getAttribute('href').slice(1));
+            if (el && el.getBoundingClientRect().top <= probe) cur = a;  // 取最后一个已滚过的
+        });
+        links.forEach(function(a) { a.classList.toggle('tn-active', a === cur); });
+    }
+    var ticking = false;
+    window.addEventListener('scroll', function() {
+        if (!ticking) { ticking = true; requestAnimationFrame(function() { spy(); ticking = false; }); }
+    }, {passive: true});
+    window.addEventListener('load', spy);
+    spy();
+})();
 
 // 突发已并入早晚报正文(12h 报道一次足够实时), 不再做独立 banner / 拉 breaking.json。
 

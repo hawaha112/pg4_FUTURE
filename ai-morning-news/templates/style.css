@@ -239,13 +239,21 @@ body {
     border-radius: 9px; padding: 0 7px;
 }
 /* 今日导览 —— 版块地图 + 跳转 chip（给页面一个一眼可记的层次） */
+/* 导览随滚动常驻(sticky, 贴在 header 下方; top 由 JS 按 header 实际高度设)。
+   单行横向可滚, 不换行堆高; 滚动时高亮当前所在板块。 */
 .today-nav {
-    max-width: 1120px; margin: 4px auto 18px; padding: 0 16px;
-    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    position: sticky; top: 56px; z-index: 90;
+    margin: 0 0 14px; padding: 8px 16px;
+    display: flex; flex-wrap: nowrap; gap: 8px; align-items: center;
+    overflow-x: auto; scrollbar-width: none;
+    background: rgba(11,11,18,0.92);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
 }
+.today-nav::-webkit-scrollbar { display: none; }
 .today-nav .tn-link {
-    display: inline-flex; align-items: center; gap: 5px;
-    font-size: 13px; font-weight: 600; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto;
+    font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap;
     color: var(--text-70, #b6bdcb);
     background: var(--bg-card, rgba(255,255,255,0.04));
     border: 1px solid var(--border, rgba(255,255,255,0.10));
@@ -256,11 +264,15 @@ body {
     color: var(--text, #ecf0f5); border-color: var(--accent);
     background: var(--bg-card-hover, rgba(255,255,255,0.055));
 }
+/* 当前所在板块高亮(scroll-spy) */
+.today-nav .tn-link.tn-active {
+    color: #fff; border-color: var(--accent);
+    background: rgba(107,138,253,0.20);
+}
 /* 往期入口：靠右分隔，读作"离开本页去归档" */
 .today-nav .tn-history { margin-left: auto; }
-@media (max-width: 640px) { .today-nav .tn-history { margin-left: 0; } }
-/* 版块锚点：跳转时留出 sticky header 的高度，标题不被遮挡 */
-.page-sec { scroll-margin-top: 84px; }
+/* 版块锚点：跳转时留出 sticky header + 导览条 的高度(JS 实测设 --sec-offset)，标题不被遮挡 */
+.page-sec { scroll-margin-top: var(--sec-offset, 112px); }
 /* 空版块（如无突发时的 #sec-breaking）不占额外纵向空间 */
 .page-sec:empty { display: none; }
 
@@ -315,7 +327,19 @@ body {
 .dim {
     display: inline-block; font-size: 10px; font-weight: 600;
     padding: 1px 7px; border-radius: 5px; white-space: nowrap; line-height: 1.7;
+    cursor: pointer; transition: filter 0.12s, transform 0.1s;
 }
+.dim:hover { filter: brightness(1.28); }
+.dim:active { transform: scale(0.95); }
+/* 标签筛选状态条 */
+.filter-active {
+    max-width: 1120px; margin: 0 auto 12px; padding: 8px 16px;
+    font-size: 13px; font-weight: 600; color: var(--accent);
+    background: rgba(107,138,253,0.10); border: 1px solid rgba(107,138,253,0.30);
+    border-radius: 8px; cursor: pointer; text-align: center;
+    transition: background 0.15s;
+}
+.filter-active:hover { background: rgba(107,138,253,0.18); }
 .dim-topic { color: var(--text-50, #8a93a6); background: rgba(255,255,255,0.05); }
 /* 层面五色: 模型/应用/算力/研究/政策商业 */
 .dim-model    { color: #a5b4fc; background: rgba(129,140,248,0.16); }

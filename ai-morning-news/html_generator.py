@@ -196,16 +196,29 @@ def _layer_of(categories):
     return None
 
 
+def _layer_key(categories):
+    """卡片 data-layer 用的层面 key (model/app/...); 无则空串。"""
+    layer = _layer_of(categories)
+    return layer[2] if layer else ''
+
+
 def _dim_tags(categories):
     """多维标签行: [层面] + [主题×1-2]。来源类型走卡片自带的 tier 徽章, 不在此重复。
-    让读者扫标签即知这条信息属于哪些维度。返回内联 span 串(无外层容器)。"""
+    标签可点击筛选(data-flayer / data-fcat); 让读者扫标签即知维度、并据此只看某维度。"""
     parts = []
     layer = _layer_of(categories)
     if layer:
-        parts.append(f'<span class="dim dim-{layer[2]}">{layer[0]} {layer[1]}</span>')
+        parts.append(
+            f'<span class="dim dim-{layer[2]}" data-flayer="{layer[2]}" '
+            f'role="button" tabindex="0" title="只看{layer[1]}">{layer[0]} {layer[1]}</span>'
+        )
     for c in (categories or [])[:2]:
         if c and c != '其他':
-            parts.append(f'<span class="dim dim-topic">{_safe_escape(c)}</span>')
+            ce = _safe_escape(c)
+            parts.append(
+                f'<span class="dim dim-topic" data-fcat="{ce}" '
+                f'role="button" tabindex="0" title="只看{ce}">{ce}</span>'
+            )
     return ''.join(parts)
 
 
@@ -508,7 +521,7 @@ def generate_html(all_items, config, digest=None, meta=None):
             # 优先用 canonical_event_id —— dashboard"本周重要事件"深链(#evt-)用的就是它,
             # 必须一致才能滚到卡片/展开 modal。退回 _event_id(文章id) / link。
             _iid = item.get('_canonical_event_id') or item.get('_event_id') or item.get('link') or f'i{idx}'
-            _feat_card = f'''    <div class="featured-card" data-cat="{_safe_escape(cat_data)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_iid)}" style="border-left-color: {border_color}">
+            _feat_card = f'''    <div class="featured-card" data-cat="{_safe_escape(cat_data)}" data-layer="{_layer_key(categories)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_iid)}" style="border-left-color: {border_color}">
         {img_html}
         <div class="featured-body">
             {hero_badge}
@@ -673,7 +686,7 @@ def generate_html(all_items, config, digest=None, meta=None):
 
         _riid = item.get('_canonical_event_id') or item.get('_event_id') or item.get('link') or f'r{idx}'
         _card_html = f'''
-        <div class="card" data-cat="{_safe_escape(cat_data)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_riid)}"
+        <div class="card" data-cat="{_safe_escape(cat_data)}" data-layer="{_layer_key(categories)}" data-aud="{_safe_escape(aud_data)}" data-idx="{idx}" data-iid="{_safe_escape(_riid)}"
              style="animation-delay:{min(idx * 25, 500)}ms">
             {img_html}
             <div class="card-body">
@@ -1003,14 +1016,16 @@ def generate_html(all_items, config, digest=None, meta=None):
             icon = item.get('source_icon', '🎙️')
             why_html = f'<div class="vip-why">{why}</div>' if why else ''
             _viid = item.get('_canonical_event_id') or item.get('_event_id') or item.get('link') or f'vip{idx}'
+            _vcats = a.get('categories') or ['其他']
             _vrow = (
-                f'<div class="vip-item" data-idx="{idx}" data-iid="{_safe_escape(_viid)}">'
+                f'<div class="vip-item" data-cat="{_safe_escape("|".join(_vcats))}" '
+                f'data-layer="{_layer_key(_vcats)}" data-aud="general" '
+                f'data-idx="{idx}" data-iid="{_safe_escape(_viid)}">'
                 f'<div class="vip-meta">{icon} {src}</div>'
                 f'<div class="vip-title-txt">{ct}</div>'
                 f'{why_html}'
                 f'</div>'
             )
-            _vcats = a.get('categories') or ['其他']
             _vc = _vcats[0] if (_vcats and _vcats[0] in _cat_rank) else '其他'
             _vip_groups.setdefault(_vc, []).append(_vrow)
         _vip_groups = _merge_small_groups(_vip_groups, min_size=2)
