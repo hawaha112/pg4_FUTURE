@@ -628,17 +628,13 @@ document.addEventListener('keydown', function(e) {
 // ═══ Auto-open modal from URL hash ═══
 // 当 URL 带 #evt-<event_id>（来自 dashboard 重要事件链接）时，
 // 滚到对应卡片并自动展开 modal。需要 modal_data 已加载（ensureModalData lazy load）。
-function _handleEvtHash() {
-    var h = window.location.hash || '';
-    if (!h.startsWith('#evt-')) return;
-    var eid = decodeURIComponent(h.substring(5));
+// 按事件 id 打开对应 modal（滚到卡片如果存在）。供 hash 跳转 + 判断卡来源链接共用。
+function _openEventById(eid) {
     if (!eid) return;
-
     ensureModalData(function() {
         if (typeof __data === 'undefined' || !Array.isArray(__data)) return;
-        // 在 modal_data 里找匹配 item_id 的下标
-        // 兼容两种 ID 体系：
-        //   · canonical_event_id: 'evt_' + 24 hex（dashboard 链接用）
+        // 在 modal_data 里找匹配 item_id 的下标。兼容两种 ID 体系：
+        //   · canonical_event_id: 'evt_' + 24 hex（dashboard / 判断来源链接用）
         //   · canonical_article_id: 32 hex（卡片 data-iid 用）
         // 后者的前 24 位 = 前者去掉 'evt_'。这里前缀匹配兼容两种来源。
         var bareEid = eid.indexOf('evt_') === 0 ? eid.substring(4) : eid;
@@ -651,19 +647,32 @@ function _handleEvtHash() {
             if (iid.startsWith(bareEid)) { matchIdx = i; break; }
         }
         if (matchIdx < 0) return;
-
         // 滚到对应卡片（如果存在）
         try {
             var sel = '[data-iid="' + (window.CSS && CSS.escape ? CSS.escape(eid) : eid) + '"]';
             var card = document.querySelector(sel);
             if (card) card.scrollIntoView({behavior: 'smooth', block: 'center'});
         } catch (_) {}
-
         openModal(matchIdx);
     });
 }
+function _handleEvtHash() {
+    var h = window.location.hash || '';
+    if (!h.startsWith('#evt-')) return;
+    _openEventById(decodeURIComponent(h.substring(5)));
+}
 window.addEventListener('load', _handleEvtHash);
 window.addEventListener('hashchange', _handleEvtHash);
+// 判断卡「📎 依据」来源链接 → 直接开对应事件 modal。不走 hashchange/懒加载时序，
+// 在 TG 内置浏览器等环境更可靠（用户反馈"点了关联不到"）。data-iid 由 html_generator 写在 .jc-src 上。
+document.addEventListener('click', function(e) {
+    var a = e.target.closest && e.target.closest('a.jc-src');
+    if (!a) return;
+    var eid = a.getAttribute('data-iid') || '';
+    if (!eid) return;
+    e.preventDefault();
+    _openEventById(eid);
+});
 
 // ═══ 图加载兜底：CSS background-image 没有 onerror 事件，这里用 Image()
 //    探测每张 .card-img / .featured-img 的 URL，失败就把元素塌陷掉

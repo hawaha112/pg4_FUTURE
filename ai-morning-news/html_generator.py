@@ -870,12 +870,10 @@ def generate_html(all_items, config, digest=None, meta=None):
             j_body = re.sub(r'\*\*([^*\n]+?)\*\*',
                             r'<strong class="jc-bold">\1</strong>', j_body)
 
-            # 顶部徽章: 编辑改写标 + (仅) 与来源矛盾的红旗。
-            # 旧的"已核/未核"计数对读者太抽象 → 改成卡片底部直接列原文来源链接(见下方
-            # jc-sources), 让读者点进去自己核对, 比一个数字徽章直观。
+            # 顶部徽章: 仅保留"与来源矛盾"的红旗(真红旗、读者该知道)。
+            # 不再显示"✎编辑改写"——那是内部流程标记、不是分类, 混在域标签行里会被
+            # 误读成"跑出来的分类"(用户反馈)。"已核/未核"计数同理早已移除, 改用底部来源链接。
             badges_html = ''
-            if j.get('_was_rewritten'):
-                badges_html += '<span class="jc-badge jc-badge-edited" title="编辑改写过, 提升立场">✎ 编辑改写</span>'
             fc = j.get('fact_check') or {}
             cc = int((fc.get('contradicted_count') if fc else 0) or 0)
             if cc > 0:
@@ -904,17 +902,20 @@ def generate_html(all_items, config, digest=None, meta=None):
                 seen_src.add(iid)
                 sname = _safe_escape(it.get('source_name', '') or '原文')
                 sicon = _safe_escape(str(it.get('source_icon', '') or '🔗'))
+                eid_attr = _safe_escape(str(iid))
                 src_links.append(
-                    f'<a class="jc-src" href="#evt-{_safe_escape(str(iid))}">{sicon} {sname}</a>'
+                    f'<a class="jc-src" href="#evt-{eid_attr}" data-iid="{eid_attr}" '
+                    f'role="button">{sicon} {sname}</a>'
                 )
+            # 只露出真实 6 域, 过滤兜底"其他"(它不是用户定的分类, 露出来像噪声)
             dom_chips = ''.join(
                 f'<span class="dim dim-{_dk}" data-flayer="{_dk}" role="button" '
                 f'title="只看{_dn}">{_de} {_dn}</span>'
-                for _de, _dn, _dk in _dom_seen[:3]
+                for _de, _dn, _dk in _dom_seen[:3] if _dk != 'other'
             )
             src_html = ''
             if src_links:
-                src_html = '<div class="jc-sources">📎 来源(点击看页内卡片)：' + ' · '.join(src_links) + '</div>'
+                src_html = '<div class="jc-sources">📎 依据(点开看详情)：' + ' · '.join(src_links) + '</div>'
 
             j_cards_html += (
                 '<article class="judgment-card">'
