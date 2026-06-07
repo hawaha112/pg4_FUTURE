@@ -221,6 +221,24 @@ def main():
         # 再在下面按 published_at 精筛
         hours = max(hours, 24)
 
+        # 验证/补漏用: BRIEFING_WINDOW_HOURS 设了就把"发布时间窗"覆盖成"最近 N 小时"
+        # （起点=now-N, 终点=now），用于一次性把该时段全部内容拉满做验证, 不受 am/pm
+        # 班次切窗 + 日界限制。正常调度不设此变量, 走上面的 am/pm 班次窗口。
+        _wh = _os.environ.get('BRIEFING_WINDOW_HOURS', '').strip()
+        if _wh:
+            try:
+                _wh_n = float(_wh)
+            except ValueError:
+                _wh_n = 0
+            if _wh_n > 0:
+                window_start = _now - _td(hours=_wh_n)
+                window_end = _now
+                hours = max(hours, int(_wh_n) + 2)
+                log.info("🔧 BRIEFING_WINDOW_HOURS=%s → 窗口覆盖最近 %sh: %s ~ %s",
+                         _wh, _wh,
+                         window_start.strftime('%m-%d %H:%M'),
+                         window_end.strftime('%m-%d %H:%M'))
+
     def _in_window(pub_raw) -> bool:
         """pub_raw 可以是 datetime、str（ISO） 或 None"""
         if window_start is None:

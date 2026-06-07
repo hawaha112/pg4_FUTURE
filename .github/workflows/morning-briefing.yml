@@ -26,6 +26,10 @@ on:
         description: '手动 dispatch 测试用: 跳过 TG 推送, 避免噪音'
         type: boolean
         default: false
+      window_hours:
+        description: '验证/补漏用: 把发布时间窗覆盖为"最近 N 小时"(不分 am/pm 班次), 留空=走正常班次窗口'
+        type: string
+        default: ''
   # ⚠️ GH Actions schedule 已禁用 (2026-05-15). 触发改由 Anthropic Routine 走
   # workflow_dispatch — 解决 GH cron 整点队列拥堵导致 30-90 分钟延迟的问题
   # (实测准时性: routine ~5 分钟内 vs GH schedule 30-90 分钟).
@@ -158,6 +162,7 @@ jobs:
         env:
           BRIEFING_SHIFT_OVERRIDE: ${{ steps.shift.outputs.shift }}
           BRIEFING_SILENT_TG: ${{ github.event.inputs.silent_tg }}
+          BRIEFING_WINDOW_HOURS: ${{ github.event.inputs.window_hours }}
         run: bash run_daily.sh
 
       - name: Push updated state back to briefing-state
