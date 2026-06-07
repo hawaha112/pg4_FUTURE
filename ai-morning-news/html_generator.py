@@ -885,31 +885,41 @@ def generate_html(all_items, config, digest=None, meta=None):
                     f'⚠ {cc} 处与新闻不符</span>'
                 )
 
-            # 来源链接: evidence_ids → all_items[i] 的原文。generate_digest 和 generate_html
-            # 收到同一份 all_items(briefing_renderer 同一变量), 下标对齐, 可直接映射。
+            # 一次遍历 evidence_ids 同时算两件事(下标对齐 all_items, briefing_renderer 同一份):
+            #   ① 这个判断"综合了哪几个域"(去重取前3) —— 判断是跨域结论
+            #   ② 来源链接 → 页内对应卡片锚点(#evt-, _handleEvtHash 滚动+展开), 让"判断←依据"可点直达
+            _dom_seen = []
             src_links = []
             seen_src = set()
             for ei in (j.get('evidence_ids') or []):
                 if not isinstance(ei, int) or ei < 0 or ei >= len(all_items):
                     continue
                 it = all_items[ei]
-                u = (it.get('url') or it.get('link') or '').strip()
-                if not u or u in seen_src:
+                _de, _dn, _dk = _domain_of(it)
+                if _dk not in [d[2] for d in _dom_seen]:
+                    _dom_seen.append((_de, _dn, _dk))
+                iid = (it.get('_canonical_event_id') or it.get('_event_id') or it.get('link') or '').strip()
+                if not iid or iid in seen_src:
                     continue
-                seen_src.add(u)
+                seen_src.add(iid)
                 sname = _safe_escape(it.get('source_name', '') or '原文')
                 sicon = _safe_escape(str(it.get('source_icon', '') or '🔗'))
                 src_links.append(
-                    f'<a class="jc-src" href="{_safe_escape(u)}" target="_blank" '
-                    f'rel="noopener">{sicon} {sname}</a>'
+                    f'<a class="jc-src" href="#evt-{_safe_escape(str(iid))}">{sicon} {sname}</a>'
                 )
+            dom_chips = ''.join(
+                f'<span class="dim dim-{_dk}" data-flayer="{_dk}" role="button" '
+                f'title="只看{_dn}">{_de} {_dn}</span>'
+                for _de, _dn, _dk in _dom_seen[:3]
+            )
             src_html = ''
             if src_links:
-                src_html = '<div class="jc-sources">📎 来源：' + ' · '.join(src_links) + '</div>'
+                src_html = '<div class="jc-sources">📎 来源(点击看页内卡片)：' + ' · '.join(src_links) + '</div>'
 
             j_cards_html += (
                 '<article class="judgment-card">'
-                f'<div class="jc-header"><span class="jc-emoji">{j_emoji}</span>{badges_html}</div>'
+                f'<div class="jc-header"><span class="jc-emoji">{j_emoji}</span>'
+                f'<span class="jc-doms">{dom_chips}</span>{badges_html}</div>'
                 f'<h3 class="jc-title">{j_title}</h3>'
                 f'<p class="jc-body">{j_body}</p>'
                 f'{src_html}'

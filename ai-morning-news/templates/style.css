@@ -345,11 +345,15 @@ body {
 .grid-cat-head[data-flayer]:hover { color: var(--accent); }
 .dim-topic { color: var(--text-50, #8a93a6); background: rgba(255,255,255,0.05); }
 /* 层面五色: 模型/应用/算力/研究/政策商业 */
+/* 6 域配色 (与分组/筛选一致): 模型/算力/应用/研究/治理/商业 */
 .dim-model    { color: #a5b4fc; background: rgba(129,140,248,0.16); }
+.dim-infra    { color: #fbbf77; background: rgba(245,158,66,0.15); }
 .dim-app      { color: #6ee7b7; background: rgba(52,211,153,0.14); }
-.dim-compute  { color: #fbbf77; background: rgba(245,158,66,0.15); }
 .dim-research { color: #7dd3fc; background: rgba(56,189,248,0.14); }
+.dim-gov      { color: #fca5a5; background: rgba(248,113,113,0.14); }
 .dim-biz      { color: #f0abfc; background: rgba(232,121,249,0.14); }
+/* 判断卡顶部「综合了哪几个域」的小标签行 */
+.jc-doms { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .featured-dims { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
 /* (突发 banner 样式已移除: 突发并入早晚报正文, 不再做独立 banner) */
 .briefing .br-outro {
