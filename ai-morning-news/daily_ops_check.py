@@ -102,36 +102,65 @@ def check_source_health() -> list[str]:
     return issues
 
 
-def check_pat_expiry() -> list[str]:
-    """检查 GitHub PAT 过期天数 (需要 GITHUB_PAT env)."""
-    if not GITHUB_PAT:
-        return []  # 没传 token 就跳过 (这是 fine-grained PAT, 自检需要)
+def _token_days_left(token: str, api_url: str):
+    """用 token 请求 api_url, 从 GitHub-Authentication-Token-Expiration 响应头读剩余天数.
+    返回 (days_left, 'YYYY-MM-DD') 或 None(无过期头/请求失败).
+    注意: api_url 必须是该 token 有权访问的端点(否则 403 拿不到头) —— fine-grained PAT
+    只给某仓 Contents/Metadata 时, 用该仓的 /repos/{owner}/{repo} 端点, 不能用 /user."""
+    if not token:
+        return None
     try:
         req = urllib.request.Request(
-            'https://api.github.com/user',
+            api_url,
             headers={
-                'Authorization': f'Bearer {GITHUB_PAT}',
+                'Authorization': f'Bearer {token}',
                 'Accept': 'application/vnd.github+json',
                 'X-GitHub-Api-Version': '2022-11-28',
             },
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
-            # PAT 过期日期在 GitHub-Authentication-Token-Expiration 响应头
+            # 格式: "2026-09-06 14:54:33 UTC"
             exp_header = resp.headers.get('GitHub-Authentication-Token-Expiration', '')
             if not exp_header:
-                return []  # 老 token 没有过期头
-            # 格式: "2026-06-14 14:54:33 UTC"
+                return None  # 无过期头 (Actions GITHUB_TOKEN / 经典无期限 token)
             exp_str = exp_header.split('UTC')[0].strip()
             exp_dt = datetime.strptime(exp_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
-            days_left = (exp_dt - datetime.now(timezone.utc)).days
-            if days_left <= PAT_EXPIRY_WARN_DAYS:
-                return [f"🔑 <b>PAT 剩 {days_left} 天过期</b> ({exp_dt.strftime('%Y-%m-%d')}) — 须 <a href='https://github.com/settings/personal-access-tokens'>续期</a>"]
+            return (exp_dt - datetime.now(timezone.utc)).days, exp_dt.strftime('%Y-%m-%d')
     except (urllib.error.URLError, urllib.error.HTTPError, ValueError) as e:
-        # 自检失败不当作问题告警 (避免日复一日噪音):
-        # - GH Actions 默认 GITHUB_TOKEN 没 user.read 权限, /user 返回 403
-        # - 如果未来想真正自检 PAT 过期, 需要单独配 PAT (例如 GH_PAT_FOR_OPS secret)
-        log.info("PAT 自检跳过 (token 无 user 权限或异常): %s", str(e)[:80])
-    return []
+        log.info("PAT 自检跳过 (%s): %s", api_url, str(e)[:80])
+        return None
+
+
+def check_pat_expiry() -> list[str]:
+    """检查各 GitHub PAT 剩余天数, 临期(< PAT_EXPIRY_WARN_DAYS)告警.
+    重点: DEPLOY_REPO_TOKEN(推部署仓的 PAT) —— 它过期会让早晚报渲染成功却部署失败
+    (2026-06-08 实际踩过)。用部署仓 metadata 端点验证它(该 token 有 Metadata:Read)。
+    旧的只查 GITHUB_TOKEN(Actions 自带、永不过期)等于白查, 故改成按 token 逐个查。"""
+    out = []
+    # (env 名, 显示名, 该 token 有权访问的验证端点)
+    checks = [
+        ('DEPLOY_REPO_TOKEN', '部署仓 PAT (DEPLOY_REPO_TOKEN)',
+         'https://api.github.com/repos/hawaha112/ai-morning-briefing'),
+        ('GITHUB_PAT', 'GITHUB_PAT', 'https://api.github.com/user'),
+    ]
+    seen = set()
+    for env_name, label, api_url in checks:
+        tok = os.environ.get(env_name, '')
+        if not tok or tok in seen:
+            continue
+        seen.add(tok)
+        res = _token_days_left(tok, api_url)
+        if res is None:
+            continue
+        days_left, exp_date = res
+        log.info("PAT 检查: %s 剩 %d 天 (到期 %s)", label, days_left, exp_date)
+        if days_left <= PAT_EXPIRY_WARN_DAYS:
+            out.append(
+                f"🔑 <b>{label} 剩 {days_left} 天过期</b> ({exp_date}) — 须 "
+                f"<a href='https://github.com/settings/personal-access-tokens'>续期</a> "
+                f"并 <code>gh secret set {env_name}</code>"
+            )
+    return out
 
 
 def check_state_branch_freshness() -> list[str]:

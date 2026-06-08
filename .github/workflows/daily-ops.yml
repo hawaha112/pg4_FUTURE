@@ -35,6 +35,8 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # 兼容旧名 (PAT 自检)
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      # 部署仓 PAT 临期自检 (2026-06-08: 它过期导致早晚报部署失败却无预警, 故纳入每日检查)
+      DEPLOY_REPO_TOKEN: ${{ secrets.DEPLOY_REPO_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4    # main 代码到默认 . (含 daily_ops_check.py)
