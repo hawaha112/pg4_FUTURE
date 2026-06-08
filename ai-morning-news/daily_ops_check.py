@@ -44,6 +44,21 @@ FAILING_SOURCE_ALERT = 5       # >=5 个连失 >=3 次源
 STATE_BRANCH_STALE_HOURS = 36  # briefing-state >= 36h 没 push 告警
 PAT_EXPIRY_WARN_DAYS = 14      # PAT 剩余 < 14 天告警
 
+# 手动管理、无法用 token 自检过期的凭证 (嵌在别处、非 GH secret, 如 routine 提示词里的 PAT)。
+# 硬编码到期日; 剩 <= warn_days 天时 daily-ops 直接 TG 提醒人工续期 (这些过期 = 核心功能停摆)。
+# 续期后记得回来改这里的 expiry 日期。
+MANUAL_TOKEN_EXPIRY = [
+    {
+        'name': 'Routine PAT (claude-routine-pg4future-trigger)',
+        'expiry': '2026-06-14',   # 续期后更新此日期
+        'warn_days': 1,           # 用户要求"到期前一天"再处理
+        'note': ('触发早/晚报+周报的 PAT, 过期则 Anthropic Routine 不再触发(早晚报停)。'
+                 '让 Claude 用 Chrome 续: github.com/settings/personal-access-tokens 新建 fine-grained '
+                 '(Actions: Read and write @ pg4_FUTURE) → 替换 claude.ai/code/routines 那 3 个 routine '
+                 '提示词里的 <code>Authorization: Bearer github_pat_...</code>。'),
+    },
+]
+
 
 def _send_tg(html_text: str) -> bool:
     if not TG_BOT_TOKEN or not TG_CHAT_ID:
@@ -163,6 +178,29 @@ def check_pat_expiry() -> list[str]:
     return out
 
 
+def check_manual_token_expiry() -> list[str]:
+    """硬编码到期日的手动凭证临期检查 (无法用 token 自检的, 如嵌在 routine 提示词里的 PAT).
+    剩 <= 各自 warn_days 天 (或已过期) 时返回提醒, 由 main() 直接推 TG。"""
+    out = []
+    today = datetime.now(timezone.utc).date()
+    for t in MANUAL_TOKEN_EXPIRY:
+        try:
+            exp = datetime.strptime(t['expiry'], '%Y-%m-%d').date()
+        except (ValueError, KeyError):
+            continue
+        days_left = (exp - today).days
+        if days_left <= t.get('warn_days', PAT_EXPIRY_WARN_DAYS):
+            if days_left < 0:
+                head = f"🔴 <b>{t['name']} 已过期 {-days_left} 天</b> ({t['expiry']})"
+            elif days_left == 0:
+                head = f"⏰ <b>{t['name']} 今天到期</b> ({t['expiry']})"
+            else:
+                head = f"⏰ <b>{t['name']} 还有 {days_left} 天过期</b> ({t['expiry']})"
+            log.warning("手动凭证临期: %s 剩 %d 天", t['name'], days_left)
+            out.append(f"{head}\n{t.get('note', '')}")
+    return out
+
+
 def check_state_branch_freshness() -> list[str]:
     """检查 briefing-state 分支最后一次 push 时间."""
     try:
@@ -274,6 +312,12 @@ def main():
             labels=['security', 'needs-human'],
         )
 
+    # 2c. 手动凭证临期 (无法自检的, 如 routine PAT) → 直接 TG。
+    #     这些过期 = 核心功能停摆(早晚报不再触发), 时效强, 走用户最活跃的 TG 而非 GH issue。
+    manual_issues = check_manual_token_expiry()
+    if manual_issues:
+        _send_tg("🔑 <b>凭证临期提醒</b>(到期前需人工续期)\n\n" + "\n\n".join(manual_issues))
+
     # 3. briefing-state stale → 开 issue (流水线可能死了, 必须人工查)
     stale_issues = check_state_branch_freshness()
     if stale_issues:
@@ -287,7 +331,7 @@ def main():
             labels=['critical', 'needs-human'],
         )
 
-    if not (source_issues or pat_issues or stale_issues):
+    if not (source_issues or pat_issues or manual_issues or stale_issues):
         log.info("✅ 所有检查通过, 系统健康, 完全静默")
     else:
         log.info("📋 检查完成 (问题已自治处理或开 issue, 不推 TG raw 告警)")
