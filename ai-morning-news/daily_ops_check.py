@@ -153,8 +153,10 @@ def check_pat_expiry() -> list[str]:
     旧的只查 GITHUB_TOKEN(Actions 自带、永不过期)等于白查, 故改成按 token 逐个查。"""
     out = []
     # (env 名, 显示名, 该 token 有权访问的验证端点)
+    # 注: 部署已改用 SSH deploy key(永不过期), DEPLOY_REPO_TOKEN 仅兜底 →
+    # 它过期不影响部署, 续期可选(标签里写明, 避免误报成紧急)。
     checks = [
-        ('DEPLOY_REPO_TOKEN', '部署仓 PAT (DEPLOY_REPO_TOKEN)',
+        ('DEPLOY_REPO_TOKEN', '部署仓兜底 PAT (已改用 SSH key, 过期不影响部署, 续期可选)',
          'https://api.github.com/repos/hawaha112/ai-morning-briefing'),
         ('GITHUB_PAT', 'GITHUB_PAT', 'https://api.github.com/user'),
     ]
