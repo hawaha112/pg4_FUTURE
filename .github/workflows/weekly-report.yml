@@ -35,6 +35,8 @@ jobs:
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
       TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
       BRIEFING_URL: ${{ secrets.BRIEFING_URL }}
+      # 部署认证: SSH deploy key 优先(永不过期), DEPLOY_REPO_TOKEN 仅兜底
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       DEPLOY_REPO_TOKEN: ${{ secrets.DEPLOY_REPO_TOKEN }}
       DEPLOY_REPO: hawaha112/ai-morning-briefing
 
@@ -140,10 +142,18 @@ jobs:
             echo "::warning::output/weekly 为空,跳过部署"
             exit 0
           fi
+          # 部署认证: SSH deploy key 优先(永不过期), DEPLOY_REPO_TOKEN(PAT, 会过期)仅兜底
+          if [ -n "${DEPLOY_SSH_KEY:-}" ]; then
+            KEYFILE=$(mktemp); printf '%s\n' "$DEPLOY_SSH_KEY" > "$KEYFILE"; chmod 600 "$KEYFILE"
+            export GIT_SSH_COMMAND="ssh -i $KEYFILE -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+            REPO_URL="git@github.com:${DEPLOY_REPO}.git"
+            echo "部署认证: SSH deploy key"
+          else
+            REPO_URL="https://x-access-token:${DEPLOY_REPO_TOKEN}@github.com/${DEPLOY_REPO}.git"
+            echo "部署认证: PAT 兜底"
+          fi
           DEPLOY_TMP=$(mktemp -d)
-          git clone --depth 1 \
-            "https://x-access-token:${DEPLOY_REPO_TOKEN}@github.com/${DEPLOY_REPO}.git" \
-            "$DEPLOY_TMP" 2>&1 | tail -2
+          git clone --depth 1 "$REPO_URL" "$DEPLOY_TMP" 2>&1 | tail -2
           mkdir -p "$DEPLOY_TMP/archive/weekly"
           cp -r output/weekly/* "$DEPLOY_TMP/archive/weekly/"
           cd "$DEPLOY_TMP"
@@ -158,6 +168,7 @@ jobs:
             git push origin main
             echo "✓ 周报已部署"
           fi
+          [ -n "${KEYFILE:-}" ] && rm -f "$KEYFILE" 2>/dev/null || true
 
       - name: Send TG notification
         if: success()

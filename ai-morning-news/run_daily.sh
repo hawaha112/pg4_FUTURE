@@ -426,13 +426,24 @@ DEPLOY_OK=false
 echo "开始部署..." >> "$LOG_FILE"
 
 DEPLOY_TMP="/tmp/ai_briefing_deploy_$$"
+DEPLOY_REPO="${DEPLOY_REPO:-hawaha112/ai-morning-briefing}"
+DEPLOY_SSH_KEYFILE=""
 # REPO_URL 优先级：
-#   1. DEPLOY_REPO_TOKEN env（云端 GH Actions） → 拼 PAT 认证 URL
-#   2. output/.git remote（Mac 本地，已 clone 过部署仓库）
-#   3. DEPLOY_REPO_URL env（手动覆盖）
-if [ -n "${DEPLOY_REPO_TOKEN:-}" ]; then
-    DEPLOY_REPO="${DEPLOY_REPO:-hawaha112/ai-morning-briefing}"
+#   1. DEPLOY_SSH_KEY env（推荐, SSH deploy key, 永不过期 → 无需续 token） → SSH URL + GIT_SSH_COMMAND
+#   2. DEPLOY_REPO_TOKEN env（兜底, PAT, 会过期；daily-ops 会临期告警） → PAT 认证 URL
+#   3. output/.git remote（Mac 本地，已 clone 过部署仓库）
+#   4. DEPLOY_REPO_URL env（手动覆盖）
+if [ -n "${DEPLOY_SSH_KEY:-}" ]; then
+    DEPLOY_SSH_KEYFILE="$(mktemp)"
+    printf '%s\n' "${DEPLOY_SSH_KEY}" > "$DEPLOY_SSH_KEYFILE"
+    chmod 600 "$DEPLOY_SSH_KEYFILE"
+    # IdentitiesOnly: 只用这把 key; accept-new: 首次自动信任 github.com host key (CI 无 known_hosts)
+    export GIT_SSH_COMMAND="ssh -i ${DEPLOY_SSH_KEYFILE} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+    REPO_URL="git@github.com:${DEPLOY_REPO}.git"
+    echo "  部署认证: SSH deploy key (永不过期)" >> "$LOG_FILE"
+elif [ -n "${DEPLOY_REPO_TOKEN:-}" ]; then
     REPO_URL="https://x-access-token:${DEPLOY_REPO_TOKEN}@github.com/${DEPLOY_REPO}.git"
+    echo "  部署认证: PAT 兜底 (会过期)" >> "$LOG_FILE"
 else
     REPO_URL=$(cd "$PROJECT_DIR/output" && git remote get-url origin 2>/dev/null || echo "")
     if [ -z "$REPO_URL" ]; then
@@ -699,5 +710,8 @@ if [ "$DEPLOY_OK" = true ]; then
         echo "  ⚠️ dashboard 后置部署跳过（无 git 配置）" >> "$LOG_FILE"
     fi
 fi
+
+# 清理临时 SSH 私钥(若本次走 SSH 部署)
+[ -n "${DEPLOY_SSH_KEYFILE:-}" ] && rm -f "$DEPLOY_SSH_KEYFILE" 2>/dev/null || true
 
 echo "每日出报任务完成" >> "$LOG_FILE"

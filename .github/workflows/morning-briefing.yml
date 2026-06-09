@@ -56,6 +56,8 @@ jobs:
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
       TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
       BRIEFING_URL: ${{ secrets.BRIEFING_URL }}
+      # 部署认证: SSH deploy key 优先(永不过期), DEPLOY_REPO_TOKEN 仅兜底
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       DEPLOY_REPO_TOKEN: ${{ secrets.DEPLOY_REPO_TOKEN }}
       DEPLOY_REPO: hawaha112/ai-morning-briefing
 
