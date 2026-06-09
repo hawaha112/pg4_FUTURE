@@ -547,17 +547,6 @@
         "enabled": true
       },
       {
-        "name": "One Useful Thing",
-        "tier": 1,
-        "category": "research",
-        "url": "https://www.oneusefulthing.org/feed",
-        "icon": "🧰",
-        "color": "#5E35B1",
-        "description": "Ethan Mollick 的 AI 实用与落地观察",
-        "ai_only": true,
-        "enabled": true
-      },
-      {
         "name": "Ars Technica AI",
         "tier": 2,
         "category": "media",
@@ -798,6 +787,27 @@
         "description": "Open WebUI 版本发布（本地 LLM 界面）",
         "ai_only": true,
         "enabled": true
+      },
+      {
+        "name": "Lilian Weng",
+        "tier": 1,
+        "category": "researcher",
+        "url": "https://lilianweng.github.io/index.xml",
+        "icon": "🧠",
+        "color": "#DB2777",
+        "description": "Lilian Weng（前 OpenAI 研究负责人）深度 ML 综述，低频高信号",
+        "ai_only": true,
+        "vip": true
+      },
+      {
+        "name": "BAIR Blog",
+        "tier": 1,
+        "category": "research",
+        "url": "https://bair.berkeley.edu/blog/feed.xml",
+        "icon": "🐻",
+        "color": "#003262",
+        "description": "Berkeley AI Research 官方研究博客",
+        "ai_only": true
       }
     ],
     "chinese": [
@@ -941,6 +951,16 @@
         "description": "雷峰网（AI / 科技中文媒体）",
         "ai_only": false,
         "enabled": true
+      },
+      {
+        "name": "爱范儿",
+        "tier": 2,
+        "category": "media",
+        "url": "https://www.ifanr.com/feed",
+        "icon": "📱",
+        "color": "#00C29F",
+        "description": "爱范儿（科技 / AI 产品报道，更新勤）",
+        "ai_only": false
       }
     ]
   },
