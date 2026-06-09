@@ -961,6 +961,26 @@
         "color": "#00C29F",
         "description": "爱范儿（科技 / AI 产品报道，更新勤）",
         "ai_only": false
+      },
+      {
+        "name": "机器之心",
+        "tier": 2,
+        "category": "media",
+        "url": "https://wechat2rss.xlab.app/feed/51e92aad2728acdd1fda7314be32b16639353001.xml",
+        "icon": "🤖",
+        "color": "#1A1A2E",
+        "description": "机器之心 公众号（wechat2rss 免登录镜像，约 6h 延迟）",
+        "ai_only": true
+      },
+      {
+        "name": "新智元",
+        "tier": 2,
+        "category": "media",
+        "url": "https://plink.anyfeeder.com/weixin/AI_era",
+        "icon": "🧬",
+        "color": "#0F3460",
+        "description": "新智元 公众号（AnyFeeder 免登录镜像）",
+        "ai_only": true
       }
     ]
   },

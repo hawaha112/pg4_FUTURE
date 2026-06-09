@@ -4,6 +4,18 @@
 
 ---
 
+## ✅ 已落地（2026-06-09）
+
+放弃自托管 WeWe RSS（要微信扫码登录 + 仓库已归档），改走**免登录第三方镜像**，已实抓验证并写入 `config.json` 的 `sources.chinese`：
+
+- **机器之心** → `https://wechat2rss.xlab.app/feed/51e92aad2728acdd1fda7314be32b16639353001.xml`（wechat2rss 免费列表，频道名实测为"机器之心"，约 6h 延迟）
+- **新智元** → `https://plink.anyfeeder.com/weixin/AI_era`（AnyFeeder，实测今天有更新）
+- **量子位** → `https://www.qbitai.com/feed`（官网原生 RSS，早已收录）
+
+⚠️ 这两个是**第三方免费镜像**，有停服/限流/延迟风险；health_tracker 会在连续 10 次失败后自动停用，届时回本文档另寻镜像（wechat2rss id 若失效，重抓 `wechat2rss.xlab.app/list/list` 搜"机器之心"取新 id）。`wewe_rss` 配置块（localhost:3000）保留但**未启用**。
+
+---
+
 ## EXECUTIVE SUMMARY
 
 Getting WeChat public account content as RSS **without any form of login** remains extremely difficult in 2026. WeChat's closed ecosystem actively blocks external scraping. Most "solutions" require at least one initial authentication step (WeChat Reading login, cookie extraction, etc.). However, there are a few genuinely login-free options, particularly for the three target accounts (机器之心, 量子位, 新智元) since they all maintain independent websites with RSS capabilities.
