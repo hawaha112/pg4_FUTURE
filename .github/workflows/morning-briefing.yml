@@ -109,6 +109,13 @@ jobs:
           # edge-tts+mutagen: 口播音频(5-6 分钟 TTS+背景乐)。装不上仅无音频, 不挡早报。
           pip install edge-tts mutagen || echo "⚠️ edge-tts 安装失败(非致命: 本班无音频)"
 
+      # ffmpeg: 口播混音(背景乐+响度标准化)。⚠️ runner 并未预装(2026-06-11 实测
+      # "无 ffmpeg, 退回纯人声"), 必须显式装; 失败仅退纯人声, 不挡早报。
+      - name: Install ffmpeg (口播混音)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg \
+            || echo "⚠️ ffmpeg 安装失败(非致命: 音频退纯人声)"
+
       # ── Kokoro 开源 TTS(仅 BROADCAST_ENGINE=kokoro 时): 模型缓存 + 依赖 ──
       - name: Cache Kokoro models
         if: env.BROADCAST_ENGINE == 'kokoro'
