@@ -1097,10 +1097,11 @@ class LLMAnalyzer:
                  len(drop), n, n - len(drop))
         return [it for i, it in enumerate(items) if i not in drop]
 
-    # 口播稿目标长度: edge-tts 中文新闻声 (zh-CN-YunyangNeural) 实测 ≈317 字/分钟,
-    # 用户要求 5-6 分钟 → 1650-1850 字落点 ≈5.2-5.8 分钟; 越界一次重试。
-    BROADCAST_TARGET_CHARS = (1650, 1850)
-    BROADCAST_HARD_BOUNDS = (1350, 2150)
+    # 口播稿目标长度: edge-tts 晓晓女声 (zh-CN-XiaoxiaoNeural) 实测 ≈290 字/分钟,
+    # 用户要求 5-6 分钟 → 1550-1750 字落点 ≈5.3-6.0 分钟; 越界一次重试。
+    # (换声音记得同步: Yunyang≈317/min → 1650-1850; tts_broadcast.CHARS_PER_MIN 也要改)
+    BROADCAST_TARGET_CHARS = (1550, 1750)
+    BROADCAST_HARD_BOUNDS = (1300, 2050)
 
     def generate_broadcast_script(self, digest: dict, items: list = None) -> str:
         """生成 5-6 分钟的每日 AI 口播稿(电台结构), 供 TTS 合成音频 + 页面文字稿。
@@ -1198,7 +1199,7 @@ class LLMAnalyzer:
                 elif resp2 and abs(len(resp2) - (lo + hi) / 2) < abs(n - (lo + hi) / 2):
                     resp = resp2  # 没达标但更接近, 取较好的一版
             log.info("🎙 口播稿 %d 字 (目标 %d-%d, ≈%.1f 分钟)",
-                     len(resp), lo, hi, len(resp) / 317)
+                     len(resp), lo, hi, len(resp) / 290)
             return resp
         except Exception as e:
             log.warning("⚠️ 口播稿生成失败(跳过): %s", e)

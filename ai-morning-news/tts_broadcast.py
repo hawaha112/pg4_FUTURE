@@ -20,9 +20,10 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
-VOICE = os.environ.get('BROADCAST_VOICE', 'zh-CN-YunyangNeural')
-# 实测 Yunyang ≈317 字/分钟; 目标落点 5.5 分钟
-CHARS_PER_MIN = 317.0
+# 用户 2026-06-10: 换甜美女声 → 晓晓(微软中文音质最佳的温暖女声)。备选 zh-CN-XiaoyiNeural(更年轻俏皮)。
+VOICE = os.environ.get('BROADCAST_VOICE', 'zh-CN-XiaoxiaoNeural')
+# 实测 Xiaoxiao ≈290 字/分钟(Yunyang 317 / Xiaoyi 301); 换声音要重校此值
+CHARS_PER_MIN = float(os.environ.get('BROADCAST_CPM', '290'))
 TARGET_SEC = float(os.environ.get('BROADCAST_TARGET_SEC', '330'))
 MIN_CHARS = 200          # 稿子太短(生成失败的残片)不值得做节目
 INTRO_SEC = 2.3          # 片头音乐独奏
