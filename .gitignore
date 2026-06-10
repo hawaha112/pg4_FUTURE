@@ -46,3 +46,6 @@ twitter_cookies.json
 /briefing_preview.html
 /test_preview.html
 ai-morning-news/archive/
+
+# Kokoro TTS 模型(~400MB, tts_broadcast.py 自动下载, CI 走 actions/cache)
+ai-morning-news/models/

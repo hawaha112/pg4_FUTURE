@@ -20,9 +20,13 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
-# 用户 2026-06-10: 换甜美女声 → 晓晓(微软中文音质最佳的温暖女声)。备选 zh-CN-XiaoyiNeural(更年轻俏皮)。
+# 引擎: edge(微软云声, 零依赖) / kokoro(开源本地模型, 更自然; 失败自动回退 edge)。
+ENGINE = os.environ.get('BROADCAST_ENGINE', 'edge').lower()
+# 声音: edge 用 zh-CN-XiaoxiaoNeural 等; kokoro 用 zf_001/zf_017 等(v1.1-zh 音色)。
 VOICE = os.environ.get('BROADCAST_VOICE', 'zh-CN-XiaoxiaoNeural')
-# 实测 Xiaoxiao ≈290 字/分钟(Yunyang 317 / Xiaoyi 301); 换声音要重校此值
+# kokoro 音色名误配到 edge 时的兜底声
+EDGE_FALLBACK_VOICE = 'zh-CN-XiaoxiaoNeural'
+# 实测语速: Xiaoxiao≈290 字/分钟(Yunyang 317 / Kokoro-zh@1.0≈300); 换声音要重校
 CHARS_PER_MIN = float(os.environ.get('BROADCAST_CPM', '290'))
 TARGET_SEC = float(os.environ.get('BROADCAST_TARGET_SEC', '330'))
 MIN_CHARS = 200          # 稿子太短(生成失败的残片)不值得做节目
@@ -35,18 +39,108 @@ def log(msg):
     print(f"[tts_broadcast] {msg}", flush=True)
 
 
-def _voice_rate(n_chars: int) -> str:
-    """按字数微调语速, 把时长收敛到 TARGET_SEC 附近(±10% 封顶, 听感自然优先)。"""
+def _voice_rate_pct(n_chars: int) -> int:
+    """按字数微调语速(±10% 封顶, 听感自然优先), 把时长收敛到 TARGET_SEC 附近。"""
     est = n_chars / CHARS_PER_MIN * 60.0
     ratio = est / TARGET_SEC - 1.0
-    pct = max(-10, min(10, round(ratio * 100)))
-    return f"{pct:+d}%"
+    return max(-10, min(10, round(ratio * 100)))
 
 
 async def _synth(text: str, rate: str, out_path: Path):
     import edge_tts
     comm = edge_tts.Communicate(text, VOICE, rate=rate)
     await comm.save(str(out_path))
+
+
+# ── Kokoro 开源引擎(BROADCAST_ENGINE=kokoro): 比 Edge 云声更自然, 全本地推理免账号 ──
+# 模型 ~400MB 首次从 GitHub releases 公开直链下载(CI 用 actions/cache 复用),
+# CPU ≈2-3x 实时(6 分钟音频合成 ~3 分钟)。失败自动回退 edge-tts。
+KOKORO_DIR = SCRIPT_DIR / 'models'
+KOKORO_FILES = {
+    'kokoro-v1.1-zh.onnx':
+        'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.1-zh.onnx',
+    'voices-v1.1-zh.bin':
+        'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.1-zh.bin',
+    'kokoro-zh-config.json':
+        'https://huggingface.co/hexgrad/Kokoro-82M-v1.1-zh/raw/main/config.json',
+}
+
+
+def _kokoro_ensure_models() -> bool:
+    import urllib.request
+    KOKORO_DIR.mkdir(parents=True, exist_ok=True)
+    for name, url in KOKORO_FILES.items():
+        p = KOKORO_DIR / name
+        if p.exists() and p.stat().st_size > 1000:
+            continue
+        log(f"下载 Kokoro 模型 {name} ...")
+        try:
+            urllib.request.urlretrieve(url, str(p))
+        except Exception as e:
+            log(f"⚠️ 模型下载失败 {name}: {e}")
+            return False
+    return True
+
+
+def _synth_kokoro(text: str, rate_pct: int, out_path: Path) -> bool:
+    """Kokoro v1.1-zh 合成(按句分块, 英文走 espeak G2P)。成功返回 True。"""
+    try:
+        import re as _re
+        import numpy as np
+        import soundfile as sf
+        from kokoro_onnx import Kokoro
+        from misaki.zh import ZHG2P
+        from misaki import espeak as mespeak
+    except ImportError as e:
+        log(f"⚠️ Kokoro 依赖缺失({e}), 回退 edge-tts")
+        return False
+    if not _kokoro_ensure_models():
+        return False
+    try:
+        _eng = mespeak.EspeakG2P(language='en-us')
+
+        def _en(t):
+            try:
+                return _eng(t)[0]
+            except Exception:
+                return ''
+        g2p = ZHG2P(version='1.1', en_callable=_en)
+        k = Kokoro(str(KOKORO_DIR / 'kokoro-v1.1-zh.onnx'),
+                   str(KOKORO_DIR / 'voices-v1.1-zh.bin'),
+                   vocab_config=str(KOKORO_DIR / 'kokoro-zh-config.json'))
+        # ⚠️ 该 ONNX 导出 speed<1.0 必崩(Expand 节点负尺寸), 只允许 ≥1.0;
+        # 时长控制主要靠稿件字数(LLM 端), 放慢不是必需。
+        speed = max(1.0, min(1.15, 1.0 + rate_pct / 100.0))
+        # 按句切块(≤80 字, Kokoro 单次 510 音素上限), 块间 0.25s 停顿
+        sents = _re.split(r'(?<=[。！？；\n])', text)
+        chunks, cur = [], ''
+        for s in sents:
+            if len(cur) + len(s) > 80 and cur:
+                chunks.append(cur)
+                cur = s
+            else:
+                cur += s
+        if cur.strip():
+            chunks.append(cur)
+        parts, sr = [], 24000
+        for c in chunks:
+            c = c.strip()
+            if not c:
+                continue
+            ph, _ = g2p(c)
+            if not ph:
+                continue
+            samples, sr = k.create(ph, voice=VOICE, speed=speed, is_phonemes=True)
+            parts.append(samples)
+            parts.append(np.zeros(int(sr * 0.25), dtype=samples.dtype))
+        if not parts:
+            log("⚠️ Kokoro 无产出, 回退 edge-tts")
+            return False
+        sf.write(str(out_path), np.concatenate(parts), sr)
+        return True
+    except Exception as e:
+        log(f"⚠️ Kokoro 合成失败({str(e)[:120]}), 回退 edge-tts")
+        return False
 
 
 def _dur_sec(path: Path) -> float:
@@ -81,23 +175,35 @@ def main() -> int:
     out_path = SCRIPT_DIR / 'output' / out_rel
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # ── 1. TTS 人声 ──
-    rate = _voice_rate(len(text))
-    voice_path = SCRIPT_DIR / 'output' / '_broadcast_voice.mp3'
-    try:
-        asyncio.run(_synth(text, rate, voice_path))
-    except Exception as e:
-        log(f"⚠️ edge-tts 合成失败, 跳过音频: {e}")
-        return 0
-    if not voice_path.exists() or voice_path.stat().st_size < 10000:
-        log("⚠️ TTS 产物异常(空/过小), 跳过音频")
-        return 0
+    # ── 1. TTS 人声 (kokoro 优先所选引擎, 失败回退 edge; edge 再失败才放弃) ──
+    rate_pct = _voice_rate_pct(len(text))
+    voice_path = None
+    if ENGINE == 'kokoro':
+        wav = SCRIPT_DIR / 'output' / '_broadcast_voice.wav'
+        if _synth_kokoro(text, rate_pct, wav) \
+                and wav.exists() and wav.stat().st_size > 50000:
+            voice_path = wav
+    if voice_path is None:
+        mp3 = SCRIPT_DIR / 'output' / '_broadcast_voice.mp3'
+        # kokoro 音色名(zf_xxx)不能漏给 edge
+        global VOICE
+        if not VOICE.startswith('zh-') and not VOICE.startswith('en-'):
+            VOICE = EDGE_FALLBACK_VOICE
+        try:
+            asyncio.run(_synth(text, f"{rate_pct:+d}%", mp3))
+        except Exception as e:
+            log(f"⚠️ edge-tts 合成失败, 跳过音频: {e}")
+            return 0
+        if not mp3.exists() or mp3.stat().st_size < 10000:
+            log("⚠️ TTS 产物异常(空/过小), 跳过音频")
+            return 0
+        voice_path = mp3
     try:
         vdur = _dur_sec(voice_path)
     except Exception as e:
         log(f"⚠️ 无法读人声时长({e}), 按估算继续")
         vdur = len(text) / CHARS_PER_MIN * 60.0
-    log(f"人声: {len(text)} 字 · rate {rate} · {vdur/60:.1f} 分钟")
+    log(f"人声({ENGINE}/{VOICE}): {len(text)} 字 · {rate_pct:+d}% · {vdur/60:.1f} 分钟")
 
     # ── 2. 与底乐混音(无 ffmpeg / 无底乐 → 纯人声也照发) ──
     title_date = out_rel.rsplit('/', 1)[-1].replace('.mp3', '')
