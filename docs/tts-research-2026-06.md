@@ -51,3 +51,10 @@ GitHub Actions 4 vCPU 无 GPU(RTF≤2.5)· 免费免账号、权重公开直链 
 ElevenLabs/Cartesia/PlayHT(免费层仅需求 3-20% 且禁商用) · Azure F0(要绑卡+音色同 edge) ·
 讯飞免费档(传统参数合成) · OmniVoice 社区 ONNX(顶级桌面 CPU int8 RTF 2.79 → GHA 估 8+, 死) ·
 dots.tts(小红书 2026-06-03, Apache, 中文强, **GPU-only → 新观察名单**, 等量化)
+
+## ❌ Qwen3-TTS GHA 实测裁决(2026-06-11, bench run 27312454008)
+- server 模式(模型只加载一次)+ INT8 + 4 线程, 1700 字: **40 分钟预算内只完成 ~2/3 块 → runner 真实 RTF≈10**
+- 社区 "Zen3 RTF 2.02"(Ryzen 6800H 物理机)在 GHA 共享 vCPU(EPYC 7763, 无 AVX-512/VNNI)上不成立
+- **结论: 免费 CI CPU 上不可行**。代码路径(tts_broadcast._synth_qwen3, 链式回退)保留,
+  触发条件: 自托管 runner / GPU / 引擎未来出大幅加速。回退链实测两次完美兜底。
+- E 级以上质量的现实路径: Gemini TTS 免费 key(待用户提供) 或 付费区(百炼 ¥8/月)。

@@ -62,12 +62,12 @@ jobs:
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       DEPLOY_REPO_TOKEN: ${{ secrets.DEPLOY_REPO_TOKEN }}
       DEPLOY_REPO: hawaha112/ai-morning-briefing
-      # 口播 TTS: qwen3(LLM级, 慢但最自然) / kokoro / edge — 链式回退
-      # 用户 2026-06-11 盲听: "E(Qwen3 vivian)确实质量更好" → 转正
-      BROADCAST_ENGINE: qwen3
-      BROADCAST_VOICE: vivian
-      QWEN3_TTS_BIN: /tmp/qwen3-tts-engine/qwen_tts
-      QWEN3_BUDGET_SEC: '1500'
+      # 口播 TTS: kokoro(开源, 用户选定 zf_017) / edge — 链式回退
+      # ⚠️ qwen3(用户盲听最佳)已实测【GHA 上不可行】: runner RTF≈10, 40 分钟做不完
+      #   6 分钟音频(bench run 27312454008, 2026-06-11)。代码路径保留, 只在有更快
+      #   硬件(自托管 runner/GPU)时再启用。E 级质量的现实路径 = Gemini API(免费 key)。
+      BROADCAST_ENGINE: kokoro
+      BROADCAST_VOICE: zf_017
 
     steps:
       - name: Checkout main (代码)
