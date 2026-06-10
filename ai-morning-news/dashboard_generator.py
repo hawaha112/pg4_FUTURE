@@ -577,7 +577,8 @@ def main():
         ok = r.get('sources_healthy', 0)
         dead = len(r.get('dead_sources') or [])
         archive_href = _archive_url(run_id, shift)
-        if archive_href:
+        # kept=0 的班次没有可看的归档(空壳页), 不挂链接 — 免得用户点进空页面
+        if archive_href and kept > 0:
             time_cell = f'<a href="{escape(archive_href)}" target="_blank" title="打开本次归档">{escape(label)} ↗</a>'
         else:
             time_cell = escape(label)
@@ -1228,6 +1229,50 @@ def main():
 {week_important_html}
 
 {week_entities_html}
+
+  <!-- ⚖️ 判断记分牌: 每周对过去判断的 LLM 复盘对账(scorecard_update.py 每周日更新)。
+       数据在部署仓 archive/data/scorecard.json, 前端 fetch 渲染 —— dashboard 部署在
+       根目录与 archive/ 两处, 路径双试兜底; 数据不存在(尚未积累)则整块隐藏。 -->
+  <div id="scorecard" style="display:none;margin:32px 0 8px">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px">⚖️ 判断记分牌</div>
+    <div style="font-size:11px;color:var(--text-50);margin-bottom:10px">
+      我们每天发判断, 每周日回头对账 —— 对了认、错了也认
+    </div>
+    <div id="sc-summary" style="font-size:13px;margin-bottom:10px"></div>
+    <div id="sc-list" style="display:grid;gap:6px"></div>
+  </div>
+  <script>
+  (function() {{
+    var LBL = {{correct:'✅ 对了', partially:'🟡 部分对', wrong:'❌ 错了', unverifiable:'⚪ 无法验证'}};
+    function tryFetch(paths) {{
+      if (!paths.length) return Promise.reject();
+      return fetch(paths[0]).then(function(r) {{
+        if (!r.ok) throw 0;
+        return r.json();
+      }}).catch(function() {{ return tryFetch(paths.slice(1)); }});
+    }}
+    tryFetch(['archive/data/scorecard.json', 'data/scorecard.json']).then(function(d) {{
+      if (!d || !d.total_scored) return;
+      var c = d.counts || {{}};
+      document.getElementById('sc-summary').innerHTML =
+        '已复盘 <b>' + d.total_scored + '</b> 个判断 · 正确率 <b>' + (d.accuracy_pct || 0) +
+        '%</b> &nbsp;(✅' + (c.correct||0) + ' · 🟡' + (c.partially||0) +
+        ' · ❌' + (c.wrong||0) + ' · ⚪' + (c.unverifiable||0) + ')';
+      var list = document.getElementById('sc-list');
+      (d.recent || []).forEach(function(r) {{
+        var div = document.createElement('div');
+        div.style.cssText = 'padding:8px 10px;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:8px;font-size:12.5px;line-height:1.6';
+        var safe = function(s) {{ return String(s == null ? '' : s).replace(/[&<>"']/g, function(ch) {{
+          return {{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[ch]; }}); }};
+        div.innerHTML = '<b>' + (LBL[r.verdict] || r.verdict) + '</b> · ' +
+          '<span style="color:var(--text-50)">' + safe(r.date) + ' ' + safe(r.shift) + '</span><br>' +
+          safe(r.title) + (r.reason ? '<br><span style="color:var(--text-50)">↳ ' + safe(r.reason) + '</span>' : '');
+        list.appendChild(div);
+      }});
+      document.getElementById('scorecard').style.display = 'block';
+    }}).catch(function() {{}});
+  }})();
+  </script>
 
   <details class="run-history">
     <summary>📜 历史跑记录（最近 14 次）<span class="hist-toggle">▾</span></summary>

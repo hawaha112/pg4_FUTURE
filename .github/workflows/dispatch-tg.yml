@@ -6,6 +6,9 @@ name: Dispatch TG Message
 #   gh workflow run dispatch-tg.yml -R hawaha112/pg4_FUTURE \
 #     -f message="<b>your html message</b>" \
 #     -f preset=none
+#   发音频(message 作 caption):
+#   gh workflow run dispatch-tg.yml -R hawaha112/pg4_FUTURE \
+#     -f audio_url="https://.../x.mp3" -f message="试听"
 
 on:
   workflow_dispatch:
@@ -25,6 +28,11 @@ on:
         type: choice
         options: [none, dashboard_snapshot, health_ping]
         default: none
+      audio_url:
+        description: '可选: 音频 URL — 设了就改为下载并 sendAudio(message 作 caption), 不发文本'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   send:
@@ -42,5 +50,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Send TG audio (audio_url 模式)
+        if: inputs.audio_url != ''
+        run: |
+          curl -sL --max-time 120 "${{ inputs.audio_url }}" -o /tmp/dispatch_audio.mp3
+          SZ=$(wc -c < /tmp/dispatch_audio.mp3)
+          [ "$SZ" -gt 10000 ] || { echo "::error::下载的音频过小(${SZ}B), URL 可能错了"; exit 1; }
+          curl -s --max-time 120 "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendAudio" \
+            -F "chat_id=${TG_CHAT_ID}" \
+            -F "audio=@/tmp/dispatch_audio.mp3" \
+            -F "title=$(basename "${{ inputs.audio_url }}" .mp3)" \
+            -F "performer=AI Morning Briefing" \
+            -F "caption=${MSG}" -F "parse_mode=HTML" | head -c 300
+          echo ""
+
       - name: Build + send TG message
+        if: inputs.audio_url == ''
         run: python3 .github/scripts/build_tg_message.py

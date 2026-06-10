@@ -102,6 +102,8 @@ jobs:
           # curl_cffi: tls_client 用它模拟 Chrome TLS 指纹, 绕 Cloudflare/Substack 反爬。
           # 不装则回退裸 urllib → Substack(Import AI 等)/严审站间歇 403。装不上不致命。
           pip install curl_cffi || echo "⚠️ curl_cffi 安装失败(非致命: 回退 urllib, 严审站可能 403)"
+          # edge-tts+mutagen: 口播音频(5-6 分钟 TTS+背景乐)。装不上仅无音频, 不挡早报。
+          pip install edge-tts mutagen || echo "⚠️ edge-tts 安装失败(非致命: 本班无音频)"
 
       - name: Install Claude Code CLI
         shell: bash

@@ -128,6 +128,41 @@ jobs:
           DAYS="${{ github.event.inputs.days || '7' }}"
           python3 weekly_report.py --days "$DAYS" 2>&1 | tee weekly_run.log
 
+      # 判断记分牌: 复盘 5-45 天前的「今日判断」对错(LLM 批量裁决), 结果推回部署仓
+      # archive/data/scorecard.{jsonl,json}, 仪表盘前端 fetch 渲染。需要 proxy 存活,
+      # 故放在 Stop claude_proxy 之前; 失败不挡周报(脚本内部全兜底 exit 0)。
+      - name: Update judgment scorecard
+        if: success()
+        working-directory: ai-morning-news
+        shell: bash
+        run: |
+          if [ -n "${DEPLOY_SSH_KEY:-}" ]; then
+            KEYFILE=$(mktemp); printf '%s\n' "$DEPLOY_SSH_KEY" > "$KEYFILE"; chmod 600 "$KEYFILE"
+            export GIT_SSH_COMMAND="ssh -i $KEYFILE -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+            REPO_URL="git@github.com:${DEPLOY_REPO}.git"
+          else
+            REPO_URL="https://x-access-token:${DEPLOY_REPO_TOKEN}@github.com/${DEPLOY_REPO}.git"
+          fi
+          SC_TMP=$(mktemp -d)
+          if git clone --depth 1 "$REPO_URL" "$SC_TMP" 2>&1 | tail -1; then
+            python3 scorecard_update.py "$SC_TMP"
+            cd "$SC_TMP"
+            git config user.email "action@github.com"
+            git config user.name "GitHub Action"
+            git add archive/data 2>/dev/null || true
+            if ! git diff --cached --quiet; then
+              git commit -m "scorecard: weekly verdict update"
+              git push origin main || echo "::warning::记分牌 push 失败(下周再试)"
+            else
+              echo "记分牌无变更"
+            fi
+            cd -
+          else
+            echo "::warning::记分牌 clone 失败, 跳过"
+          fi
+          rm -rf "$SC_TMP"
+          [ -n "${KEYFILE:-}" ] && rm -f "$KEYFILE" || true
+
       - name: Stop claude_proxy
         if: always()
         run: |

@@ -151,6 +151,31 @@ def _trust_badge(item):
     return ('trust-weak', '◦ 单源')
 
 
+def _days_badge(item):
+    """跨日持续事件徽章: 事件首次入库早于今天 → '🔁 第N天' (此事是老事件的新进展)。
+
+    数据 _first_seen 由 briefing_renderer 从 canonical_events.first_seen_at 注入。
+    当天新事件(绝大多数)返回 '' 不显示——徽章只给"持续追踪中"的少数事件提供连续感。
+    """
+    fs = str(item.get('_first_seen') or '').strip()
+    if len(fs) < 10:
+        return ''
+    try:
+        from datetime import datetime as _dt, timezone as _tz
+        d0 = _dt.fromisoformat(fs.replace('Z', '+00:00'))
+        if d0.tzinfo is None:
+            d0 = d0.replace(tzinfo=_tz.utc)
+        # 两侧统一本地(北京)日: AM 班渲染在北京 06:0x = UTC 前一日 22:0x,
+        # 若左侧取 UTC 日期会系统性少 1 天(『第2天』徽章在早班永不出现)。
+        days = (_dt.now(_tz.utc).astimezone().date() - d0.astimezone().date()).days
+    except (ValueError, TypeError):
+        return ''
+    if days < 1:
+        return ''
+    return (f'<span class="days-badge" title="此事件 {days} 天前首次报道, 今天有新进展">'
+            f'🔁 第 {days + 1} 天</span>')
+
+
 # ── MECE 主题树: 单维度(新闻核心主题域)、互斥、穷尽。每条归到唯一叶子。──
 # 页面按顶层 6 域分组, 叶子作为卡片子标签。(emoji, 域名, key, [叶子...])
 _TOPIC_TREE = [
@@ -469,9 +494,10 @@ def generate_html(all_items, config, digest=None, meta=None):
 
             _ftb = _trust_badge(item)
             _ftrust = f'<span class="trust-badge {_ftb[0]}">{_ftb[1]}</span> ' if _ftb else ''
+            _fdays = _days_badge(item)
             src_html = (
                 f'<div class="featured-source">'
-                f'{_ftrust}{tier_badge_html} {icon} {source_name}{time_part}'
+                f'{_ftrust}{_fdays}{tier_badge_html} {icon} {source_name}{time_part}'
                 f'</div>'
             )
 
@@ -632,7 +658,8 @@ def generate_html(all_items, config, digest=None, meta=None):
             status_badge = f' <span style="color:{st.get("color","#888")};font-size:9px;font-weight:600">{st.get("icon","")} {st.get("label","")}</span>'
         _tb = _trust_badge(item)
         trust_html = f'<span class="trust-badge {_tb[0]}">{_tb[1]}</span> ' if _tb else ''
-        z5_html = f'<div class="z5">{trust_html}{tier_badge_html} {icon} {source_name}{time_part}{status_badge}</div>'
+        _dbadge = _days_badge(item)
+        z5_html = f'<div class="z5">{trust_html}{_dbadge}{tier_badge_html} {icon} {source_name}{time_part}{status_badge}</div>'
 
         # 多源报道 pill（普通卡片右上角）
         cluster_size = item.get('_cluster_size', 1) or 1
@@ -1076,18 +1103,37 @@ def generate_html(all_items, config, digest=None, meta=None):
     js_content = _load_template('script.js')
     page_template = Template(_load_template('page.html'))
 
-    # 口播稿区块 (C): meta['broadcast_script'] 有值时渲染一个可复制区块, 供音频/视频取用
+    # 口播稿区块: 音频播放器(5-6 分钟 TTS+背景乐) + 可折叠文字稿。
+    # 音频文件在渲染之后由 tts_broadcast.py 生成 —— 这里按约定路径先引用,
+    # TTS 失败时播放器 onerror 自动隐藏(只剩文字稿), 不会出现死链 UI。
     broadcast_html = ''
     _bc = ((meta or {}).get('broadcast_script') or '').strip()
     if _bc:
+        _bc_audio = ((meta or {}).get('broadcast_audio') or '').strip()
+        _audio_html = ''
+        if _bc_audio:
+            # preload=metadata: 页面加载即探测文件头 — 音频缺失(TTS 失败/超14天被裁)时
+            # onerror 立刻隐藏播放器, 而非等用户点了播放才报错。带宽代价仅请求头。
+            _audio_html = (
+                f'<audio class="bc-player" controls preload="metadata" '
+                f'src="{_safe_escape(_bc_audio)}" '
+                "onerror=\"var w=this.closest('.bc-audio-wrap');if(w)w.hidden=true\"></audio>"
+            )
+            _audio_html = (
+                '<div class="bc-audio-wrap">'
+                f'{_audio_html}'
+                '<p class="bc-hint">🎧 今日音频版 · 约 5-6 分钟 · 通勤可听</p>'
+                '</div>'
+            )
         broadcast_html = (
             '<section class="broadcast">'
-            '<div class="bc-head"><h2 class="bc-title">🎙 今日口播稿</h2>'
+            '<div class="bc-head"><h2 class="bc-title">🎙 今日口播</h2>'
             '<button class="bc-copy" type="button" '
             "onclick=\"navigator.clipboard.writeText(document.getElementById('bcText').innerText)"
-            ".then(()=>{this.textContent='已复制 ✓'})\">复制全文</button></div>"
-            '<p class="bc-hint">~60–90 秒口语稿 · 可直接念或喂 TTS</p>'
-            f'<pre class="bc-text" id="bcText">{_safe_escape(_bc)}</pre>'
+            ".then(()=>{this.textContent='已复制 ✓'})\">复制文稿</button></div>"
+            f'{_audio_html}'
+            '<details class="bc-details"><summary>查看文字稿</summary>'
+            f'<pre class="bc-text" id="bcText">{_safe_escape(_bc)}</pre></details>'
             '</section>'
         )
 

@@ -581,6 +581,115 @@ document.getElementById('searchBox').addEventListener('input', _debounce(functio
     _applyFilters();
 }, 150));
 
+// ═══ 跨期历史搜索: 搜索词 ≥2 字时, 从 archive/data/ 的月度索引里搜往期事件 ═══
+// 索引由 archive_appender.py 在每次部署时追加(search-YYYY-MM.jsonl, 每行
+// {i:事件id, d:'YYYY-MM-DD-am', t:标题, k:域key, m:重要度}), 永久累积。
+// 懒加载: 第一次搜索才 fetch manifest + 最近 6 个月; 「搜索更早」再加载全部。
+(function() {
+    var box = document.getElementById('searchBox');
+    var panel = document.getElementById('history-results');
+    if (!box || !panel) return;
+    // 本 JS 内联进 index.html, 归档页是它的 sed 副本(archive/ 子目录下) → 同一段代码
+    // 在两种路径下都会跑, 运行时探测自适应(fetch 根 + 结果链接前缀都要变)。
+    var IN_ARCHIVE = location.pathname.indexOf('/archive/') >= 0;
+    var ROOT = IN_ARCHIVE ? 'data/' : 'archive/data/';
+    var PAGE_PREFIX = IN_ARCHIVE ? '' : 'archive/';
+    var INITIAL_MONTHS = 6, MAX_SHOW = 30;
+    var _idx = null;                   // [{i,d,t,k,m}], 按月加载合并
+    var _months = null;                // manifest 里的全部月份(新→旧)
+    var _loadedAll = false, _loading = false;
+
+    function fetchJsonl(url) {
+        return fetch(url).then(function(r) {
+            if (!r.ok) throw new Error(r.status);
+            return r.text();
+        }).then(function(txt) {
+            var out = [];
+            txt.split('\n').forEach(function(line) {
+                line = line.trim();
+                if (!line) return;
+                try { out.push(JSON.parse(line)); } catch (e) {}
+            });
+            return out;
+        });
+    }
+    function loadMonths(months) {
+        return Promise.all(months.map(function(m) {
+            return fetchJsonl(ROOT + 'search-' + m + '.jsonl').catch(function() { return []; });
+        })).then(function(parts) {
+            parts.forEach(function(rows) { _idx = (_idx || []).concat(rows); });
+        });
+    }
+    function ensureIndex(all) {
+        if (_loading) return Promise.resolve();
+        if (_idx !== null && (!all || _loadedAll)) return Promise.resolve();
+        _loading = true;
+        var p = (_months !== null)
+            ? Promise.resolve()
+            : fetch(ROOT + 'manifest.json').then(function(r) {
+                  if (!r.ok) throw new Error(r.status);
+                  return r.json();
+              }).then(function(m) { _months = (m && m.months) || []; });
+        return p.then(function() {
+            var want = all ? _months : _months.slice(0, INITIAL_MONTHS);
+            var have = _idx === null ? [] : _months.slice(0, INITIAL_MONTHS);
+            var todo = want.filter(function(m) { return have.indexOf(m) < 0; });
+            if (all) _loadedAll = true;
+            if (_idx === null) _idx = [];
+            return loadMonths(todo);
+        }).catch(function() {
+            // 网络瞬断: 状态归零, 下次输入可重试(不锁死本页搜索)
+            if (_months === null || !_months.length) { _months = null; _idx = null; }
+        }).then(function() { _loading = false; });
+    }
+    function render(q) {
+        if (!q || q.length < 2 || !_idx) { panel.hidden = true; return; }
+        var ql = q.toLowerCase();
+        var hits = _idx.filter(function(r) {
+            return (r.t || '').toLowerCase().indexOf(ql) >= 0;
+        });
+        // 新→旧排序(d 是 YYYY-MM-DD-shift, 字典序即时间序)
+        hits.sort(function(a, b) { return (b.d || '').localeCompare(a.d || ''); });
+        var shown = hits.slice(0, MAX_SHOW);
+        var canLoadMore = !_loadedAll && _months && _months.length > INITIAL_MONTHS;
+        if (!shown.length && !canLoadMore) { panel.hidden = true; return; }
+        var html;
+        if (shown.length) {
+            html = '<div class="hr-head">📅 往期相关 · ' + hits.length + ' 条' +
+                (hits.length > MAX_SHOW ? '(显示前 ' + MAX_SHOW + ')' : '') + '</div>';
+            shown.forEach(function(r) {
+                var d = r.d || '';
+                var page = PAGE_PREFIX + d + '.html';
+                var stars = r.m >= 4 ? '⭐ ' : '';
+                html += '<a class="hr-item" href="' + escHtml(page) +
+                    '#evt-' + encodeURIComponent(r.i || '') + '" target="_blank" rel="noopener">' +
+                    '<span class="hr-date">' + escHtml(d.replace('-am', ' 早').replace('-pm', ' 晚')) + '</span>' +
+                    '<span class="hr-title">' + stars + escHtml(r.t || '') + '</span></a>';
+            });
+        } else {
+            html = '<div class="hr-head">📅 最近 ' + Math.min(INITIAL_MONTHS, (_months || []).length) +
+                ' 个月无往期匹配</div>';
+        }
+        if (canLoadMore) {
+            html += '<button class="hr-more" type="button">搜索更早的归档（共 ' +
+                _months.length + ' 个月）</button>';
+        }
+        panel.innerHTML = html;
+        panel.hidden = false;
+        var more = panel.querySelector('.hr-more');
+        if (more) more.addEventListener('click', function() {
+            more.textContent = '加载中…';
+            ensureIndex(true).then(function() { render(box.value.trim()); });
+        });
+    }
+    box.addEventListener('input', _debounce(function() {
+        var q = this.value.trim();
+        if (q.length < 2) { panel.hidden = true; return; }
+        // 渲染时重读输入框 — 索引加载慢(首次数秒)期间用户改词/清空, 不能用捕获时的旧 q
+        ensureIndex(false).then(function() { render(box.value.trim()); });
+    }, 300));
+})();
+
 // ═══ 导览条: 贴在 header 下方 + 滚动高亮当前所在板块(scroll-spy) ═══
 (function() {
     var nav = document.querySelector('.today-nav');

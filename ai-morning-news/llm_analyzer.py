@@ -1097,42 +1097,109 @@ class LLMAnalyzer:
                  len(drop), n, n - len(drop))
         return [it for i, it in enumerate(items) if i not in drop]
 
-    def generate_broadcast_script(self, digest: dict) -> str:
-        """把今日判断改写成 60-90 秒口播稿(口语/短句/铺垫专有名词), 供 TTS/短视频。
+    # 口播稿目标长度: edge-tts 中文新闻声 (zh-CN-YunyangNeural) 实测 ≈317 字/分钟,
+    # 用户要求 5-6 分钟 → 1650-1850 字落点 ≈5.2-5.8 分钟; 越界一次重试。
+    BROADCAST_TARGET_CHARS = (1650, 1850)
+    BROADCAST_HARD_BOUNDS = (1350, 2150)
 
-        判断是为"读"写的(密集堆专有名词), 念出来听众跟不上 —— 这里专门生成可朗读版。
-        失败返回 ''(调用方据此不渲染口播稿区块)。
+    def generate_broadcast_script(self, digest: dict, items: list = None) -> str:
+        """生成 5-6 分钟的每日 AI 口播稿(电台结构), 供 TTS 合成音频 + 页面文字稿。
+
+        结构: 开场(日期+总起) → 头条深讲2-3条 → 快讯串播 → 今日判断 → 收尾。
+        输入比旧版(只有判断)多了 items —— 头条/快讯取自当天真实条目, 内容够 5-6 分钟。
+        失败返回 ''(调用方据此不渲染口播稿区块、不合成音频)。
         """
         digest = digest or {}
         judgments = digest.get('judgments') or []
-        if not judgments:
+        items = items or []
+        if not judgments and not items:
             return ''
         headline = (digest.get('headline') or '').strip()
-        pts = []
-        for j in judgments[:3]:
-            t = (j.get('title') or '').strip()
-            b = (j.get('body') or '').strip()
-            if t:
-                pts.append(f'- {t}\n  {b}')
-        if not pts:
-            return ''
-        sys_msg = "你是科技播客主播。把要点改写成可以直接念出来的中文口播稿。"
-        user_msg = (
-            "把下面的「今日判断」改写成一段 60-90 秒的口播稿, 用于音频/短视频:\n"
-            "- 纯口语、短句, 像跟朋友讲; 不要书面语堆叠、不要一句塞太多专有名词\n"
-            "- 开场一句钩子抓注意力\n"
-            "- 每件事先用半句话铺垫(这是谁/是什么), 再讲为什么重要\n"
-            "- 自然过渡, 结尾一句收束\n"
-            "- 只输出口播稿正文, 不要标题/小标题/markdown/序号/方括号备注\n\n"
-            + (f'今日主旋律: {headline}\n\n' if headline else '')
-            + '今日判断:\n' + '\n'.join(pts)
+
+        # ── 素材分层: 头条(importance 最高 3 条, 给足上下文) / 快讯(其余 8 条标题+一句话) ──
+        def _imp(it):
+            return (it.get('analysis', {}) or {}).get('importance', 0) or 0
+        ranked = sorted((it for it in items
+                         if (it.get('analysis', {}) or {}).get('ai_relevant', True)),
+                        key=_imp, reverse=True)
+        top, quick = ranked[:3], ranked[3:11]
+
+        def _line(it, full=False):
+            a = it.get('analysis', {}) or {}
+            t = (a.get('chinese_title') or it.get('title') or '').strip()
+            s = (a.get('summary') or '').strip()
+            if not full:
+                return f'- {t}：{s[:80]}'
+            w = (a.get('why_it_matters') or '').strip()
+            d = (a.get('deep_analysis') or a.get('detailed_content') or '').strip()
+            parts = [f'- {t}', f'  摘要: {s[:200]}']
+            if w:
+                parts.append(f'  为什么重要: {w[:200]}')
+            if d:
+                parts.append(f'  深度: {d[:300]}')
+            return '\n'.join(parts)
+
+        jud_txt = '\n'.join(
+            f"- {(j.get('title') or '').strip()}\n  {(j.get('body') or '').strip()}"
+            for j in judgments[:2] if (j.get('title') or '').strip()
         )
+        material = (
+            (f'【今日主旋律】{headline}\n\n' if headline else '')
+            + ('【头条素材(深讲用)】\n' + '\n'.join(_line(it, full=True) for it in top) + '\n\n' if top else '')
+            + ('【快讯素材(串播用)】\n' + '\n'.join(_line(it) for it in quick) + '\n\n' if quick else '')
+            + ('【今日判断(收尾观点用)】\n' + jud_txt if jud_txt else '')
+        )
+        lo, hi = self.BROADCAST_TARGET_CHARS
+
+        sys_msg = (
+            "你是顶级中文科技电台的主播兼撰稿人, 风格沉稳、口语、有观点。"
+            "你写的稿子将直接被 TTS 朗读成音频节目, 听众在通勤路上听。"
+        )
+        user_msg = (
+            f"用下面的素材写一期【{lo}-{hi}字】的每日 AI 早报口播稿(念出来约5-6分钟)。\n\n"
+            "【节目结构(必须按此顺序, 但不要写小标题)】\n"
+            "1. 开场(约80字): 问候听众 + 用一句话点出今天最值得关注的主线\n"
+            "2. 头条深讲(2-3条, 每条250-350字): 每条按 发生了什么→半句背景铺垫→为什么重要(讲机制,不要套话)→一句影响或你的看法。条与条之间用口语过渡(比如「说完这个,再看…」)\n"
+            "3. 快讯串播(5-8条, 每条30-50字): 节奏加快, 一条一两句话, 开头说「接下来是几条快讯」\n"
+            "4. 今日观点(150-250字): 把「今日判断」用口语讲清楚推理链, 开头说类似「最后聊一个观点」\n"
+            "5. 收尾(约50字): 一句收束 + 提醒文字版在早报页 + 下期再见\n\n"
+            "【口播硬规则】\n"
+            "- 纯口语短句, 像跟朋友讲事; 一句话只装一个信息点\n"
+            "- 专有名词第一次出现给半句铺垫(「做AI编程工具的Cursor」)\n"
+            "- 所有数字口语化: 「四十亿美元」不写「$4B」,「百分之三十」不写「30%」; 英文名可保留(GPT、OpenAI)\n"
+            "- 不要 markdown、序号、小标题、括号注释、emoji —— 输出将逐字朗读\n"
+            "- 段落之间空一行(朗读时自然停顿)\n"
+            "- 不确定的事就说「据报道」, 不要把传闻说成事实\n\n"
+            f"【素材】\n{material}\n\n"
+            f"只输出口播稿正文。再次强调: 总字数控制在 {lo}-{hi} 字。"
+        )
+        lo_h, hi_h = self.BROADCAST_HARD_BOUNDS
         try:
-            resp = self._call_api([
+            resp = (self._call_api([
                 {"role": "system", "content": sys_msg},
                 {"role": "user", "content": user_msg},
-            ])
-            return (resp or '').strip()
+            ]) or '').strip()
+            n = len(resp)
+            if resp and not (lo_h <= n <= hi_h):
+                # 越界一次重试: 给出当前字数与精确目标
+                log.info("🎙 口播稿 %d 字越界 [%d,%d], 重试一次", n, lo_h, hi_h)
+                fix = ('压缩' if n > hi_h else '扩充')
+                resp2 = (self._call_api([
+                    {"role": "system", "content": sys_msg},
+                    {"role": "user", "content": user_msg},
+                    {"role": "assistant", "content": resp},
+                    {"role": "user", "content":
+                        f"这版 {n} 字, 不符合 {lo}-{hi} 字要求。请{fix}到 {lo}-{hi} 字: "
+                        f"保持同样结构与口语风格, {'删减次要快讯和重复表述' if n > hi_h else '给头条补充背景与影响分析、增加1-2条快讯'}。"
+                        "只输出修改后的完整口播稿。"},
+                ]) or '').strip()
+                if resp2 and lo_h <= len(resp2) <= hi_h:
+                    resp = resp2
+                elif resp2 and abs(len(resp2) - (lo + hi) / 2) < abs(n - (lo + hi) / 2):
+                    resp = resp2  # 没达标但更接近, 取较好的一版
+            log.info("🎙 口播稿 %d 字 (目标 %d-%d, ≈%.1f 分钟)",
+                     len(resp), lo, hi, len(resp) / 317)
+            return resp
         except Exception as e:
             log.warning("⚠️ 口播稿生成失败(跳过): %s", e)
             return ''

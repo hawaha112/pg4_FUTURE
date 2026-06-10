@@ -339,12 +339,24 @@ if [ -f "$PROJECT_DIR/output/index.html" ]; then
     # 归档页本身就在 archive/ 里，链接直接相对到同目录的 dashboard.html 即可。
     # 实体追踪 chip 的 href="entities/..." 是相对主页（根目录）的；归档页在 archive/ 下，
     # 同样的相对链接会解析成 archive/entities/... → 404。改写成 ../entities/... 回到根目录。
+    # 音频播放器 src="archive/audio/..." 是相对主页的; 归档页在 archive/ 下要去掉前缀。
     sed -e "s|s\.src = 'modal_data\.js'|s.src = '${TODAY_DATE}-${SHIFT}_modal.js'|" \
         -e 's|href="archive/dashboard\.html"|href="dashboard.html"|g' \
         -e 's|href="entities/|href="../entities/|g' \
+        -e 's|src="archive/audio/|src="audio/|g' \
         "$PROJECT_DIR/output/index.html" > "$ARCHIVE_DIR/${TODAY_DATE}-${SHIFT}.html"
     cp "$PROJECT_DIR/output/modal_data.js" "$ARCHIVE_DIR/${TODAY_DATE}-${SHIFT}_modal.js" 2>/dev/null || true
     echo "  已归档: archive/${TODAY_DATE}-${SHIFT}.html" >> "$LOG_FILE"
+fi
+
+# ────────────────────────────────────────────────
+# 第三步半：口播音频 (5-6 分钟 TTS+背景乐, 增值件, 失败绝不挡出报)
+# 产物 output/archive/audio/${TODAY_DATE}-${SHIFT}.mp3 — 部署块 cp -r archive/* 自动带上,
+# 页面 <audio> 已按此约定引用; TG 推送块在早报消息后随发同一文件。
+# ────────────────────────────────────────────────
+if [ -f "$PROJECT_DIR/output/broadcast.txt" ]; then
+    echo "🎙 合成口播音频..." >> "$LOG_FILE"
+    "$PYTHON" "$PROJECT_DIR/tts_broadcast.py" "archive/audio/${TODAY_DATE}-${SHIFT}.mp3" >> "$LOG_FILE" 2>&1 || true
 fi
 
 # 事件库滚动备份（保留最近 7 份），在渲染成功后才备份，保证备份是"可用的快照"
@@ -476,6 +488,20 @@ if [ -n "$REPO_URL" ] && [ -f "$PROJECT_DIR/output/index.html" ]; then
             mkdir -p "$DEPLOY_TMP/entities"
             cp -r "$PROJECT_DIR/output/entities/"* "$DEPLOY_TMP/entities/" 2>/dev/null || true
         fi
+        # 长期归档: 本班事件+判断 幂等追加进部署仓 archive/data/(月度 JSONL + 搜索索引
+        # + 判断库 + manifest)。永久保存, 不受 events.db 30 天清理影响; 失败不挡部署。
+        "$PYTHON" "$PROJECT_DIR/archive_appender.py" \
+            "$PROJECT_DIR/output/archive_payload.json" \
+            "$DEPLOY_TMP/archive/data" >> "$LOG_FILE" 2>&1 || true
+        # 音频只留 14 天: 每班 ~3-4MB, 不清理数月就拖垮 clone/Pages 配额。
+        # ⚠️ 不能用 find -mtime(fresh clone 的 mtime 全是克隆时刻) — 按文件名日期裁。
+        # 老归档页的 <audio> 对被裁文件会 onerror 自动隐藏, 优雅降级。
+        AUDIO_CUTOFF=$(date -u -v-14d +%F 2>/dev/null || date -u -d '14 days ago' +%F)
+        for f in "$DEPLOY_TMP/archive/audio/"*.mp3; do
+            [ -e "$f" ] || continue
+            b=$(basename "$f")
+            [ "${b:0:10}" \< "$AUDIO_CUTOFF" ] && rm -f "$f" || true
+        done
         cd "$DEPLOY_TMP"
         git config user.email "hawaha113@protonmail.com"
         git config user.name "hawaha112"
@@ -484,6 +510,12 @@ if [ -n "$REPO_URL" ] && [ -f "$PROJECT_DIR/output/index.html" ]; then
             git commit -m "Daily update: $(date '+%Y-%m-%d %H:%M')" >> "$LOG_FILE" 2>&1
             if git push origin main >> "$LOG_FILE" 2>&1; then
                 echo "  部署成功" >> "$LOG_FILE"
+                DEPLOY_OK=true
+            # 周日 18:00 周报/记分牌与 pm 班可能并发推同一仓 → non-fast-forward。
+            # rebase 一次重试(部署是整目录覆盖 cp + 幂等 JSONL 追加, 重放安全)。
+            elif git pull --rebase origin main >> "$LOG_FILE" 2>&1 \
+                 && git push origin main >> "$LOG_FILE" 2>&1; then
+                echo "  部署成功 (rebase 重试)" >> "$LOG_FILE"
                 DEPLOY_OK=true
             else
                 echo "  push 失败" >> "$LOG_FILE"
@@ -594,6 +626,40 @@ PYEOF
         echo "  📌 ${SHIFT} 单条更新: 删旧(${PREV_MSG_ID:-无}) → 新 msg_id=${NEW_MSG_ID}（另一班次保留）" >> "$LOG_FILE"
     else
         echo "  ⚠️ 未取到新 msg_id（silent 或发送失败），保留旧 id 不变" >> "$LOG_FILE"
+    fi
+
+    # ── 口播音频推送(增值件): 同班次删旧发新, 槽位 audio_msg_id_{am,pm} ──
+    AUDIO_FILE="$PROJECT_DIR/output/archive/audio/${TODAY_DATE}-${SHIFT}.mp3"
+    if [ "$BRIEFING_SILENT_TG" != "true" ] && [ -f "$AUDIO_FILE" ] && [ -n "$TG_BOT_TOKEN" ]; then
+        AUDIO_MIN=$("$PYTHON" -c "from mutagen.mp3 import MP3;print(f'{MP3(\"$AUDIO_FILE\").info.length/60:.0f}')" 2>/dev/null || echo "")
+        PREV_AUDIO_ID=$("$PYTHON" -c "import json;print(json.load(open('$TG_STATE_FILE')).get('audio_msg_id_${SHIFT}',''))" 2>/dev/null || echo "")
+        tg_delete "$PREV_AUDIO_ID"
+        AUDIO_RESP=$(curl -s --max-time 120 "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendAudio" \
+            -F "chat_id=${TG_CHAT_ID}" \
+            -F "audio=@${AUDIO_FILE}" \
+            -F "title=AI ${RPT} · $(date '+%m-%d') ${SHORT_SHIFT}" \
+            -F "performer=AI Morning Briefing" \
+            -F "caption=🎧 ${AUDIO_MIN:+约 ${AUDIO_MIN} 分钟 · }通勤路上听完今天的 AI") || AUDIO_RESP=""
+        AUDIO_MSG_ID=$(printf '%s' "$AUDIO_RESP" | "$PYTHON" -c "import sys,json;d=json.loads(sys.stdin.read() or '{}');print((d.get('result') or {}).get('message_id','') if isinstance(d,dict) else '')" 2>/dev/null || echo "")
+        if [ -n "$AUDIO_MSG_ID" ]; then
+            "$PYTHON" - "$TG_STATE_FILE" "audio_msg_id_${SHIFT}" "$AUDIO_MSG_ID" <<'PYEOF' 2>>"$LOG_FILE" || true
+import json, os, sys
+path, key, mid = sys.argv[1], sys.argv[2], sys.argv[3]
+d = {}
+if os.path.exists(path):
+    try:
+        d = json.load(open(path))
+    except Exception:
+        d = {}
+if not isinstance(d, dict):
+    d = {}
+d[key] = int(mid)
+json.dump(d, open(path, 'w'), ensure_ascii=False)
+PYEOF
+            echo "  🎧 音频已推送: msg_id=${AUDIO_MSG_ID} (删旧 ${PREV_AUDIO_ID:-无})" >> "$LOG_FILE"
+        else
+            echo "  ⚠️ 音频推送未取到 msg_id (失败或被限流), 跳过" >> "$LOG_FILE"
+        fi
     fi
 else
     # 部署失败：不删上一条"可用早报"（保留最后一条好链接），单独发告警。

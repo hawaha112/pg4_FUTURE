@@ -28,7 +28,7 @@ from logger import get_logger
 log = get_logger('renderer')
 
 from event_store import EventStore
-from html_generator import generate_html
+from html_generator import generate_html, _domain_of as _ag_domain
 from source_ranker import SourceRanker
 from llm_analyzer import LLMAnalyzer, create_analyzer_from_config
 from config_validator import validate_and_warn
@@ -107,6 +107,8 @@ def _enrich_item_with_event_info(item: dict, event: dict) -> dict:
     item['_cluster_size'] = event.get('cluster_size', 1)
     item['_canonical_event_id'] = event.get('event_id', '')
     item['_entities'] = event.get('entity_tags', []) or []
+    # 事件首次入库时间 → 页面"🔁 第N天"持续追踪徽章(跨日仍在更新的事件)
+    item['_first_seen'] = event.get('first_seen_at') or event.get('first_seen') or ''
     # 外部热度信号 (P2): 关联到的 HN / Reddit / HF / GitHub
     item['_external_signals'] = event.get('external_signals', {})
 
@@ -706,13 +708,37 @@ def main():
                 entity_set.add(eid)
     entity_count = len(entity_set)
 
-    # ── 口播稿 (C, 不阻塞): 把今日判断改写成 60-90 秒口语稿, 供音频/短视频取用 ──
+    # ── 口播稿 (不阻塞): 5-6 分钟电台稿(头条深讲+快讯+判断), 供 TTS 音频 + 页面文字版 ──
     broadcast_script = ''
-    if isinstance(digest, dict) and digest.get('judgments'):
+    if isinstance(digest, dict) and (digest.get('judgments') or all_items):
         try:
-            broadcast_script = create_analyzer_from_config(config).generate_broadcast_script(digest)
+            broadcast_script = create_analyzer_from_config(config).generate_broadcast_script(
+                digest, items=all_items)
         except Exception as e:
             log.warning("⚠️ 口播稿生成失败 (不阻塞): %s", e)
+
+    # 口播稿落盘 → run_daily.sh 的 TTS 步骤(tts_broadcast.py)读它合成音频。
+    # 音频文件名按日期+班次约定, 页面 <audio> 先按约定引用(文件在渲染后才生成,
+    # 若 TTS 失败则 404 → 前端 onerror 自动隐藏播放器, 不阻塞)。
+    import os as _os_bc
+    _bc_shift = _os_bc.environ.get('BRIEFING_SHIFT', '').lower()
+    _bc_suffix = f'-{_bc_shift}' if _bc_shift in ('am', 'pm') else ''
+    audio_rel = ''
+    if broadcast_script:
+        try:
+            _bc_dir = script_dir / 'output'
+            _bc_dir.mkdir(parents=True, exist_ok=True)
+            with open(_bc_dir / 'broadcast.txt', 'w', encoding='utf-8') as f:
+                f.write(broadcast_script)
+            audio_rel = f"archive/audio/{datetime.now().strftime('%Y-%m-%d')}{_bc_suffix}.mp3"
+        except Exception as e:
+            log.warning("⚠️ 口播稿落盘失败 (不阻塞): %s", e)
+    else:
+        # 本班没有口播稿 → 清掉上一班残留, 防 run_daily.sh 误用旧稿合成音频
+        try:
+            (script_dir / 'output' / 'broadcast.txt').unlink(missing_ok=True)
+        except OSError:
+            pass
 
     meta = {
         'llm_coverage': llm_coverage,
@@ -723,6 +749,7 @@ def main():
         'depth_count': depth_count,
         'entity_count': entity_count,
         'broadcast_script': broadcast_script,
+        'broadcast_audio': audio_rel,
     }
 
     # ── 生成实体时间线 (P1, 不阻塞主流程) ──
@@ -890,6 +917,12 @@ def main():
                 'event_status':   item.get('_event_status', 'unknown'),
                 'event_id':       item.get('_event_id', ''),
                 '_analysis_level': a.get('_analysis_level', 0),
+                # 长期归档/跨期搜索/记分牌 增补字段
+                'canonical_event_id': item.get('_canonical_event_id', ''),
+                'first_seen':     str(item.get('_first_seen') or ''),
+                'topic_domain':   _ag_domain(item)[1],
+                'topic_domain_key': _ag_domain(item)[2],
+                'topic_leaf':     (a.get('topic_leaf') or '').strip(),
             })
         archive_items.sort(key=lambda x: (-x['importance'], -x['cluster_size']))
 
@@ -903,6 +936,37 @@ def main():
         }
         with open(digest_dir / f'{today}{suffix}.json', 'w', encoding='utf-8') as f:
             json.dump(archive_json, f, ensure_ascii=False, indent=2)
+
+        # ── 长期归档 payload → output/archive_payload.json ──
+        # run_daily.sh 部署时由 archive_appender.py 读它, 把本班事件+判断按月追加进
+        # 部署仓 archive/data/(events-YYYY-MM.jsonl / judgments.jsonl / 搜索索引),
+        # 永久保存——events.db 30 天清理不再是历史上限。
+        try:
+            payload_judgments = []
+            for j in (digest.get('judgments') or [])[:3] if digest else []:
+                ev_titles = []
+                for ei in (j.get('evidence_ids') or []):
+                    if isinstance(ei, int) and 0 <= ei < len(all_items):
+                        ea = all_items[ei].get('analysis', {}) or {}
+                        ev_titles.append(ea.get('chinese_title')
+                                         or all_items[ei].get('title', '')[:60])
+                payload_judgments.append({
+                    'emoji': j.get('emoji', ''),
+                    'title': (j.get('title') or '').strip(),
+                    'body': (j.get('body') or '').strip(),
+                    'evidence_titles': ev_titles[:5],
+                })
+            with open(script_dir / 'output' / 'archive_payload.json', 'w',
+                      encoding='utf-8') as f:
+                json.dump({
+                    'date': today,
+                    'shift': shift if shift in ('am', 'pm') else '',
+                    'generated_at': datetime.now(timezone.utc).isoformat(),
+                    'events': archive_items,
+                    'judgments': payload_judgments,
+                }, f, ensure_ascii=False)
+        except Exception as e:
+            log.warning("⚠️ archive_payload 写入失败 (不阻塞): %s", e)
 
         # Markdown 人读版
         md = [f'# AI 早报 · {today}', '']
