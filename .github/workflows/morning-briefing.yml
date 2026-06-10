@@ -61,8 +61,9 @@ jobs:
       DEPLOY_REPO_TOKEN: ${{ secrets.DEPLOY_REPO_TOKEN }}
       DEPLOY_REPO: hawaha112/ai-morning-briefing
       # 口播 TTS: edge(微软云声) / kokoro(开源本地, 更自然, 失败自动回退 edge)
-      BROADCAST_ENGINE: edge
-      BROADCAST_VOICE: zh-CN-XiaoxiaoNeural
+      # 用户 2026-06-11 试听选定: B = Kokoro zf_017
+      BROADCAST_ENGINE: kokoro
+      BROADCAST_VOICE: zf_017
 
     steps:
       - name: Checkout main (代码)
