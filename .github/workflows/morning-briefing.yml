@@ -45,7 +45,9 @@ concurrency:
 jobs:
   briefing:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 40: kokoro TTS 首跑要下载 400MB 模型 + CPU 合成 6 分钟音频(~5-10 分钟),
+    # 常规班 ~15 分钟 + kokoro 余量。卡死兜底仍在(GH 强制终止)。
+    timeout-minutes: 40
     permissions:
       contents: write   # 需要 push briefing-state 分支
     env:
