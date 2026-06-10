@@ -1103,36 +1103,30 @@ def generate_html(all_items, config, digest=None, meta=None):
     js_content = _load_template('script.js')
     page_template = Template(_load_template('page.html'))
 
-    # 口播稿区块: 音频播放器(5-6 分钟 TTS+背景乐) + 可折叠文字稿。
-    # 音频文件在渲染之后由 tts_broadcast.py 生成 —— 这里按约定路径先引用,
-    # TTS 失败时播放器 onerror 自动隐藏(只剩文字稿), 不会出现死链 UI。
+    # 口播: 音频播放器"嵌入早报顶部"(用户 2026-06-10: 打开早报即可听), 文字稿留页底。
+    # 音频文件在渲染之后由 tts_broadcast.py 生成 —— 按约定路径先引用;
+    # preload=metadata 让缺失(TTS 失败/超14天被裁)在页面加载时即触发 onerror 隐藏。
     broadcast_html = ''
+    audio_top_html = ''
     _bc = ((meta or {}).get('broadcast_script') or '').strip()
     if _bc:
         _bc_audio = ((meta or {}).get('broadcast_audio') or '').strip()
-        _audio_html = ''
         if _bc_audio:
-            # preload=metadata: 页面加载即探测文件头 — 音频缺失(TTS 失败/超14天被裁)时
-            # onerror 立刻隐藏播放器, 而非等用户点了播放才报错。带宽代价仅请求头。
-            _audio_html = (
+            audio_top_html = (
+                '<div class="bc-audio-wrap audio-top">'
                 f'<audio class="bc-player" controls preload="metadata" '
                 f'src="{_safe_escape(_bc_audio)}" '
                 "onerror=\"var w=this.closest('.bc-audio-wrap');if(w)w.hidden=true\"></audio>"
-            )
-            _audio_html = (
-                '<div class="bc-audio-wrap">'
-                f'{_audio_html}'
-                '<p class="bc-hint">🎧 今日音频版 · 约 5-6 分钟 · 通勤可听</p>'
+                '<p class="bc-hint">🎧 今日音频版 · 约 5-6 分钟听完全天 · 文字稿在页底 🎙</p>'
                 '</div>'
             )
         broadcast_html = (
             '<section class="broadcast">'
-            '<div class="bc-head"><h2 class="bc-title">🎙 今日口播</h2>'
+            '<div class="bc-head"><h2 class="bc-title">🎙 今日口播文字稿</h2>'
             '<button class="bc-copy" type="button" '
             "onclick=\"navigator.clipboard.writeText(document.getElementById('bcText').innerText)"
             ".then(()=>{this.textContent='已复制 ✓'})\">复制文稿</button></div>"
-            f'{_audio_html}'
-            '<details class="bc-details"><summary>查看文字稿</summary>'
+            '<details class="bc-details"><summary>查看文字稿（音频播放器在页面顶部）</summary>'
             f'<pre class="bc-text" id="bcText">{_safe_escape(_bc)}</pre></details>'
             '</section>'
         )
@@ -1198,6 +1192,7 @@ def generate_html(all_items, config, digest=None, meta=None):
     html = page_template.safe_substitute(
         today_nav=today_nav,
         today_glance=today_glance,
+        audio_top_html=audio_top_html,
         broadcast_html=broadcast_html,
         vip_html=vip_html,
         date_str=date_str,

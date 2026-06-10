@@ -601,8 +601,56 @@ ${HEADLINES:+
 ${HEADLINES}
 }
 共 <b>${ARTICLE_COUNT}</b> 条${WARN_LINE}"
+    # ── 音频嵌入早报(用户 2026-06-10): 有音频时发"一条合体消息"(sendAudio,
+    #    caption=早报正文+链接) —— 每班仍只占一条消息, 点开即听、往下即读。
+    #    无音频/合体失败 → 回退纯文本 sendMessage, 早报永远发得出去。 ──
+    AUDIO_FILE="$PROJECT_DIR/output/archive/audio/${TODAY_DATE}-${SHIFT}.mp3"
+    # 旧版"独立音频消息"槽位遗留 id 一并删除(避免双消息时代残留堆积)
+    PREV_AUDIO_ID=""
+    [ -f "$TG_STATE_FILE" ] && PREV_AUDIO_ID=$("$PYTHON" -c "import json;print(json.load(open('$TG_STATE_FILE')).get('audio_msg_id_${SHIFT}',''))" 2>/dev/null || echo "")
     tg_delete "$PREV_MSG_ID"
-    NEW_MSG_ID=$(send_tg_capture "$BRIEFING_MSG" "$BRIEFING_URL" "📖 阅读全文")
+    tg_delete "$PREV_AUDIO_ID"
+    NEW_MSG_ID=""
+    if [ -f "$AUDIO_FILE" ] && [ "$BRIEFING_SILENT_TG" != "true" ] && [ -n "$TG_BOT_TOKEN" ]; then
+        AUDIO_MIN=$("$PYTHON" -c "from mutagen.mp3 import MP3;print(f'{MP3(\"$AUDIO_FILE\").info.length/60:.0f}')" 2>/dev/null || echo "")
+        # caption 上限 1024: 截到 1000(按行截断), 链接永远保留(裸 URL 一点直达)
+        CAPTION=$(BMSG="$BRIEFING_MSG" BURL="$BRIEFING_URL" AMIN="$AUDIO_MIN" "$PYTHON" - <<'PYEOF' 2>>"$LOG_FILE" || printf '%s' "$BRIEFING_MSG"
+import os
+msg = os.environ.get('BMSG', '')
+url = (os.environ.get('BURL', '') or '').strip()
+amin = os.environ.get('AMIN', '')
+head = ("🎧 音频版约 " + amin + " 分钟 · 文字速览👇\n\n") if amin else ""
+tail = ("\n\n📖 文字版全文:\n" + url) if url else ""
+limit = 1000 - len(head) - len(tail)
+if len(msg) > limit:
+    out, n = [], 0
+    for ln in msg.split('\n'):
+        if n + len(ln) + 1 > limit - 2:
+            break
+        out.append(ln)
+        n += len(ln) + 1
+    msg = '\n'.join(out) + '\n…'
+print(head + msg + tail, end='')
+PYEOF
+)
+        # ⚠️ caption 以 <b> 开头, curl -F 会把开头的 < 当"读文件"语法 → 必须 --form-string
+        AUDIO_RESP=$(curl -s --max-time 120 "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendAudio" \
+            -F "chat_id=${TG_CHAT_ID}" \
+            -F "audio=@${AUDIO_FILE}" \
+            --form-string "title=AI ${RPT} · $(date '+%m-%d') ${SHORT_SHIFT}" \
+            --form-string "performer=AI Morning Briefing" \
+            --form-string "caption=${CAPTION}" \
+            -F "parse_mode=HTML") || AUDIO_RESP=""
+        NEW_MSG_ID=$(printf '%s' "$AUDIO_RESP" | "$PYTHON" -c "import sys,json;d=json.loads(sys.stdin.read() or '{}');print((d.get('result') or {}).get('message_id','') if isinstance(d,dict) else '')" 2>/dev/null || echo "")
+        if [ -n "$NEW_MSG_ID" ]; then
+            echo "  🎧 合体消息(音频+早报)已推送: msg_id=${NEW_MSG_ID}" >> "$LOG_FILE"
+        else
+            echo "  ⚠️ 合体消息失败(caption 超限/网络/限流), 回退纯文本: $(printf '%s' "$AUDIO_RESP" | head -c 160)" >> "$LOG_FILE"
+        fi
+    fi
+    if [ -z "$NEW_MSG_ID" ]; then
+        NEW_MSG_ID=$(send_tg_capture "$BRIEFING_MSG" "$BRIEFING_URL" "📖 阅读全文")
+    fi
     if [ -n "$NEW_MSG_ID" ]; then
         # 只更新本班次(am/pm)的槽，保留另一班次的 id —— 早报/晚报各一条、互不顶替、各自每天刷新
         "$PYTHON" - "$TG_STATE_FILE" "$SHIFT" "$NEW_MSG_ID" <<'PYEOF' 2>>"$LOG_FILE" || \
@@ -619,6 +667,7 @@ if os.path.exists(path):
 if not isinstance(d, dict):
     d = {}
 d.pop('briefing_msg_id', None)   # 清理旧版单键，迁移到 am/pm 双槽
+d.pop('audio_msg_id_' + shift, None)   # 清理"独立音频消息"时代的槽(已并入合体消息)
 d['briefing_msg_id_' + shift] = int(mid)
 d['updated_at'] = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 json.dump(d, open(path, 'w'), ensure_ascii=False)
@@ -626,40 +675,6 @@ PYEOF
         echo "  📌 ${SHIFT} 单条更新: 删旧(${PREV_MSG_ID:-无}) → 新 msg_id=${NEW_MSG_ID}（另一班次保留）" >> "$LOG_FILE"
     else
         echo "  ⚠️ 未取到新 msg_id（silent 或发送失败），保留旧 id 不变" >> "$LOG_FILE"
-    fi
-
-    # ── 口播音频推送(增值件): 同班次删旧发新, 槽位 audio_msg_id_{am,pm} ──
-    AUDIO_FILE="$PROJECT_DIR/output/archive/audio/${TODAY_DATE}-${SHIFT}.mp3"
-    if [ "$BRIEFING_SILENT_TG" != "true" ] && [ -f "$AUDIO_FILE" ] && [ -n "$TG_BOT_TOKEN" ]; then
-        AUDIO_MIN=$("$PYTHON" -c "from mutagen.mp3 import MP3;print(f'{MP3(\"$AUDIO_FILE\").info.length/60:.0f}')" 2>/dev/null || echo "")
-        PREV_AUDIO_ID=$("$PYTHON" -c "import json;print(json.load(open('$TG_STATE_FILE')).get('audio_msg_id_${SHIFT}',''))" 2>/dev/null || echo "")
-        tg_delete "$PREV_AUDIO_ID"
-        AUDIO_RESP=$(curl -s --max-time 120 "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendAudio" \
-            -F "chat_id=${TG_CHAT_ID}" \
-            -F "audio=@${AUDIO_FILE}" \
-            -F "title=AI ${RPT} · $(date '+%m-%d') ${SHORT_SHIFT}" \
-            -F "performer=AI Morning Briefing" \
-            -F "caption=🎧 ${AUDIO_MIN:+约 ${AUDIO_MIN} 分钟 · }通勤路上听完今天的 AI") || AUDIO_RESP=""
-        AUDIO_MSG_ID=$(printf '%s' "$AUDIO_RESP" | "$PYTHON" -c "import sys,json;d=json.loads(sys.stdin.read() or '{}');print((d.get('result') or {}).get('message_id','') if isinstance(d,dict) else '')" 2>/dev/null || echo "")
-        if [ -n "$AUDIO_MSG_ID" ]; then
-            "$PYTHON" - "$TG_STATE_FILE" "audio_msg_id_${SHIFT}" "$AUDIO_MSG_ID" <<'PYEOF' 2>>"$LOG_FILE" || true
-import json, os, sys
-path, key, mid = sys.argv[1], sys.argv[2], sys.argv[3]
-d = {}
-if os.path.exists(path):
-    try:
-        d = json.load(open(path))
-    except Exception:
-        d = {}
-if not isinstance(d, dict):
-    d = {}
-d[key] = int(mid)
-json.dump(d, open(path, 'w'), ensure_ascii=False)
-PYEOF
-            echo "  🎧 音频已推送: msg_id=${AUDIO_MSG_ID} (删旧 ${PREV_AUDIO_ID:-无})" >> "$LOG_FILE"
-        else
-            echo "  ⚠️ 音频推送未取到 msg_id (失败或被限流), 跳过" >> "$LOG_FILE"
-        fi
     fi
 else
     # 部署失败：不删上一条"可用早报"（保留最后一条好链接），单独发告警。
