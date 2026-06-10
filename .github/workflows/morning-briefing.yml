@@ -45,9 +45,9 @@ concurrency:
 jobs:
   briefing:
     runs-on: ubuntu-latest
-    # 40: kokoro TTS 首跑要下载 400MB 模型 + CPU 合成 6 分钟音频(~5-10 分钟),
-    # 常规班 ~15 分钟 + kokoro 余量。卡死兜底仍在(GH 强制终止)。
-    timeout-minutes: 40
+    # 55: qwen3 TTS 是慢引擎(GHA 估 RTF 2-3, 6 分钟音频合成 12-25 分钟, 预算
+    # QWEN3_BUDGET_SEC=1500 封顶) + 常规班 ~15 分钟 + 模型下载余量。
+    timeout-minutes: 55
     permissions:
       contents: write   # 需要 push briefing-state 分支
     env:
@@ -62,10 +62,12 @@ jobs:
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       DEPLOY_REPO_TOKEN: ${{ secrets.DEPLOY_REPO_TOKEN }}
       DEPLOY_REPO: hawaha112/ai-morning-briefing
-      # 口播 TTS: edge(微软云声) / kokoro(开源本地, 更自然, 失败自动回退 edge)
-      # 用户 2026-06-11 试听选定: B = Kokoro zf_017
-      BROADCAST_ENGINE: kokoro
-      BROADCAST_VOICE: zf_017
+      # 口播 TTS: qwen3(LLM级, 慢但最自然) / kokoro / edge — 链式回退
+      # 用户 2026-06-11 盲听: "E(Qwen3 vivian)确实质量更好" → 转正
+      BROADCAST_ENGINE: qwen3
+      BROADCAST_VOICE: vivian
+      QWEN3_TTS_BIN: /tmp/qwen3-tts-engine/qwen_tts
+      QWEN3_BUDGET_SEC: '1500'
 
     steps:
       - name: Checkout main (代码)
@@ -131,6 +133,32 @@ jobs:
         run: |
           pip install kokoro-onnx "misaki[zh]" espeakng-loader phonemizer-fork num2words soundfile \
             || echo "⚠️ kokoro 依赖安装失败(非致命: tts_broadcast 自动回退 edge)"
+
+      # ── Qwen3-TTS(仅 BROADCAST_ENGINE=qwen3): 模型缓存(1.8GB) + 现场编译 C 引擎 ──
+      # 二进制每跑现编(~20s): Makefile 用 -march=native, 缓存的产物换一种 runner CPU 会 SIGILL。
+      - name: Cache Qwen3-TTS model
+        if: env.BROADCAST_ENGINE == 'qwen3'
+        uses: actions/cache@v4
+        with:
+          path: ai-morning-news/models/qwen3-tts-0.6b
+          key: qwen3-tts-0.6b-customvoice
+
+      - name: Build Qwen3-TTS engine + fetch model
+        if: env.BROADCAST_ENGINE == 'qwen3'
+        run: |
+          set -e
+          sudo apt-get install -y -qq libopenblas-dev > /dev/null
+          git clone -q --depth 1 https://github.com/gabriele-mastrapasqua/qwen3-tts /tmp/qwen3-tts-engine-src
+          make -C /tmp/qwen3-tts-engine-src blas -j4 > /dev/null
+          mkdir -p /tmp/qwen3-tts-engine
+          cp /tmp/qwen3-tts-engine-src/qwen_tts /tmp/qwen3-tts-engine/
+          if [ ! -f ai-morning-news/models/qwen3-tts-0.6b/model.safetensors ]; then
+            echo "模型未命中缓存, 从 HF 下载(~1.8GB)..."
+            cd /tmp/qwen3-tts-engine-src
+            ./download_model.sh --model small --dir "$GITHUB_WORKSPACE/ai-morning-news/models/qwen3-tts-0.6b"
+          fi
+          ls -la "$GITHUB_WORKSPACE/ai-morning-news/models/qwen3-tts-0.6b/" | head -5
+        continue-on-error: true   # 任何失败 → tts_broadcast 自动回退 kokoro/edge, 不挡早报
 
       - name: Install Claude Code CLI
         shell: bash

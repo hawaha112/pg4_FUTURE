@@ -52,6 +52,138 @@ async def _synth(text: str, rate: str, out_path: Path):
     await comm.save(str(out_path))
 
 
+# ── Qwen3-TTS 引擎(BROADCAST_ENGINE=qwen3): LLM 级自然度, 纯 C 推理, 免账号 ──
+# 用户 2026-06-11 盲听: "E(Qwen3 vivian)确实质量更好" → 转正。
+# 引擎: gabriele-mastrapasqua/qwen3-tts(MIT) + Qwen3-TTS-12Hz-0.6B(Apache-2.0)。
+# 慢是已知代价(GHA 估 RTF 2-3, 6 分钟音频合成 12-18 分钟) → 预算看门狗 + 失败回退。
+# 二进制/模型由 workflow 提供(每跑现编译 — 缓存 -march=native 产物跨机型会 SIGILL;
+# 模型 1.8GB 走 actions/cache)。本地测试放 models/ 同路径。
+QWEN3_BIN = Path(os.environ.get('QWEN3_TTS_BIN',
+                                str(SCRIPT_DIR / 'models' / 'qwen3-bin' / 'qwen_tts')))
+QWEN3_MODEL = Path(os.environ.get('QWEN3_TTS_MODEL',
+                                  str(SCRIPT_DIR / 'models' / 'qwen3-tts-0.6b')))
+QWEN3_BUDGET_SEC = int(os.environ.get('QWEN3_BUDGET_SEC', '1500'))   # 总预算 25 分钟
+QWEN3_THREADS = os.environ.get('QWEN3_THREADS', '4')
+
+
+def _synth_qwen3(text: str, out_path: Path) -> bool:
+    """Qwen3-TTS 0.6B INT8 分块合成(~500字/块, 段落边界优先), ffmpeg 拼接。
+
+    超预算(QWEN3_BUDGET_SEC)立刻放弃 → 调用方回退下一引擎; 部分块成功不拼残品。
+    """
+    import re as _re
+    import time as _time
+    if not (QWEN3_BIN.exists() and (QWEN3_MODEL / 'model.safetensors').exists()):
+        log("⚠️ qwen3 二进制/模型缺失, 回退下一引擎")
+        return False
+    # 分块: 先按空行(段落), 段落过长再按句切, 目标 ≤500 字/块
+    paras = [p.strip() for p in _re.split(r'\n\s*\n', text) if p.strip()]
+    chunks, cur = [], ''
+    for p in paras:
+        if len(cur) + len(p) <= 500:
+            cur = (cur + '\n\n' + p).strip()
+            continue
+        if cur:
+            chunks.append(cur)
+            cur = ''
+        if len(p) <= 500:
+            cur = p
+        else:
+            for s in _re.split(r'(?<=[。！？；])', p):
+                if len(cur) + len(s) > 500 and cur:
+                    chunks.append(cur)
+                    cur = s
+                else:
+                    cur += s
+    if cur.strip():
+        chunks.append(cur.strip())
+    log(f"qwen3: {len(text)} 字 → {len(chunks)} 块 (预算 {QWEN3_BUDGET_SEC}s)")
+
+    # 服务模式: 模型加载+INT8 量化只做一次(每块单独起进程会重复这 1-2 分钟开销,
+    # 实测 620 字两块被拖到 17.9 分钟; server 模式一次加载、分块走 HTTP)。
+    import json as _json
+    import urllib.request as _ur
+    t0 = _time.time()
+    part_files = []
+    tmp_dir = out_path.parent
+    port = int(os.environ.get('QWEN3_PORT', '3457'))
+    spk = VOICE if not VOICE.startswith('zh-') else 'vivian'
+    srv = None
+    try:
+        srv = subprocess.Popen(
+            [str(QWEN3_BIN), '-d', str(QWEN3_MODEL), '--serve', str(port),
+             '--int8', '-j', QWEN3_THREADS, '--seed', '7', '-S'],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # 等加载+量化完成(最多 5 分钟)
+        up = False
+        for _ in range(150):
+            if srv.poll() is not None:
+                log("⚠️ qwen3 server 进程退出, 回退")
+                return False
+            try:
+                with _ur.urlopen(f'http://127.0.0.1:{port}/v1/health', timeout=2):
+                    up = True
+                    break
+            except Exception:
+                _time.sleep(2)
+        if not up:
+            log("⚠️ qwen3 server 5 分钟未就绪, 回退")
+            return False
+        log(f"qwen3 server 就绪({(_time.time()-t0):.0f}s), 开始分块合成")
+
+        for i, c in enumerate(chunks):
+            remain = QWEN3_BUDGET_SEC - (_time.time() - t0)
+            if remain < 60:
+                log(f"⚠️ qwen3 预算耗尽(块 {i}/{len(chunks)}), 放弃回退")
+                return False
+            part = tmp_dir / f'_q3_part{i}.wav'
+            body = _json.dumps({'text': c, 'speaker': spk,
+                                'language': 'chinese'}).encode('utf-8')
+            req = _ur.Request(f'http://127.0.0.1:{port}/v1/tts', data=body,
+                              headers={'Content-Type': 'application/json'})
+            try:
+                with _ur.urlopen(req, timeout=remain) as resp:
+                    part.write_bytes(resp.read())
+            except Exception as e:
+                log(f"⚠️ qwen3 块 {i} 失败({str(e)[:100]}), 回退")
+                return False
+            if not part.exists() or part.stat().st_size < 20000:
+                log(f"⚠️ qwen3 块 {i} 产物异常, 回退")
+                return False
+            part_files.append(part)
+        # 拼接(同编码 wav, concat demuxer 零转码)
+        lst = tmp_dir / '_q3_concat.txt'
+        lst.write_text(''.join(f"file '{p.name}'\n" for p in part_files),
+                       encoding='utf-8')
+        subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-f', 'concat',
+                        '-safe', '0', '-i', str(lst), '-c', 'copy', str(out_path)],
+                       check=True, timeout=120, capture_output=True, cwd=str(tmp_dir))
+        log(f"qwen3: 合成完成, 用时 {(_time.time()-t0)/60:.1f} 分钟")
+        return out_path.exists() and out_path.stat().st_size > 100000
+    except Exception as e:
+        log(f"⚠️ qwen3 合成异常({str(e)[:120]}), 回退")
+        return False
+    finally:
+        if srv is not None:
+            try:
+                srv.terminate()
+                srv.wait(timeout=10)
+            except Exception:
+                try:
+                    srv.kill()
+                except Exception:
+                    pass
+        for p in part_files:
+            try:
+                p.unlink()
+            except OSError:
+                pass
+        try:
+            (tmp_dir / '_q3_concat.txt').unlink()
+        except OSError:
+            pass
+
+
 # ── Kokoro 开源引擎(BROADCAST_ENGINE=kokoro): 比 Edge 云声更自然, 全本地推理免账号 ──
 # 模型 ~400MB 首次从 GitHub releases 公开直链下载(CI 用 actions/cache 复用),
 # CPU ≈2-3x 实时(6 分钟音频合成 ~3 分钟)。失败自动回退 edge-tts。
@@ -130,7 +262,9 @@ def _synth_kokoro(text: str, rate_pct: int, out_path: Path) -> bool:
             ph, _ = g2p(c)
             if not ph:
                 continue
-            samples, sr = k.create(ph, voice=VOICE, speed=speed, is_phonemes=True)
+            # qwen3 音色名(vivian 等)落到 kokoro 回退时, 用用户上一轮选定的 zf_017
+            _kv = VOICE if VOICE[:3] in ('zf_', 'zm_', 'af_', 'bf_') else 'zf_017'
+            samples, sr = k.create(ph, voice=_kv, speed=speed, is_phonemes=True)
             parts.append(samples)
             parts.append(np.zeros(int(sr * 0.25), dtype=samples.dtype))
         if not parts:
@@ -175,11 +309,14 @@ def main() -> int:
     out_path = SCRIPT_DIR / 'output' / out_rel
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # ── 1. TTS 人声 (kokoro 优先所选引擎, 失败回退 edge; edge 再失败才放弃) ──
+    # ── 1. TTS 人声: 引擎链 qwen3 → kokoro → edge, 逐级回退, 永不空手 ──
     rate_pct = _voice_rate_pct(len(text))
     voice_path = None
-    if ENGINE == 'kokoro':
-        wav = SCRIPT_DIR / 'output' / '_broadcast_voice.wav'
+    wav = SCRIPT_DIR / 'output' / '_broadcast_voice.wav'
+    if ENGINE == 'qwen3':
+        if _synth_qwen3(text, wav) and wav.exists() and wav.stat().st_size > 50000:
+            voice_path = wav
+    if voice_path is None and ENGINE in ('kokoro', 'qwen3'):
         if _synth_kokoro(text, rate_pct, wav) \
                 and wav.exists() and wav.stat().st_size > 50000:
             voice_path = wav
@@ -205,6 +342,15 @@ def main() -> int:
         vdur = len(text) / CHARS_PER_MIN * 60.0
     log(f"人声({ENGINE}/{VOICE}): {len(text)} 字 · {rate_pct:+d}% · {vdur/60:.1f} 分钟")
 
+    # 超长保险: qwen3 不支持语速参数, 稿子偏长时音频会超 6 分钟 → atempo 轻微提速
+    # (≤1.12x, 听感几乎无损)收回 6 分钟附近。
+    tempo = 1.0
+    if vdur > 385:
+        tempo = min(1.12, vdur / 360.0)
+        log(f"超长 {vdur/60:.1f} 分钟 → atempo {tempo:.2f} 收到 {vdur/tempo/60:.1f} 分钟")
+        vdur = vdur / tempo
+    _tempo_flt = f"atempo={tempo:.3f}," if tempo > 1.0 else ""
+
     # ── 2. 与底乐混音(无 ffmpeg / 无底乐 → 纯人声也照发) ──
     title_date = out_rel.rsplit('/', 1)[-1].replace('.mp3', '')
     meta = ['-metadata', f'title=AI 早报 · {title_date}',
@@ -216,7 +362,7 @@ def main() -> int:
         fade_st = max(0.0, total - 3.0)
         delay_ms = int(INTRO_SEC * 1000)
         flt = (
-            f"[0:a]aresample=44100,aformat=channel_layouts=stereo,"
+            f"[0:a]aresample=44100,aformat=channel_layouts=stereo,{_tempo_flt}"
             f"adelay={delay_ms}|{delay_ms}[v];"
             f"[1:a]volume='if(lt(t,{INTRO_SEC}),0.42,"
             f"if(lt(t,{vend:.2f}),0.13,0.36))':eval=frame,"
@@ -247,7 +393,7 @@ def main() -> int:
         try:
             subprocess.run(['ffmpeg', '-y', '-loglevel', 'error',
                             '-i', str(voice_path),
-                            '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+                            '-af', f'{_tempo_flt}loudnorm=I=-16:TP=-1.5:LRA=11',
                             '-c:a', 'libmp3lame', '-b:a', '80k',
                             *meta, str(out_path)],
                            check=True, timeout=600, capture_output=True)

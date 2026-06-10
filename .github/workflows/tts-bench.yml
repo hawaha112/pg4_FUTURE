@@ -1,0 +1,98 @@
+name: TTS Bench (一次性)
+# 用途: 在真实 runner 上实测口播 TTS 引擎速度(RTF)+ 预热模型 actions/cache。
+# 手动触发; 不碰 briefing 状态、不推 TG、不部署 — 纯测速。
+
+on:
+  workflow_dispatch:
+    inputs:
+      engine:
+        description: 'TTS 引擎'
+        type: choice
+        options: [qwen3, kokoro]
+        default: qwen3
+      chars:
+        description: '测试文本字数(默认 1700 ≈ 正式稿)'
+        type: string
+        default: '1700'
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      TZ: Asia/Shanghai
+      BROADCAST_ENGINE: ${{ inputs.engine }}
+      BROADCAST_VOICE: ${{ inputs.engine == 'qwen3' && 'vivian' || 'zf_017' }}
+      QWEN3_TTS_BIN: /tmp/qwen3-tts-engine/qwen_tts
+      QWEN3_BUDGET_SEC: '2400'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Common deps
+        run: |
+          pip install mutagen edge-tts
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libopenblas-dev
+
+      - name: Cache Qwen3-TTS model
+        if: inputs.engine == 'qwen3'
+        uses: actions/cache@v4
+        with:
+          path: ai-morning-news/models/qwen3-tts-0.6b
+          key: qwen3-tts-0.6b-customvoice
+
+      - name: Build engine + fetch model (qwen3)
+        if: inputs.engine == 'qwen3'
+        run: |
+          set -e
+          nproc; grep -m1 "model name" /proc/cpuinfo || true
+          git clone -q --depth 1 https://github.com/gabriele-mastrapasqua/qwen3-tts /tmp/q3src
+          make -C /tmp/q3src blas -j4 > /dev/null
+          mkdir -p /tmp/qwen3-tts-engine && cp /tmp/q3src/qwen_tts /tmp/qwen3-tts-engine/
+          /tmp/qwen3-tts-engine/qwen_tts --caps || true
+          if [ ! -f ai-morning-news/models/qwen3-tts-0.6b/model.safetensors ]; then
+            cd /tmp/q3src && ./download_model.sh --model small --dir "$GITHUB_WORKSPACE/ai-morning-news/models/qwen3-tts-0.6b"
+          fi
+
+      - name: Cache Kokoro models
+        if: inputs.engine == 'kokoro'
+        uses: actions/cache@v4
+        with:
+          path: ai-morning-news/models
+          key: kokoro-v1.1-zh
+
+      - name: Kokoro deps
+        if: inputs.engine == 'kokoro'
+        run: pip install kokoro-onnx "misaki[zh]" espeakng-loader phonemizer-fork num2words soundfile
+
+      - name: Bench
+        working-directory: ai-morning-news
+        run: |
+          python3 - <<'PY'
+          # 固定测试稿(真实早报风格), 重复拼到目标字数
+          base = ("各位早上好，今天是测试播报。OpenAI正在筹备ChatGPT发布以来最大规模的产品改版，"
+                  "以单一聊天框为核心的交互方式将被彻底重构。为什么重要？因为对话式AI的入口形态"
+                  "正在从问答工具转向任务工作台，整个行业的产品设计都会跟着调整。"
+                  "接下来是几条快讯。第一，AI编程工具Cursor年化营收突破四十亿美元。"
+                  "第二，小米发布新模型，在通用GPU上首次突破每秒一千个token的生成速度。\n\n")
+          import os
+          n = int(os.environ.get('BENCH_CHARS', '1700'))
+          text = (base * (n // len(base) + 1))[:n]
+          os.makedirs('output', exist_ok=True)
+          open('output/broadcast.txt', 'w').write(text)
+          print(f"测试稿 {len(text)} 字")
+          PY
+          time python3 tts_broadcast.py "archive/audio/bench.mp3"
+          ls -la output/archive/audio/bench.mp3
+        env:
+          BENCH_CHARS: ${{ inputs.chars }}
+
+      - name: Upload sample
+        uses: actions/upload-artifact@v4
+        with:
+          name: tts-bench-${{ inputs.engine }}
+          path: ai-morning-news/output/archive/audio/bench.mp3
+          retention-days: 3
