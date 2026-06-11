@@ -1097,11 +1097,13 @@ class LLMAnalyzer:
                  len(drop), n, n - len(drop))
         return [it for i, it in enumerate(items) if i not in drop]
 
-    # 口播稿目标长度: edge-tts 晓晓女声 (zh-CN-XiaoxiaoNeural) 实测 ≈290 字/分钟,
-    # 用户要求 5-6 分钟 → 1550-1750 字落点 ≈5.3-6.0 分钟; 越界一次重试。
-    # (换声音记得同步: Yunyang≈317/min → 1650-1850; tts_broadcast.CHARS_PER_MIN 也要改)
-    BROADCAST_TARGET_CHARS = (1550, 1750)
-    BROADCAST_HARD_BOUNDS = (1300, 2050)
+    # 口播稿目标长度: 同一篇稿供两个引擎用 ——
+    #   快引擎 kokoro zf_017 ≈290 字/分(6:00 准点版), 慢引擎 qwen3 vivian 实测仅
+    #   ≈215 字/分(HQ 重制版, E2E 实测 1810 字=8.4 分钟)。
+    # 折中目标 1300-1450 字: E 版 6.0-6.7 分钟 → atempo 1.12 收到 5.4-6.0 ✓;
+    # kokoro 准点版 4.5-5.0 分钟(临时版, 短一点可接受)。越界一次重试。
+    BROADCAST_TARGET_CHARS = (1300, 1450)
+    BROADCAST_HARD_BOUNDS = (1150, 1700)
 
     def generate_broadcast_script(self, digest: dict, items: list = None,
                                   shift: str = '', date_str: str = '') -> str:
