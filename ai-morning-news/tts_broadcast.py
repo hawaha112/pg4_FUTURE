@@ -353,7 +353,9 @@ def main() -> int:
 
     # ── 2. 与底乐混音(无 ffmpeg / 无底乐 → 纯人声也照发) ──
     title_date = out_rel.rsplit('/', 1)[-1].replace('.mp3', '')
-    meta = ['-metadata', f'title=AI 早报 · {title_date}',
+    _rpt = {'am': 'AI 早报', 'pm': 'AI 晚报'}.get(
+        os.environ.get('BRIEFING_SHIFT', '').lower(), 'AI 日报')
+    meta = ['-metadata', f'title={_rpt} · {title_date}',
             '-metadata', 'artist=AI Morning Briefing']
     mixed = False
     if BGM.exists():

@@ -712,8 +712,13 @@ def main():
     broadcast_script = ''
     if isinstance(digest, dict) and (digest.get('judgments') or all_items):
         try:
+            import os as _os_sh
+            _sh = _os_sh.environ.get('BRIEFING_SHIFT', '').lower()
+            _now_bc = datetime.now()
+            _wd = '一二三四五六日'[_now_bc.weekday()]
+            _ds = f"{_now_bc.month}月{_now_bc.day}日, 星期{_wd}"
             broadcast_script = create_analyzer_from_config(config).generate_broadcast_script(
-                digest, items=all_items)
+                digest, items=all_items, shift=_sh, date_str=_ds)
         except Exception as e:
             log.warning("⚠️ 口播稿生成失败 (不阻塞): %s", e)
 
