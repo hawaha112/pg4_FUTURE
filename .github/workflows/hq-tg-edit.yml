@@ -1,0 +1,130 @@
+name: HQ Audio TG Edit
+# 两段式口播的第三步: 部署仓 hq-audio.yml 用 Qwen3(E) 重制完音频后, 这里把当班
+# TG 合体消息的音频【原地替换】为 E 版(editMessageMedia, 不发新消息不打扰)。
+# 页面音频不用管 — 部署仓直接覆盖了同名 mp3, 页面自动升级。
+# 轻量(~2 分钟), 跑在私有仓不心疼; 各种 guard 不满足时静默退出。
+
+on:
+  workflow_dispatch:
+    inputs:
+      shift:
+        description: '班次(留空按当前北京时间推断: <12点=am)'
+        type: choice
+        options: ['', am, pm]
+        default: ''
+  schedule:
+    # 北京 07:55 / 19:55 (briefing 6:00/18:00 出 → HQ 重制 ~75-90 分钟 → 此时应已就绪)
+    # + 08:40 / 20:40 重试一轮(HQ 偶尔磨得久; 已升级过的班次会被 hq_edited 标记挡掉)
+    - cron: '55 23 * * *'
+    - cron: '55 11 * * *'
+    - cron: '40 0 * * *'
+    - cron: '40 12 * * *'
+
+concurrency:
+  group: hq-tg-edit
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # push 更新 briefing-state 的 hq_edited 标记
+
+jobs:
+  edit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: Asia/Shanghai
+      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      SHIFT_INPUT: ${{ inputs.shift }}
+      DEPLOY_RAW: https://raw.githubusercontent.com/hawaha112/ai-morning-briefing/main
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: briefing-state
+          path: _state
+
+      - name: Edit TG message audio to HQ version
+        run: |
+          pip install -q requests
+          python3 - <<'PY'
+          import json, os, sys, datetime, subprocess
+          import requests
+
+          RAW = os.environ['DEPLOY_RAW']
+          tok, chat = os.environ.get('TG_BOT_TOKEN', ''), os.environ.get('TG_CHAT_ID', '')
+          if not tok or not chat:
+              print('无 TG 凭据, 退出'); sys.exit(0)
+
+          shift = (os.environ.get('SHIFT_INPUT') or '').strip()
+          if not shift:
+              shift = 'am' if datetime.datetime.now().hour < 12 else 'pm'
+          print('班次:', shift)
+
+          # ① HQ 重制完成标记(部署仓公开 raw) + 必须对应"当前"任务(sha 对齐,
+          #    防止 HQ 还在磨本班任务时, 误把上一个任务的标记当成已完成)
+          try:
+              done = requests.get(f'{RAW}/archive/data/hq_done.json', timeout=20).json()
+              job = requests.get(f'{RAW}/archive/data/hq_job.json', timeout=20).json()
+          except Exception as e:
+              print('无 hq_done/hq_job(HQ 未完成/未启用), 退出:', e); sys.exit(0)
+          if done.get('shift') != shift:
+              print(f"hq_done 班次 {done.get('shift')} ≠ {shift}, 退出"); sys.exit(0)
+          if done.get('sha') != job.get('sha'):
+              print(f"HQ 尚未完成当前任务(done {done.get('sha')} ≠ job {job.get('sha')}), 等下轮"); sys.exit(0)
+
+          # ② briefing-state 里的消息信息
+          st_path = '_state/ai-morning-news/tg_state.json'
+          try:
+              st = json.load(open(st_path))
+          except Exception as e:
+              print('tg_state 读取失败, 退出:', e); sys.exit(0)
+          msg_id = st.get(f'briefing_msg_id_{shift}')
+          caption = st.get(f'briefing_caption_{shift}', '')
+          msg_date = st.get(f'briefing_msg_date_{shift}', '')
+          if not msg_id or not caption:
+              print('无合体消息记录(本班可能是纯文本/静默), 退出'); sys.exit(0)
+          if done.get('date') != msg_date:
+              print(f"hq_done 日期 {done.get('date')} ≠ 消息日期 {msg_date}, 退出"); sys.exit(0)
+          if st.get(f'hq_edited_{shift}') == msg_date:
+              print('本班已升级过, 退出'); sys.exit(0)
+
+          # ③ 下载 E 版音频
+          audio_rel = done.get('audio') or f"archive/audio/{msg_date}-{shift}.mp3"
+          r = requests.get(f'{RAW}/{audio_rel}', timeout=120)
+          if r.status_code != 200 or len(r.content) < 100000:
+              print('E 版音频下载异常, 退出:', r.status_code, len(r.content)); sys.exit(0)
+          open('/tmp/hq.mp3', 'wb').write(r.content)
+          print(f'E 版音频 {len(r.content)//1024}KB')
+
+          # ④ 原地替换消息音频(caption 必须重传否则被清空)
+          rpt = {'am': 'AI 早报', 'pm': 'AI 晚报'}[shift]
+          media = {'type': 'audio', 'media': 'attach://a',
+                   'caption': caption, 'parse_mode': 'HTML',
+                   'title': f'{rpt} · {msg_date}-{shift} (高清版)',
+                   'performer': 'AI Morning Briefing'}
+          resp = requests.post(
+              f'https://api.telegram.org/bot{tok}/editMessageMedia',
+              data={'chat_id': chat, 'message_id': msg_id,
+                    'media': json.dumps(media, ensure_ascii=False)},
+              files={'a': ('hq.mp3', open('/tmp/hq.mp3', 'rb'), 'audio/mpeg')},
+              timeout=120)
+          ok = False
+          try:
+              ok = resp.json().get('ok', False)
+          except Exception:
+              pass
+          if not ok:
+              print('editMessageMedia 失败(不重试, 下个 cron 再来):', resp.text[:300])
+              sys.exit(0)
+          print(f'✅ TG 消息 {msg_id} 音频已升级为 E 版')
+
+          # ⑤ 标记已升级, 推回 briefing-state(下一班 force-push 会自然扁平化)
+          st[f'hq_edited_{shift}'] = msg_date
+          json.dump(st, open(st_path, 'w'), ensure_ascii=False)
+          subprocess.run(['git', '-C', '_state', 'config', 'user.email', 'action@github.com'])
+          subprocess.run(['git', '-C', '_state', 'config', 'user.name', 'hq-tg-edit'])
+          subprocess.run(['git', '-C', '_state', 'add', 'ai-morning-news/tg_state.json'])
+          subprocess.run(['git', '-C', '_state', 'commit', '-m', f'hq: {msg_date} {shift} TG 音频已升级'])
+          subprocess.run(['git', '-C', '_state', 'push', 'origin', 'HEAD:briefing-state'])
+          PY

@@ -493,6 +493,18 @@ if [ -n "$REPO_URL" ] && [ -f "$PROJECT_DIR/output/index.html" ]; then
         "$PYTHON" "$PROJECT_DIR/archive_appender.py" \
             "$PROJECT_DIR/output/archive_payload.json" \
             "$DEPLOY_TMP/archive/data" >> "$LOG_FILE" 2>&1 || true
+        # HQ 离线重制任务(用户 2026-06-11 定 E=Qwen3 为最佳): 把口播文本+任务标记发布到
+        # 部署仓(公开, Actions 分钟不限量), 那边的 hq-audio.yml 监听 hq_job.json 的 push,
+        # 用慢但最自然的 Qwen3 引擎重制音频(~75-90 分钟)后原地覆盖 mp3(页面自动升级),
+        # 再由 pg4 的 hq-tg-edit.yml 定时任务把 TG 消息的音频原地换掉。失败不影响本班。
+        if [ -f "$PROJECT_DIR/output/broadcast.txt" ]; then
+            mkdir -p "$DEPLOY_TMP/archive/data"
+            cp "$PROJECT_DIR/output/broadcast.txt" "$DEPLOY_TMP/archive/data/broadcast-${SHIFT}.txt" 2>/dev/null || true
+            BC_SHA=$(shasum "$PROJECT_DIR/output/broadcast.txt" 2>/dev/null | cut -c1-16 || echo "x")
+            printf '{"date":"%s","shift":"%s","sha":"%s","audio":"archive/audio/%s-%s.mp3"}\n' \
+                "$TODAY_DATE" "$SHIFT" "$BC_SHA" "$TODAY_DATE" "$SHIFT" \
+                > "$DEPLOY_TMP/archive/data/hq_job.json" 2>/dev/null || true
+        fi
         # 音频只留 14 天: 每班 ~3-4MB, 不清理数月就拖垮 clone/Pages 配额。
         # ⚠️ 不能用 find -mtime(fresh clone 的 mtime 全是克隆时刻) — 按文件名日期裁。
         # 老归档页的 <audio> 对被裁文件会 onerror 自动隐藏, 优雅降级。
@@ -644,6 +656,22 @@ PYEOF
         NEW_MSG_ID=$(printf '%s' "$AUDIO_RESP" | "$PYTHON" -c "import sys,json;d=json.loads(sys.stdin.read() or '{}');print((d.get('result') or {}).get('message_id','') if isinstance(d,dict) else '')" 2>/dev/null || echo "")
         if [ -n "$NEW_MSG_ID" ]; then
             echo "  🎧 合体消息(音频+早报)已推送: msg_id=${NEW_MSG_ID}" >> "$LOG_FILE"
+            # 存 caption + 班次日期 → hq-tg-edit.yml 稍后用 E 引擎高质量音频原地
+            # editMessageMedia 升级这条消息(caption 必须重传, 否则会被清空)
+            CAPTION_ENV="$CAPTION" "$PYTHON" - "$TG_STATE_FILE" "$SHIFT" "$TODAY_DATE" <<'PYEOF' 2>>"$LOG_FILE" || true
+import json, os, sys
+path, shift, d = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    st = json.load(open(path)) if os.path.exists(path) else {}
+except Exception:
+    st = {}
+if not isinstance(st, dict):
+    st = {}
+st['briefing_caption_' + shift] = os.environ.get('CAPTION_ENV', '')
+st['briefing_msg_date_' + shift] = d
+st.pop('hq_edited_' + shift, None)   # 新一班, 清上一班的"已升级"标记
+json.dump(st, open(path, 'w'), ensure_ascii=False)
+PYEOF
         else
             echo "  ⚠️ 合体消息失败(caption 超限/网络/限流), 回退纯文本: $(printf '%s' "$AUDIO_RESP" | head -c 160)" >> "$LOG_FILE"
         fi

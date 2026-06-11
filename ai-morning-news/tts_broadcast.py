@@ -310,12 +310,18 @@ def main() -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     # ── 1. TTS 人声: 引擎链 qwen3 → kokoro → edge, 逐级回退, 永不空手 ──
+    # BROADCAST_NO_FALLBACK=true(HQ 离线重制用): 所选引擎失败就直接放弃不产文件,
+    # 调用方据此保留已有的快引擎音频, 而不是用同档引擎白白覆盖一遍。
+    no_fallback = os.environ.get('BROADCAST_NO_FALLBACK', '').lower() == 'true'
     rate_pct = _voice_rate_pct(len(text))
     voice_path = None
     wav = SCRIPT_DIR / 'output' / '_broadcast_voice.wav'
     if ENGINE == 'qwen3':
         if _synth_qwen3(text, wav) and wav.exists() and wav.stat().st_size > 50000:
             voice_path = wav
+    if voice_path is None and no_fallback:
+        log("引擎失败且 NO_FALLBACK, 不产出(保留既有音频)")
+        return 0
     if voice_path is None and ENGINE in ('kokoro', 'qwen3'):
         if _synth_kokoro(text, rate_pct, wav) \
                 and wav.exists() and wav.stat().st_size > 50000:
