@@ -380,11 +380,24 @@ def generate_html(all_items, config, digest=None, meta=None):
     # ── 必读"少而精"：按分排序后只取 Top N 进必读，其余降到"更多"(保留分类) ──
     # 不动 importance≥3 的入选门槛(不漏 LLM 低估的)，只限制必读的展示量；被降级的
     # 条目带着 categories 回流 regular，"更多"的主题分布也随之更丰富(不再 77% 堆在其他)。
-    FEATURED_CAP = int((config.get('settings', {}) or {}).get('featured_cap', 15))
+    FEATURED_CAP = int((config.get('settings', {}) or {}).get('featured_cap', 10))
     if len(featured_items) > FEATURED_CAP:
         _demoted = featured_items[FEATURED_CAP:]
         featured_items = featured_items[:FEATURED_CAP]
         regular_items = _demoted + regular_items   # prepend: 重要的排在各自分类组前面
+
+    # ── "更多资讯"也设上限(用户 2026-06-12: 每天推送的条目偏多, 过滤一些) ──
+    # 按 (importance, 多源数) 排序取 Top N, 长尾直接不上页 —— 它们仍进长期归档
+    # (archive/data)与仪表盘, 可搜可查, 只是不再占读者注意力。
+    GRID_CAP = int((config.get('settings', {}) or {}).get('grid_cap', 10))
+    if len(regular_items) > GRID_CAP:
+        regular_items.sort(key=lambda t: (
+            -(t[1].get('analysis', {}) or {}).get('importance', 0),
+            -(t[1].get('_cluster_size', 1) or 1)))
+        _grid_dropped = len(regular_items) - GRID_CAP
+        regular_items = regular_items[:GRID_CAP]
+    else:
+        _grid_dropped = 0
 
     # ── 今日三件大事：importance >= 4 且 cluster_size >= 2 的前 3 条 ──
     top3_items = []
@@ -1037,7 +1050,7 @@ def generate_html(all_items, config, digest=None, meta=None):
             continue
         vip_candidates.append((idx, item, imp))
     vip_candidates.sort(key=lambda x: -x[2])
-    vip_candidates = vip_candidates[:8]
+    vip_candidates = vip_candidates[:6]   # 用户 2026-06-12: 条目偏多, 收紧
 
     vip_html = ''
     if vip_candidates:
@@ -1135,7 +1148,7 @@ def generate_html(all_items, config, digest=None, meta=None):
     # 用层面而非 14 个细主题: 少而杂的内容(每个细主题常 1 条)按细主题会全碎进"其他",
     # 按 5 个层面则摊得开、每层有好几条, 分组才有意义。放在判断前先拿全貌; 点条目开 modal。
     _glance_groups = {}   # {层面名: [(idx, title), ...]}
-    for _gidx, _gitem in featured_items[:10]:
+    for _gidx, _gitem in featured_items[:8]:   # 速览 10→8(用户: 条目偏多)
         _ga = _gitem.get('analysis', {}) or {}
         _gt = (_ga.get('chinese_title') or _gitem.get('title') or '').strip()
         if not _gt:
