@@ -1124,13 +1124,15 @@ class LLMAnalyzer:
         if shift == 'pm':
             shift_rule = (f"这是一期【晚报】({date_str}): 开场问候必须用「晚上好」, "
                           "节目自称「AI 晚报」, 内容口吻是回顾今天发生的事, "
-                          "收尾说「明天早上见」。")
+                          "收尾说「明天早上见」。提到文字版页面时一律称「晚报页面」——"
+                          "全文任何地方都不许出现「早报」二字。")
         elif shift == 'am':
             shift_rule = (f"这是一期【早报】({date_str}): 开场问候必须用「早上好」, "
-                          "节目自称「AI 早报」, 收尾说「今晚/明天见」。")
+                          "节目自称「AI 早报」, 收尾说「今晚/明天见」。"
+                          "提到文字版页面时一律称「早报页面」。")
         else:
             shift_rule = (f"这是一期日报({date_str}): 开场问候用「大家好」, "
-                          "节目自称「AI 日报」。")
+                          "节目自称「AI 日报」, 提到文字版页面时称「简报页面」。")
 
         # ── 素材分层: 头条(importance 最高 3 条, 给足上下文) / 快讯(其余 8 条标题+一句话) ──
         def _imp(it):
@@ -1214,6 +1216,14 @@ class LLMAnalyzer:
                     resp = resp2
                 elif resp2 and abs(len(resp2) - (lo + hi) / 2) < abs(n - (lo + hi) / 2):
                     resp = resp2  # 没达标但更接近, 取较好的一版
+            # 班次词确定性兜底: prompt 约束之外再做硬替换 —— LLM 偶尔仍嘴瓢
+            # (2026-06-12 用户抓到晚班说「文字版已在早报页面更新」)
+            if shift == 'pm':
+                resp = (resp.replace('AI早报', 'AI晚报').replace('AI 早报', 'AI 晚报')
+                            .replace('早报页面', '晚报页面').replace('早上好', '晚上好'))
+            elif shift == 'am':
+                resp = (resp.replace('AI晚报', 'AI早报').replace('AI 晚报', 'AI 早报')
+                            .replace('晚报页面', '早报页面').replace('晚上好', '早上好'))
             log.info("🎙 口播稿 %d 字 (目标 %d-%d, ≈%.1f 分钟)",
                      len(resp), lo, hi, len(resp) / 290)
             return resp
