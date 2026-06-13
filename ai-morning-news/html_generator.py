@@ -192,15 +192,27 @@ _DOMAIN_BY_KEY = {k: (e, n, k) for e, n, k, _ in _TOPIC_TREE}
 _LEAF_TO_DOMAIN = {leaf: (e, n, k) for e, n, k, leaves in _TOPIC_TREE for leaf in leaves}
 _OTHER_DOMAIN = ('📰', '其他', 'other')
 
-# 兜底: LLM 未给 topic_domain 时, 从 categories+标题 关键词归域(保证不漏)。
-# 顺序=优先级: 先判"事件性质"强信号(商业/治理/算力/研究), 再应用, 模型最泛放最后。
+# 兜底: LLM 没给合法 topic_domain 时, 从 categories+标题 关键词归域(保证不漏)。
+# 顺序=优先级: 法律/治理信号最特异放最前, 再商业/算力/研究, 应用次之, 模型最泛放最后。
+# 不中时默认归 app(见 _domain_of) —— 永不返回"其他", 让 6 域真正穷尽(用户 2026-06-13)。
 _DOMAIN_KEYWORDS = [
-    ('biz',      ['融资', '投资', '估值', '并购', '收购', '商业', '营收', '市场', 'ipo', '人事', '裁员', '招聘', '上市']),
-    ('gov',      ['政策', '监管', '治理', '合规', '伦理', '滥用', '审查', '军事', '隐私', '版权', '法案', '诉讼']),
-    ('infra',    ['芯片', '算力', 'gpu', 'tpu', '硬件', '数据中心', '半导体', '推理', '部署', '能源', '集群', '显卡']),
-    ('research', ['论文', '研究', '学术', 'benchmark', '基准', '评测', '对齐', '理论', 'arxiv']),
-    ('app',      ['应用', '产品', 'agent', '智能体', '编程', '开发', '工具', '驾驶', '机器人', '具身', '场景', '企业', '消费']),
-    ('model',    ['大模型', '模型', '开源', '权重', '训练', '算法', '架构', '多模态', '视觉', '语音', '视频']),
+    ('gov',      ['政策', '监管', '治理', '合规', '伦理', '滥用', '审查', '军事', '隐私', '版权',
+                  '法案', '诉讼', '起诉', '法院', '裁定', '行政令', '政治', '献金', '否决', '国会',
+                  '白宫', '选举', '制裁', '反垄断', '工会', '罢工', '立法', '听证', '封禁', '出口管制']),
+    ('biz',      ['融资', '投资', '估值', '并购', '收购', '商业', '营收', '市场', 'ipo', '人事',
+                  '裁员', '招聘', '上市', '经济', 'gdp', '股份', '持股', '募资', '基金', '创投',
+                  '出海', '支付', '预算', '开支', '咨询', '顾问', '利润', '股价', '发债', '借款',
+                  '热潮', '格局', '营收', '增长', '商业模式']),
+    ('infra',    ['芯片', '算力', 'gpu', 'tpu', '硬件', '数据中心', '半导体', '能源', '集群',
+                  '显卡', '超算', '超级计算', '机房', '带宽', '储能', '光纤', '产能', 'asic', '算子']),
+    ('research', ['论文', '研究', '学术', 'benchmark', '基准', '评测', '对齐', '理论', 'arxiv',
+                  '框架', '指标', '评估', '检测', '压缩', '微调', '神经网络', '张量', '蒸馏',
+                  '数据集', '技术报告', '综述', '圆桌', '攻击']),
+    ('app',      ['应用', '产品', 'agent', '智能体', '编程', '工具', '驾驶', '机器人', '具身',
+                  '场景', '企业', '消费', '插件', 'codex', 'copilot', '助手', '功能', '集成',
+                  '客服', '医疗', '教育', '浏览器', '订阅', '软件', '课程']),
+    ('model',    ['大模型', '模型', '开源', '权重', '训练', '算法', '架构', '多模态', '视觉',
+                  '语音', '视频', '参数']),
 ]
 
 
@@ -214,12 +226,16 @@ def _domain_of(item):
     leaf = (a.get('topic_leaf') or '').strip()
     if leaf in _LEAF_TO_DOMAIN:
         return _LEAF_TO_DOMAIN[leaf]
+    # 标题里若有 6 域名直接出现(LLM 偶尔把域名塞进 leaf 或 title), 也认
+    title = str(a.get('chinese_title') or '')
     blob = (' '.join(str(c) for c in (a.get('categories') or [])) + ' '
-            + str(a.get('chinese_title') or '')).lower()
+            + title + ' ' + leaf).lower()
     for key, kws in _DOMAIN_KEYWORDS:
         if any(k in blob for k in kws):
             return _DOMAIN_BY_KEY[key]
-    return _OTHER_DOMAIN
+    # 永不返回"其他"(用户 2026-06-13: 不要模糊大类)。关键词全不中的多是行业杂项/动态,
+    # 默认归"应用与产品"(AI 新闻最高频的真实类别、最泛的筐); 治本靠 prompt 强制 LLM 归 6 域。
+    return _DOMAIN_BY_KEY['app']
 
 
 def _domain_key(item):
@@ -744,7 +760,7 @@ def generate_html(all_items, config, digest=None, meta=None):
     # 分类的卡片"流"到下一列、标题与内容对不上)。每个域一个独立 .grid-group 区块:
     # 彩色重标题(gch-{key} 左色条) + 该域自己的卡片网格(.grid-cards), 分割一目了然。
     cards_html = ""
-    for _emoji, _glname, _glkey in _DOMAIN_ORDER + [_OTHER_DOMAIN]:
+    for _emoji, _glname, _glkey in _DOMAIN_ORDER:   # _domain_of 永不返回"其他", 6 域穷尽
         _cards = _grid_groups.get(_glname)
         if not _cards:
             continue
