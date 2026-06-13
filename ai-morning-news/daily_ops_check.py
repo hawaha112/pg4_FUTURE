@@ -50,7 +50,7 @@ PAT_EXPIRY_WARN_DAYS = 14      # PAT 剩余 < 14 天告警
 MANUAL_TOKEN_EXPIRY = [
     {
         'name': 'Routine PAT (claude-routine-pg4future-trigger)',
-        'expiry': '2026-06-14',   # 续期后更新此日期
+        'expiry': '2026-07-13',   # 续期后更新此日期(2026-06-13 续, 下次 7/13 前)
         'warn_days': 1,           # 用户要求"到期前一天"再处理
         'note': ('触发早/晚报+周报的 PAT, 过期则 Anthropic Routine 不再触发(早晚报停)。'
                  '让 Claude 用 Chrome 续: github.com/settings/personal-access-tokens 新建 fine-grained '
