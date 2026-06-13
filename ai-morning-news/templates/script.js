@@ -497,6 +497,9 @@ function _updateGridHeaders() {
                 el = el.nextElementSibling;
             }
             h.classList.toggle('hidden', !anyVisible);
+            // "更多资讯"已改为分类成块(.grid-group): 整组连壳一起藏, 避免空壳占位
+            var g = h.closest('.grid-group');
+            if (g) g.classList.toggle('hidden', !anyVisible);
         });
     });
 }

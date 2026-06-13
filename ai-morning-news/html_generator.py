@@ -585,7 +585,7 @@ def generate_html(all_items, config, digest=None, meta=None):
             if not _fcards:
                 continue
             _fparts.append(
-                f'<h3 class="grid-cat-head" data-flayer="{_flkey}" role="button" '
+                f'<h3 class="grid-cat-head gch-{_flkey}" data-flayer="{_flkey}" role="button" '
                 f'title="只看{_flname}">{_femoji} {_flname}'
                 f'<span class="gc-n">{len(_fcards)}</span></h3>\n'
                 '<div class="featured-grid">\n' + ''.join(_fcards) + '</div>\n'
@@ -740,17 +740,21 @@ def generate_html(all_items, config, digest=None, meta=None):
         _, _glname, _ = _domain_of(item)   # 按层面分组(粗维度, 不碎)
         _grid_groups.setdefault(_glname, []).append(_card_html)
 
-    # 按层面顺序拼接 cards_html，每层一个全宽小标题(可点筛选)
+    # 按域成块拼接(用户 2026-06-13: 瀑布流里分类分割不明显 —— 多列布局会让一个
+    # 分类的卡片"流"到下一列、标题与内容对不上)。每个域一个独立 .grid-group 区块:
+    # 彩色重标题(gch-{key} 左色条) + 该域自己的卡片网格(.grid-cards), 分割一目了然。
     cards_html = ""
-    for _emoji, _glname, _glkey in _DOMAIN_ORDER:
+    for _emoji, _glname, _glkey in _DOMAIN_ORDER + [_OTHER_DOMAIN]:
         _cards = _grid_groups.get(_glname)
         if not _cards:
             continue
         cards_html += (
-            f'<h3 class="grid-cat-head" data-flayer="{_glkey}" role="button" '
+            f'<section class="grid-group">'
+            f'<h3 class="grid-cat-head gch-{_glkey}" data-flayer="{_glkey}" role="button" '
             f'title="只看{_glname}">{_emoji} {_glname}'
             f'<span class="gc-n">{len(_cards)}</span></h3>'
-            + ''.join(_cards)
+            f'<div class="grid-cards">' + ''.join(_cards) + '</div>'
+            '</section>'
         )
 
     # ── 为所有卡片构建 modal_data ──
@@ -1083,7 +1087,7 @@ def generate_html(all_items, config, digest=None, meta=None):
             if not _vrows:
                 continue
             _head = '' if _single else (
-                f'<h3 class="grid-cat-head" data-flayer="{_vlkey}" role="button" '
+                f'<h3 class="grid-cat-head gch-{_vlkey}" data-flayer="{_vlkey}" role="button" '
                 f'title="只看{_vlname}">{_vemoji} {_vlname}<span class="gc-n">{len(_vrows)}</span></h3>'
             )
             _vparts.append(_head + '<div class="vip-list">' + ''.join(_vrows) + '</div>')

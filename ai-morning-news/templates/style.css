@@ -277,15 +277,29 @@ body {
     .hr-item { flex-direction: column; gap: 2px; }
 }
 /* 「其他资讯」按类别分组的小标题 —— 全宽横跨网格, 卡片在其下方按类聚拢 */
+/* 分类区块标题: 左色条(随域配色) + 浅底横幅 + 计数 chip —— 分割醒目、可点筛选 */
 .grid-cat-head {
     grid-column: 1 / -1;
-    margin: 18px 0 2px; padding: 6px 0 8px;
-    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.10));
-    font-size: 13px; font-weight: 700; letter-spacing: 0.5px;
-    color: var(--text-70, #b6bdcb);
+    margin: 0 0 12px; padding: 9px 14px;
+    font-size: 14.5px; font-weight: 800; letter-spacing: 0.4px;
+    color: var(--text-100, #e7ebf3);
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.10));
+    border-left: 4px solid var(--accent, #66c0ff);
+    border-radius: 10px;
     display: flex; align-items: center; gap: 8px;
+    cursor: pointer;
 }
+.grid-cat-head:hover { background: rgba(255, 255, 255, 0.06); }
 .grid-cat-head:first-child { margin-top: 0; }
+/* 六域左色条配色(与卡片 dim 标签同色系) */
+.gch-model    { border-left-color: #818cf8; }
+.gch-infra    { border-left-color: #f59e42; }
+.gch-app      { border-left-color: #34d399; }
+.gch-research { border-left-color: #38bdf8; }
+.gch-gov      { border-left-color: #f87171; }
+.gch-biz      { border-left-color: #e879f9; }
+.gch-other    { border-left-color: #9ca3af; }
 .gc-n {
     font-size: 11px; font-weight: 600; color: var(--text-50, #8a93a6);
     background: rgba(255, 255, 255, 0.06);
@@ -578,12 +592,22 @@ body {
 }
 
 /* ═════ Grid — masonry columns ═════ */
+/* 2026-06-13 用户反馈"分类分割不明显": 弃瀑布流(columns 会让一个分类的卡片
+   流到下一列、标题对不上内容), 改为"每个分类一个独立区块"(.grid-group),
+   区块内自己的卡片网格(.grid-cards), 标题加色条+计数, 分割一目了然。 */
 .grid {
     max-width: 1120px; margin: 18px auto; padding: 0 14px;
-    columns: 3; column-gap: 10px;
 }
-@media (max-width:1024px) { .grid { columns: 2; } }
-@media (max-width:640px)  { .grid { columns: 1; padding: 0 10px; } }
+@media (max-width:640px)  { .grid { padding: 0 10px; } }
+.grid-group { margin: 0 0 28px; }
+.grid-group:last-child { margin-bottom: 8px; }
+.grid-group.hidden { display: none !important; }
+.grid-cards {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 10px; align-items: start;
+}
+@media (max-width:640px) { .grid-cards { grid-template-columns: 1fr; } }
+.grid-cards .card { margin-bottom: 0; }   /* 间距交给 grid gap, 避免叠加 */
 
 /* ═════ Card — 最小有效差异 ═════ */
 .card {
