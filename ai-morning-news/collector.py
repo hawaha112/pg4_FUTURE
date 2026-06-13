@@ -125,6 +125,46 @@ _HIGH_AUTHORITY_GENERAL_MEDIA = {
     '虎嗅科技', '知乎日报',
 }
 
+# ───────────────────────────────────────────────────────────────────────
+# 合订本/聚合帖过滤
+# 部分综合媒体（如爱范儿）RSS 里每天混一条「早报｜A/B/C」式聚合帖：一条 item
+# 塞多条互不相关的新闻。采集器若当成单一事件，LLM 只能把里面的多条硬揉进一张卡
+# （实测一张卡同时出现华为盘古 + Kimi K2.7 + Genspark 融资）。命中即在采集端丢弃——
+# 这些事件多半也能从一手源单独采到，丢掉聚合壳不丢内容。正则刻意收紧，只认
+# 「栏目标签领头 + 分隔符」或「AI/科技+早晚周报」这类强信号，避免误伤单事件文章。
+_ROUNDUP_LEAD_RE = re.compile(
+    r'^\s*(?:【[^】]{0,12}】|\[[^\]]{0,12}\])?\s*'        # 可选 【科技】/[AI] 前缀标签
+    r'(?:[^｜|│\s：:]{0,8}[：:]\s*)?'                     # 可选 "36氪：" 来源前缀
+    r'(?:早报|晚报|午报|日报|早间快讯|晚间快讯|早间新闻|晚间新闻|今日简报)'
+    r'\s*[｜|│\|：:·、\-—]'                              # 栏目名后必须跟分隔符（与"简报功能"等区分）
+)
+_ROUNDUP_KW_RE = re.compile(
+    r'(?:AI|科技|每日|今日|大模型|互联网|创投|财经)\s*'
+    r'(?:早报|晚报|日报|周报|月报|快讯合集|资讯合集|资讯汇总|要闻汇总)'
+    r'|(?:一周|本周|上周|过去一周|过去7天|过去七天)\s*[^，。\n]{0,8}'
+    r'(?:盘点|大事|要闻|回顾|热点|速览|汇总|总结)'
+    r'|(?:AI|大模型|科技|行业)\s*(?:周报|周刊|月报|月刊)'
+)
+
+
+def _is_roundup_title(title: str) -> bool:
+    """标题是否为合订本/聚合帖（多条不相关新闻塞进一条 item）。"""
+    t = (title or '').strip()
+    if not t:
+        return False
+    return bool(_ROUNDUP_LEAD_RE.match(t) or _ROUNDUP_KW_RE.search(t))
+
+
+def _drop_roundup_posts(items):
+    """丢弃合订本/聚合帖。返回 (保留列表, 丢弃的标题列表)。"""
+    kept, dropped = [], []
+    for item in items:
+        if _is_roundup_title(item.get('title', '')):
+            dropped.append(item.get('title', '')[:80])
+        else:
+            kept.append(item)
+    return kept, dropped
+
 
 def _keyword_prefilter(items, ai_only_sources, source_authority):
     """分层关键词预过滤
@@ -396,6 +436,12 @@ def main():
     if age_filtered > 0:
         log.info("🕐 时间过滤移除 %s 条旧文章（T0/T1=%dh · T2=%dh · %d 源自定义）",
                  age_filtered, _TIER_MAX_AGE[0], max_age, len(_src_override))
+
+    # 合订本/聚合帖过滤（如爱范儿「早报｜A/B/C」一条塞多新闻 → 丢弃，避免揉成一张卡）
+    all_items, _roundups = _drop_roundup_posts(all_items)
+    if _roundups:
+        log.info("🗞️  合订本过滤移除 %d 条聚合帖：%s",
+                 len(_roundups), " ｜ ".join(_roundups[:3]))
 
     # 按时间排序
     def sort_key(item):

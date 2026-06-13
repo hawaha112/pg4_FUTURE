@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from briefing_renderer import _already_rendered_in_shift
 from llm_analyzer import LLMAnalyzer, _smart_truncate
+from collector import _is_roundup_title, _drop_roundup_posts
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -148,6 +149,74 @@ class TestSmartTruncate(unittest.TestCase):
         out = _smart_truncate(text, 50, note="…")
         # 至少 note 要追加上
         self.assertTrue(out.endswith("…"))
+
+
+# ════════════════════════════════════════════════════════════════════
+# 合订本/聚合帖过滤 — 2026-06-13
+#
+#   爱范儿 RSS 每天混一条「早报｜SpaceX上市/苹果Siri/华为盘古」式聚合帖：
+#   一条 item 塞多条不相关新闻。采集器旧逻辑当成单一事件 → LLM 把里面的
+#   华为盘古 + Kimi K2.7（+ Genspark 融资）硬揉进一张卡，用户看到"两件不
+#   相关的事粘在一起"。修复：采集端用 _is_roundup_title 检出并丢弃。
+#   正则收紧（栏目标签领头+分隔符 / AI·科技+早晚周报），避免误伤单事件文章。
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestRoundupFilter(unittest.TestCase):
+    # 触发本次修复的真实标题
+    REAL_OFFENDER = (
+        "早报｜SpaceX上市首日暴涨/苹果高管：Siri不想做用户的情感伴侣/"
+        "华为余承东：要带盘古大模型从中国第一走向世界第一"
+    )
+
+    DROP = [
+        REAL_OFFENDER,
+        "晚报｜OpenAI发布新模型/谷歌回应Gemini争议",
+        "AI早报：DeepSeek开源新版本",
+        "科技早报 6月13日：苹果、华为齐发新品",
+        "36氪：早报｜今日多家公司财报",
+        "一周AI大事盘点",
+        "大模型周报",
+        "本周AI融资速览",
+        "每日资讯汇总",
+    ]
+    KEEP = [
+        # 聚合帖里被误揉的单事件，单独出现时必须保留
+        "华为余承东：要带盘古大模型从中国第一走向世界第一",
+        "Kimi K2.7 Code 正式开源，长程编程 token 消耗降三成",
+        "OpenAI发布GPT-5",
+        "Anthropic发布每日简报功能",        # "每日"+"简报"但非 roundup
+        "苹果发布会要闻：Siri重大更新",      # 单事件 recap 含"要闻"
+        "AI日历应用上线",                   # 含"日"非"日报"
+        "OpenAI发布会日程公布",
+        "DeepSeek-V3技术报告解读",
+        "美国政府对Anthropic最新模型实施出口管制",
+    ]
+
+    def test_roundups_detected(self):
+        for t in self.DROP:
+            self.assertTrue(_is_roundup_title(t), f"漏判合订本: {t!r}")
+
+    def test_single_events_kept(self):
+        for t in self.KEEP:
+            self.assertFalse(_is_roundup_title(t), f"误伤单事件: {t!r}")
+
+    def test_drop_helper_removes_only_roundups(self):
+        items = (
+            [{'title': t} for t in self.DROP]
+            + [{'title': t} for t in self.KEEP]
+        )
+        kept, dropped = _drop_roundup_posts(items)
+        self.assertEqual(len(dropped), len(self.DROP))
+        self.assertEqual(len(kept), len(self.KEEP))
+        self.assertIn(self.REAL_OFFENDER[:80], dropped)
+
+    def test_empty_and_missing_title_safe(self):
+        self.assertFalse(_is_roundup_title(""))
+        self.assertFalse(_is_roundup_title(None))
+        kept, dropped = _drop_roundup_posts([{'summary': 'x'}, {'title': ''}])
+        self.assertEqual(len(kept), 2)
+        self.assertEqual(dropped, [])
 
 
 if __name__ == '__main__':
