@@ -58,3 +58,14 @@ dots.tts(小红书 2026-06-03, Apache, 中文强, **GPU-only → 新观察名单
 - **结论: 免费 CI CPU 上不可行**。代码路径(tts_broadcast._synth_qwen3, 链式回退)保留,
   触发条件: 自托管 runner / GPU / 引擎未来出大幅加速。回退链实测两次完美兜底。
 - E 级以上质量的现实路径: Gemini TTS 免费 key(待用户提供) 或 付费区(百炼 ¥8/月)。
+
+## ☠️ HQ 两段式管线停用(2026-06-13 事故复盘)
+- 6/12am/pm + 6/13am 三班音频被 GHA 上的 Qwen3 重制版覆盖, **实际产物是乱码**(用户实听
+  11 分钟杂音)。疑因: int8 kernel 在共享 EPYC(无 VNNI)数值劣化 / AR 模型长文本复读退化。
+- **根因教训: 管线只验证了"时长+流程", CI 产物从未经人耳验证就自动上线替换**。
+  以后任何 TTS 引擎变更, 必须先把 CI 实际产物发 TG 人耳验收, 才允许接自动管线。
+- 处置: 两 workflow 已 disable(pg4/hq-tg-edit + 部署仓/hq-audio), run_daily 停发 hq_job
+  (注释保留); 三班 mp3 从 git 历史恢复; 6/12-pm 的 TG 消息用 restore 模式换回好版本。
+- 架构(发布文本→公开仓重制→覆盖 mp3→editMessageMedia)本身已验证可用, 复活条件:
+  换"人耳验证过的引擎"(Gemini key / 付费 TTS)即可原样启用。
+- **现役: Kokoro zf_017(B), 全链路稳定。**
