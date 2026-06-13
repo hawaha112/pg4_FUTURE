@@ -236,6 +236,13 @@ def _synth_kokoro(text: str, rate_pct: int, out_path: Path) -> bool:
                 return _eng(t)[0]
             except Exception:
                 return ''
+        # 多音字/专名读音修正: 必须在 ZHG2P 调用前灌进 pypinyin/jieba 全局词典
+        # (微调=tiáo, 重置=chóng, 切换=qiē, 长上下文=cháng 等; 见 tts_pronounce.py)
+        try:
+            from tts_pronounce import apply_pronunciation_fixes
+            apply_pronunciation_fixes(log=log)
+        except Exception as _pe:
+            log(f"⚠️ 读音修正加载失败(不阻塞): {_pe}")
         g2p = ZHG2P(version='1.1', en_callable=_en)
         k = Kokoro(str(KOKORO_DIR / 'kokoro-v1.1-zh.onnx'),
                    str(KOKORO_DIR / 'voices-v1.1-zh.bin'),

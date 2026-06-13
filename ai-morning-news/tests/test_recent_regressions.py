@@ -297,5 +297,44 @@ class TestLastBriefingMemory(unittest.TestCase):
         self.assertIsNone(_load_prev_briefing(self.dir, 'am', self.today))
 
 
+# ════════════════════════════════════════════════════════════════════
+# 多音字读音修正 — 2026-06-14
+#
+#   用户反馈口播多音字读错。Kokoro/misaki 定音 = jieba 分词 + pypinyin(TONE3)。
+#   实测真错: 微调(→diào应tiáo)、重置(→zhòng应chóng)、切换(→qiè应qiē)、
+#   长上下文(jieba 切碎"长"→默认 zhǎng 应 cháng)。修复: tts_pronounce 用
+#   jieba.add_word + pypinyin.load_phrases_dict 注入读音, ZHG2P 调用前生效。
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestPronunciationFix(unittest.TestCase):
+    @staticmethod
+    def _rd(text):
+        import jieba
+        from pypinyin import lazy_pinyin, Style
+        return ' '.join(
+            p for w in jieba.lcut(text)
+            for p in lazy_pinyin(w, style=Style.TONE3, neutral_tone_with_five=True))
+
+    def test_readings_corrected_after_apply(self):
+        from tts_pronounce import apply_pronunciation_fixes
+        apply_pronunciation_fixes()
+        self.assertIn('tiao2', self._rd('微调模型'))   # 微调 = wēi tiáo
+        self.assertIn('chong2', self._rd('模型重置'))  # 重置 = chóng zhì
+        self.assertIn('qie1', self._rd('切换模型'))    # 切换 = qiē huàn
+        self.assertTrue(self._rd('长上下文窗口').startswith('chang2'))  # 长 = cháng
+
+    def test_idempotent(self):
+        from tts_pronounce import apply_pronunciation_fixes
+        apply_pronunciation_fixes()
+        self.assertEqual(apply_pronunciation_fixes(), 0)  # 已加载, 第二次不重复
+
+    def test_to_phrase_entry_format(self):
+        from tts_pronounce import _to_phrase_entry
+        self.assertEqual(_to_phrase_entry('wēi tiáo'), [['wēi'], ['tiáo']])
+        self.assertIsNone(_to_phrase_entry(''))
+        self.assertIsNone(_to_phrase_entry('   '))
+
+
 if __name__ == '__main__':
     unittest.main()
