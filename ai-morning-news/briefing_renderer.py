@@ -34,6 +34,72 @@ from llm_analyzer import LLMAnalyzer, create_analyzer_from_config
 from config_validator import validate_and_warn
 
 
+# ─── 跨班次"上一班记忆" ──────────────────────────────────────
+# 治"今天早报和昨天晚报像在说同一件事"(用户 2026-06-14 反馈)：把上一班的
+# 判断/头条标题存进 last_briefing.json，下一班出报前读回来喂给 digest/口播，
+# 让 LLM 把延续大事写成"进展/跟进(只讲 delta)"、没新进展就让位给新事、
+# 开场不与上一班雷同。文件随 briefing-state 分支跨云端跑持久化(*.json 通配 restore
+# + morning-briefing.yml push-back 列表已加)。任何读写失败都不阻塞出报。
+_LAST_BRIEFING_FILENAME = 'last_briefing.json'
+
+
+def _shift_label(shift, date_obj):
+    name = {'am': '早报', 'pm': '晚报'}.get(shift, '简报')
+    return f"{date_obj.month}月{date_obj.day}日{name}"
+
+
+def _load_prev_briefing(script_dir, cur_shift, cur_date, max_age_hours=22):
+    """读上一班记忆。返回 {label, judgments[], headlines[]} 或 None。"""
+    path = Path(script_dir) / _LAST_BRIEFING_FILENAME
+    if not path.exists():
+        return None
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        return None
+    # 同班次同一天 = 重跑自己，不当"上一班"(否则 AM 跟 AM、自我重复)
+    if data.get('shift') == cur_shift and data.get('date') == cur_date.isoformat():
+        return None
+    # 太旧不用(间隔超大半天，连续性已无意义；防 routine 中断后翻出隔夜旧报)
+    ts = data.get('ts')
+    if ts:
+        try:
+            t = datetime.fromisoformat(ts)
+            if t.tzinfo is None:
+                t = t.astimezone()
+            age_h = (datetime.now().astimezone() - t).total_seconds() / 3600
+            if age_h > max_age_hours:
+                return None
+        except Exception:
+            pass
+    js = [t for t in (data.get('judgments') or []) if t]
+    hs = [t for t in (data.get('headlines') or []) if t]
+    if not js and not hs:
+        return None
+    return {'label': data.get('label') or '上一班', 'judgments': js, 'headlines': hs}
+
+
+def _save_last_briefing(script_dir, shift, cur_date, judgments, headlines):
+    """出报后记下本班判断/头条，供下一班连续性参考。失败不阻塞。"""
+    path = Path(script_dir) / _LAST_BRIEFING_FILENAME
+    try:
+        data = {
+            'shift': shift,
+            'date': cur_date.isoformat(),
+            'label': _shift_label(shift, cur_date),
+            'ts': datetime.now().astimezone().isoformat(),
+            'judgments': [t for t in judgments if t][:3],
+            'headlines': [t for t in headlines if t][:6],
+        }
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
+        log.info("🧵 已记录本班记忆(%s): %d 判断 / %d 头条",
+                 data['label'], len(data['judgments']), len(data['headlines']))
+    except Exception as e:
+        log.warning("⚠️ last_briefing.json 写入失败(不阻塞): %s", e)
+
+
 # ─── 状态展示配置 ────────────────────────────────────────────
 STATUS_DISPLAY = {
     'rumor': {'label': '传闻', 'label_en': 'Rumor', 'color': '#f59e0b', 'icon': '🔮'},
@@ -563,6 +629,16 @@ def main():
     if filtered_count:
         log.info("🔽 质量过滤：移除 %d 条内容不充分的文章", filtered_count)
 
+    # ── 上一班记忆：注入连续性约束，避免与上一班"说同一件事" ──
+    import os as _os_prev
+    _cur_shift = _os_prev.environ.get('BRIEFING_SHIFT', '').lower()
+    _cur_date = datetime.now().astimezone().date()
+    prev_context = _load_prev_briefing(script_dir, _cur_shift, _cur_date)
+    if prev_context:
+        log.info("🧵 上一班记忆 %s: %d 判断 / %d 头条 → 注入连续性约束",
+                 prev_context['label'], len(prev_context['judgments']),
+                 len(prev_context['headlines']))
+
     # ── 生成今日速览（带缓存） ──
     digest = {"editorial": "", "top_stories": []}
     digest_cache_path = script_dir / 'output' / '.digest_cache.json'
@@ -581,7 +657,7 @@ def main():
                 # 失败原样返回。去重后的 all_items 同时供 digest 和 generate_html 使用。
                 all_items = analyzer.dedupe_same_event(all_items)
                 log.info("📝 生成今日速览...")
-                digest = analyzer.generate_digest(all_items)
+                digest = analyzer.generate_digest(all_items, prev_context=prev_context)
                 # 缓存成功的速览，避免重渲染丢失
                 if digest.get('editorial'):
                     try:
@@ -718,9 +794,25 @@ def main():
             _wd = '一二三四五六日'[_now_bc.weekday()]
             _ds = f"{_now_bc.month}月{_now_bc.day}日, 星期{_wd}"
             broadcast_script = create_analyzer_from_config(config).generate_broadcast_script(
-                digest, items=all_items, shift=_sh, date_str=_ds)
+                digest, items=all_items, shift=_sh, date_str=_ds,
+                prev_context=prev_context)
         except Exception as e:
             log.warning("⚠️ 口播稿生成失败 (不阻塞): %s", e)
+
+    # ── 记录本班记忆(判断标题 + 按重要性的头条标题), 供下一班连续性参考 ──
+    try:
+        _jud_titles = [(j.get('title') or '').strip()
+                       for j in (digest.get('judgments') or [])]
+        _head_titles = []
+        for _it in sorted(
+                all_items,
+                key=lambda x: (x.get('analysis', {}) or {}).get('importance', 0),
+                reverse=True)[:6]:
+            _a = _it.get('analysis', {}) or {}
+            _head_titles.append((_a.get('chinese_title') or _it.get('title') or '').strip())
+        _save_last_briefing(script_dir, _cur_shift, _cur_date, _jud_titles, _head_titles)
+    except Exception as _e:
+        log.warning("⚠️ 记录本班记忆失败(不阻塞): %s", _e)
 
     # 口播稿落盘 → run_daily.sh 的 TTS 步骤(tts_broadcast.py)读它合成音频。
     # 音频文件名按日期+班次约定, 页面 <audio> 先按约定引用(文件在渲染后才生成,

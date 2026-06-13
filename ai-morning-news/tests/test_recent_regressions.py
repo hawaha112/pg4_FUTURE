@@ -4,6 +4,7 @@
 就能知道"这里曾经踩过什么坑"。
 """
 
+import json
 import os
 import sys
 import unittest
@@ -11,7 +12,12 @@ from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from briefing_renderer import _already_rendered_in_shift
+import tempfile
+from pathlib import Path
+
+from briefing_renderer import (
+    _already_rendered_in_shift, _load_prev_briefing, _save_last_briefing,
+)
 from llm_analyzer import LLMAnalyzer, _smart_truncate
 from collector import _is_roundup_title, _drop_roundup_posts
 
@@ -217,6 +223,78 @@ class TestRoundupFilter(unittest.TestCase):
         kept, dropped = _drop_roundup_posts([{'summary': 'x'}, {'title': ''}])
         self.assertEqual(len(kept), 2)
         self.assertEqual(dropped, [])
+
+
+# ════════════════════════════════════════════════════════════════════
+# 跨班次"上一班记忆" — 2026-06-14
+#
+#   用户反馈"今天的早报和昨天的晚报都说的是一件事"。根因: 出报时 LLM 不知
+#   道上一班讲了什么, 延续性大事(如美国对 Anthropic 出口管制)每班都从头重讲。
+#   修复: last_briefing.json 存上一班判断/头条, 下一班读回注入连续性约束
+#   (延续事件写"进展/跟进"、没新进展让位、开场不雷同)。
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestContinuityBlock(unittest.TestCase):
+    PC = {
+        'label': '6月13日晚报',
+        'judgments': ['Anthropic IPO与出口管制同日落地', '合规团队规模将成竞争壁垒'],
+        'headlines': ['美国封禁Fable 5'],
+    }
+
+    def test_digest_block_has_prev_and_rule(self):
+        b = LLMAnalyzer._build_continuity_block(self.PC)
+        self.assertIn('6月13日晚报', b)
+        self.assertIn('Anthropic IPO与出口管制同日落地', b)
+        self.assertIn('进展/跟进', b)
+        self.assertIn('没有实质新进展', b)
+
+    def test_digest_block_empty_when_no_prev(self):
+        self.assertEqual(LLMAnalyzer._build_continuity_block(None), '')
+        self.assertEqual(LLMAnalyzer._build_continuity_block({}), '')
+        self.assertEqual(
+            LLMAnalyzer._build_continuity_block({'judgments': [], 'headlines': []}), '')
+
+    def test_broadcast_note(self):
+        n = LLMAnalyzer._broadcast_continuity_note(self.PC)
+        self.assertIn('进展式', n)
+        self.assertIn('6月13日晚报', n)
+        self.assertEqual(LLMAnalyzer._broadcast_continuity_note(None), '')
+
+
+class TestLastBriefingMemory(unittest.TestCase):
+    def setUp(self):
+        self._dir = tempfile.mkdtemp()
+        self.dir = Path(self._dir)
+        self.today = datetime.now().astimezone().date()
+        self.yesterday = self.today - timedelta(days=1)
+
+    def test_roundtrip_prev_shift_loads(self):
+        # 昨晚 pm 存 → 今早 am 读, 应取回
+        _save_last_briefing(self.dir, 'pm', self.yesterday,
+                            ['判断A', '判断B'], ['头条1', '头条2'])
+        prev = _load_prev_briefing(self.dir, 'am', self.today)
+        self.assertIsNotNone(prev)
+        self.assertEqual(prev['judgments'], ['判断A', '判断B'])
+        self.assertIn('晚报', prev['label'])
+
+    def test_same_shift_same_day_is_self_rerun(self):
+        # 同班次同一天 = 重跑自己, 不当上一班(防自我重复)
+        _save_last_briefing(self.dir, 'am', self.today, ['判断A'], ['头条1'])
+        self.assertIsNone(_load_prev_briefing(self.dir, 'am', self.today))
+
+    def test_stale_memory_ignored(self):
+        # ts 太旧(>22h)不用
+        _save_last_briefing(self.dir, 'pm', self.yesterday, ['判断A'], ['头条1'])
+        path = self.dir / 'last_briefing.json'
+        data = json.loads(path.read_text(encoding='utf-8'))
+        old = datetime.now().astimezone() - timedelta(hours=30)
+        data['ts'] = old.isoformat()
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+        self.assertIsNone(_load_prev_briefing(self.dir, 'am', self.today))
+
+    def test_missing_file_safe(self):
+        self.assertIsNone(_load_prev_briefing(self.dir, 'am', self.today))
 
 
 if __name__ == '__main__':

@@ -1105,8 +1105,26 @@ class LLMAnalyzer:
     BROADCAST_TARGET_CHARS = (1300, 1450)
     BROADCAST_HARD_BOUNDS = (1150, 1700)
 
+    @staticmethod
+    def _broadcast_continuity_note(prev_context) -> str:
+        """口播稿的承上启下提示: 延续事件用"进展式"开场, 别重复上一班角度。"""
+        if not prev_context:
+            return ''
+        label = (prev_context.get('label') or '上一班').strip()
+        js = [t for t in (prev_context.get('judgments') or []) if t][:3]
+        if not js:
+            return ''
+        body = '；'.join(js)
+        return (
+            f"【承上启下(重要)】听众上一班（{label}）已经听过这些主题：{body}。"
+            f"今天若讲到同一件事，开场钩子和导语【不要重复上一班的角度】，要用"
+            f"「继{label}说的那件事之后，今天有了新进展……」这种【进展式】开场，只讲新发展；"
+            f"相比上一班没有新进展的旧事，不要再当头条深讲。\n\n"
+        )
+
     def generate_broadcast_script(self, digest: dict, items: list = None,
-                                  shift: str = '', date_str: str = '') -> str:
+                                  shift: str = '', date_str: str = '',
+                                  prev_context: dict = None) -> str:
         """生成 5-6 分钟的每日 AI 口播稿(电台结构), 供 TTS 合成音频 + 页面文字稿。
 
         结构: 开场(日期+总起) → 头条深讲2-3条 → 快讯串播 → 今日判断 → 收尾。
@@ -1178,6 +1196,7 @@ class LLMAnalyzer:
         user_msg = (
             f"用下面的素材写一期【{lo}-{hi}字】的 AI 新闻口播稿(念出来约5-6分钟)。\n\n"
             f"【班次】{shift_rule}\n\n"
+            f"{self._broadcast_continuity_note(prev_context)}"
             "【节目结构(必须按此顺序; 不要写小标题/阿拉伯数字序号, 但要在话里喊出'第一件''第二件'当路标)】\n"
             "1. 冷开场钩子(约25字): 第一句直接抛今天最大的冲突或反差, 一句话勾住人。"
             "禁止'大家好''欢迎收听''今天天气'这种平铺开头——钩子先行。\n"
@@ -1258,9 +1277,42 @@ class LLMAnalyzer:
     # 今日速览（全局综合）
     # ------------------------------------------------------------------
 
-    def generate_digest(self, analyses: List[dict]) -> dict:
+    @staticmethod
+    def _build_continuity_block(prev_context) -> str:
+        """把上一班的判断/头条拼成连续性约束块, 注入 digest 主编 prompt。
+
+        没有上一班(首班/隔太久/重跑自己)时返回 ''(不注入)。
+        """
+        if not prev_context:
+            return ''
+        label = (prev_context.get('label') or '上一班').strip()
+        js = [t for t in (prev_context.get('judgments') or []) if t][:3]
+        hs = [t for t in (prev_context.get('headlines') or []) if t][:6]
+        if not js and not hs:
+            return ''
+        lines = [f"【读者上一班（{label}）已经看过的内容】"]
+        if js:
+            lines.append("上一班的判断标题：")
+            lines += [f"  - {t}" for t in js]
+        if hs:
+            lines.append("上一班的头条：")
+            lines += [f"  - {t}" for t in hs]
+        lines.append(
+            "【连续性铁律】今天若涉及上面同一事件：必须当作【进展/跟进】来写——"
+            "判断的标题和切入角度要和上一班明显不同；body 第一句点明承接"
+            "（如「继昨晚X之后」「这事昨天讲过，今天的新变化是」），之后只讲【新进展】"
+            "（新数字 / 新动作 / 新后果 / 对手的新反应），不要从头复述上一班已经交代过的背景。"
+            "若某件事相比上一班【没有实质新进展】，就不要再把它放进今日判断，把版面让给真正的新事。"
+            "headline（今日主旋律）也不得与上一班雷同。"
+        )
+        return '\n'.join(lines)
+
+    def generate_digest(self, analyses: List[dict], prev_context: dict = None) -> dict:
         """
         从所有文章分析中生成"今日 3 个判断", 走 **3 道工序流水线** (v3).
+
+        prev_context: 上一班的 {label, judgments[], headlines[]}(可选)。传入则注入
+        连续性约束, 让延续大事写成"进展/跟进"而非重新铺垫(治跨班次"说同一件事")。
 
         Pipeline:
             Stage A (主编): 从事件中提炼 3 判断 draft (digest_system prompt)
@@ -1330,6 +1382,11 @@ class LLMAnalyzer:
 
         count = len([a for a in analyses if a.get("analysis", {}).get("ai_relevant", True)])
         user_msg = DIGEST_USER_TEMPLATE.format(count=count, summaries=summaries_text)
+
+        # 上一班记忆: 注入连续性约束(延续大事写"进展"、没新进展让位、开场不雷同)
+        prev_block = self._build_continuity_block(prev_context)
+        if prev_block:
+            user_msg = prev_block + "\n\n" + user_msg
 
         # ═══ Stage A: 主编生成 draft ═══
         draft_data = self._digest_stage_a_chief(user_msg)
