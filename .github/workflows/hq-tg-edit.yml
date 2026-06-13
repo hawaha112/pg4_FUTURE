@@ -12,6 +12,11 @@ on:
         type: choice
         options: ['', am, pm]
         default: ''
+      restore_audio_url:
+        description: '恢复模式: 指定音频 URL 直接替换该班消息音频(绕过 hq_done 校验, 用于救灾)'
+        required: false
+        type: string
+        default: ''
   schedule:
     # 北京 07:55 / 19:55 (briefing 6:00/18:00 出 → HQ 重制 ~75-90 分钟 → 此时应已就绪)
     # + 08:40 / 20:40 重试一轮(HQ 偶尔磨得久; 已升级过的班次会被 hq_edited 标记挡掉)
@@ -36,6 +41,7 @@ jobs:
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
       TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
       SHIFT_INPUT: ${{ inputs.shift }}
+      RESTORE_URL: ${{ inputs.restore_audio_url }}
       DEPLOY_RAW: https://raw.githubusercontent.com/hawaha112/ai-morning-briefing/main
 
     steps:
@@ -61,17 +67,22 @@ jobs:
               shift = 'am' if datetime.datetime.now().hour < 12 else 'pm'
           print('班次:', shift)
 
-          # ① HQ 重制完成标记(部署仓公开 raw) + 必须对应"当前"任务(sha 对齐,
-          #    防止 HQ 还在磨本班任务时, 误把上一个任务的标记当成已完成)
-          try:
-              done = requests.get(f'{RAW}/archive/data/hq_done.json', timeout=20).json()
-              job = requests.get(f'{RAW}/archive/data/hq_job.json', timeout=20).json()
-          except Exception as e:
-              print('无 hq_done/hq_job(HQ 未完成/未启用), 退出:', e); sys.exit(0)
-          if done.get('shift') != shift:
-              print(f"hq_done 班次 {done.get('shift')} ≠ {shift}, 退出"); sys.exit(0)
-          if done.get('sha') != job.get('sha'):
-              print(f"HQ 尚未完成当前任务(done {done.get('sha')} ≠ job {job.get('sha')}), 等下轮"); sys.exit(0)
+          restore_url = (os.environ.get('RESTORE_URL') or '').strip()
+          done = {}
+          if restore_url:
+              print('恢复模式: 直接用指定 URL 替换音频(绕过 hq_done 校验)')
+          else:
+              # ① HQ 重制完成标记(部署仓公开 raw) + 必须对应"当前"任务(sha 对齐,
+              #    防止 HQ 还在磨本班任务时, 误把上一个任务的标记当成已完成)
+              try:
+                  done = requests.get(f'{RAW}/archive/data/hq_done.json', timeout=20).json()
+                  job = requests.get(f'{RAW}/archive/data/hq_job.json', timeout=20).json()
+              except Exception as e:
+                  print('无 hq_done/hq_job(HQ 未完成/未启用), 退出:', e); sys.exit(0)
+              if done.get('shift') != shift:
+                  print(f"hq_done 班次 {done.get('shift')} ≠ {shift}, 退出"); sys.exit(0)
+              if done.get('sha') != job.get('sha'):
+                  print(f"HQ 尚未完成当前任务(done {done.get('sha')} ≠ job {job.get('sha')}), 等下轮"); sys.exit(0)
 
           # ② briefing-state 里的消息信息
           st_path = '_state/ai-morning-news/tg_state.json'
@@ -84,24 +95,29 @@ jobs:
           msg_date = st.get(f'briefing_msg_date_{shift}', '')
           if not msg_id or not caption:
               print('无合体消息记录(本班可能是纯文本/静默), 退出'); sys.exit(0)
-          if done.get('date') != msg_date:
-              print(f"hq_done 日期 {done.get('date')} ≠ 消息日期 {msg_date}, 退出"); sys.exit(0)
-          if st.get(f'hq_edited_{shift}') == msg_date:
-              print('本班已升级过, 退出'); sys.exit(0)
+          if not restore_url:
+              if done.get('date') != msg_date:
+                  print(f"hq_done 日期 {done.get('date')} ≠ 消息日期 {msg_date}, 退出"); sys.exit(0)
+              if st.get(f'hq_edited_{shift}') == msg_date:
+                  print('本班已升级过, 退出'); sys.exit(0)
 
-          # ③ 下载 E 版音频
-          audio_rel = done.get('audio') or f"archive/audio/{msg_date}-{shift}.mp3"
-          r = requests.get(f'{RAW}/{audio_rel}', timeout=120)
+          # ③ 下载音频(恢复模式用指定 URL; 否则 hq_done 指向的 E 版)
+          if restore_url:
+              url = restore_url
+          else:
+              audio_rel = done.get('audio') or f"archive/audio/{msg_date}-{shift}.mp3"
+              url = f'{RAW}/{audio_rel}'
+          r = requests.get(url, timeout=120)
           if r.status_code != 200 or len(r.content) < 100000:
-              print('E 版音频下载异常, 退出:', r.status_code, len(r.content)); sys.exit(0)
+              print('音频下载异常, 退出:', r.status_code, len(r.content)); sys.exit(0)
           open('/tmp/hq.mp3', 'wb').write(r.content)
-          print(f'E 版音频 {len(r.content)//1024}KB')
+          print(f'音频 {len(r.content)//1024}KB ← {url[-60:]}')
 
           # ④ 原地替换消息音频(caption 必须重传否则被清空)
           rpt = {'am': 'AI 早报', 'pm': 'AI 晚报'}[shift]
           media = {'type': 'audio', 'media': 'attach://a',
                    'caption': caption, 'parse_mode': 'HTML',
-                   'title': f'{rpt} · {msg_date}-{shift} (高清版)',
+                   'title': f'{rpt} · {msg_date}-{shift}' + ('' if restore_url else ' (高清版)'),
                    'performer': 'AI Morning Briefing'}
           resp = requests.post(
               f'https://api.telegram.org/bot{tok}/editMessageMedia',

@@ -493,18 +493,19 @@ if [ -n "$REPO_URL" ] && [ -f "$PROJECT_DIR/output/index.html" ]; then
         "$PYTHON" "$PROJECT_DIR/archive_appender.py" \
             "$PROJECT_DIR/output/archive_payload.json" \
             "$DEPLOY_TMP/archive/data" >> "$LOG_FILE" 2>&1 || true
-        # HQ 离线重制任务(用户 2026-06-11 定 E=Qwen3 为最佳): 把口播文本+任务标记发布到
-        # 部署仓(公开, Actions 分钟不限量), 那边的 hq-audio.yml 监听 hq_job.json 的 push,
-        # 用慢但最自然的 Qwen3 引擎重制音频(~75-90 分钟)后原地覆盖 mp3(页面自动升级),
-        # 再由 pg4 的 hq-tg-edit.yml 定时任务把 TG 消息的音频原地换掉。失败不影响本班。
-        if [ -f "$PROJECT_DIR/output/broadcast.txt" ]; then
-            mkdir -p "$DEPLOY_TMP/archive/data"
-            cp "$PROJECT_DIR/output/broadcast.txt" "$DEPLOY_TMP/archive/data/broadcast-${SHIFT}.txt" 2>/dev/null || true
-            BC_SHA=$(shasum "$PROJECT_DIR/output/broadcast.txt" 2>/dev/null | cut -c1-16 || echo "x")
-            printf '{"date":"%s","shift":"%s","sha":"%s","audio":"archive/audio/%s-%s.mp3"}\n' \
-                "$TODAY_DATE" "$SHIFT" "$BC_SHA" "$TODAY_DATE" "$SHIFT" \
-                > "$DEPLOY_TMP/archive/data/hq_job.json" 2>/dev/null || true
-        fi
+        # ⛔ HQ 离线重制已停用(2026-06-13): Qwen3 在 GHA runner 上产出乱码音频
+        # (用户实听 11 分钟杂音; 疑 int8 kernel 在共享 EPYC 上数值劣化/模型复读退化,
+        # 且 CI 产物无人耳验证环节)。两个 workflow 已 gh workflow disable:
+        # pg4/hq-tg-edit.yml + 部署仓/hq-audio.yml。恢复条件: 有人耳验证过的引擎
+        # (如 Gemini key / 付费 TTS)再启用同一套管线 —— 架构保留, 只停任务发布。
+        # if [ -f "$PROJECT_DIR/output/broadcast.txt" ]; then
+        #     mkdir -p "$DEPLOY_TMP/archive/data"
+        #     cp "$PROJECT_DIR/output/broadcast.txt" "$DEPLOY_TMP/archive/data/broadcast-${SHIFT}.txt" 2>/dev/null || true
+        #     BC_SHA=$(shasum "$PROJECT_DIR/output/broadcast.txt" 2>/dev/null | cut -c1-16 || echo "x")
+        #     printf '{"date":"%s","shift":"%s","sha":"%s","audio":"archive/audio/%s-%s.mp3"}\n' \
+        #         "$TODAY_DATE" "$SHIFT" "$BC_SHA" "$TODAY_DATE" "$SHIFT" \
+        #         > "$DEPLOY_TMP/archive/data/hq_job.json" 2>/dev/null || true
+        # fi
         # 音频只留 14 天: 每班 ~3-4MB, 不清理数月就拖垮 clone/Pages 配额。
         # ⚠️ 不能用 find -mtime(fresh clone 的 mtime 全是克隆时刻) — 按文件名日期裁。
         # 老归档页的 <audio> 对被裁文件会 onerror 自动隐藏, 优雅降级。
