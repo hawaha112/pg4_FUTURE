@@ -24,6 +24,16 @@ _KNOWN_GENERIC = (
     'dao_li_cover',   # 爱范儿 早晚报通用封面
 )
 
+# 已知防盗链/外链 403 的图床: 浏览器里同样加载失败 → 渲染成空白图块。直接判烂图,
+# 走占位图(避免"有图块却空白")。微信公众号图 mmbiz.qpic.cn 及其各类代理是重灾区。
+_HOTLINK_BLOCKED = (
+    'mmbiz.qpic.cn',          # 微信公众号图床(防盗链)
+    'wechat2rss',             # wechat2rss img-proxy
+    'jintiankansha.me',       # 今天看啥 镜像代理
+    'img-proxy',              # 通用图片代理(多为防盗链转发)
+    'weixin.qq.com',
+)
+
 
 def is_bad_image(url) -> bool:
     """该图是否"宁可没有"(空/噪声/已知通用封面)。"""
@@ -33,7 +43,9 @@ def is_bad_image(url) -> bool:
     if _NOISE_RE.search(u):
         return True
     low = u.lower()
-    return any(g in low for g in _KNOWN_GENERIC)
+    if any(g in low for g in _KNOWN_GENERIC):
+        return True
+    return any(b in low for b in _HOTLINK_BLOCKED)
 
 
 def clean_card_images(items, generic_threshold: int = 3) -> int:

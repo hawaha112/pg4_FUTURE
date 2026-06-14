@@ -651,6 +651,11 @@ body {
 }
 .card-img-ph .cimg-ph-ico { font-size: 34px; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,.28)); }
 .card-img-ph .cimg-ph-kw  { font-size: 13px; font-weight: 700; letter-spacing: .04em; opacity: .96; text-shadow: 0 1px 2px rgba(0,0,0,.22); }
+/* 真图叠加在占位图之上: 加载成功盖住占位图; onerror 自移除则露出底层占位图(永不空白) */
+.card-img-ph .cimg-real {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; display: block; border: 0; z-index: 2;
+}
 .ph-model    { background: linear-gradient(135deg, #4f46e5, #818cf8); }
 .ph-infra    { background: linear-gradient(135deg, #c2620f, #f59e42); }
 .ph-app      { background: linear-gradient(135deg, #0f9e6e, #34d399); }

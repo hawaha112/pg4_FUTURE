@@ -372,13 +372,32 @@ class TestImageCleanup(unittest.TestCase):
         self.assertEqual(items[4]['image'], 'https://s/unique-good.jpg')  # 独有好图→留
         self.assertEqual(emptied, 2)
 
-    def test_placeholder_html(self):
-        from html_generator import _placeholder_img
+    def test_hotlink_blocked_images_are_bad(self):
+        from image_utils import is_bad_image
+        # 微信图床/代理: 浏览器里 403 防盗链 → 判烂图, 走占位图
+        for u in ['https://mmbiz.qpic.cn/mmbiz_jpg/abc/640',
+                  'https://wechat2rss.xlab.app/img-proxy/?k=x&u=https%3A%2F%2Fmmbiz.qpic.cn%2Fa',
+                  'http://img2.jintiankansha.me/get?src=http://mmbiz.qpic.cn/b']:
+            self.assertTrue(is_bad_image(u), f"防盗链图应判烂: {u!r}")
+
+    def test_placeholder_base_html(self):
+        from html_generator import _card_img_html
         it = {'analysis': {'topic_domain': '治理与安全', 'categories': ['政策·监管·法律']}}
-        ph = _placeholder_img(it, 'card-img')
+        ph = _card_img_html(it, 'card-img')
         self.assertIn('ph-gov', ph)
         self.assertIn('📜', ph)
         self.assertIn('card-img-ph', ph)
+        self.assertNotIn('cimg-real', ph)   # 无图 → 不叠真图层
+
+    def test_real_image_overlay_with_onerror(self):
+        from html_generator import _card_img_html
+        it = {'image': 'https://cdn.x.com/news/hero.jpg',
+              'analysis': {'topic_domain': '模型与算法'}}
+        html = _card_img_html(it, 'featured-img')
+        self.assertIn('card-img-ph', html)          # 占位图仍打底
+        self.assertIn('class="cimg-real"', html)    # 叠加真图
+        self.assertIn('hero.jpg', html)
+        self.assertIn('onerror="this.remove()"', html)  # 失败自动露占位图
 
 
 if __name__ == '__main__':
