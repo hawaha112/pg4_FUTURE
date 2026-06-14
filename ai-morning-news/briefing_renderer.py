@@ -866,6 +866,15 @@ def main():
         log.warning("⚠️ 实体时间线生成失败 (不阻塞): %s", e)
         meta['entity_timelines'] = []
 
+    # ── 配图清洗: 剔除烂源图(logo/通用封面/噪声), 无替补则置空 → 渲染端落占位图 ──
+    try:
+        from image_utils import clean_card_images
+        _emptied = clean_card_images(all_items)
+        if _emptied:
+            log.info("🖼️ 配图清洗: %d 条烂源图已剔除(将用设计感占位图)", _emptied)
+    except Exception as e:
+        log.warning("⚠️ 配图清洗失败(不阻塞): %s", e)
+
     # ── 生成 HTML ──
     log.info("🎨 生成页面（%d 条）...", len(all_items))
     html, modal_js = generate_html(all_items, config, digest, meta=meta)

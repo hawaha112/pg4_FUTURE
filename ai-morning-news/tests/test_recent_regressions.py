@@ -336,5 +336,50 @@ class TestPronunciationFix(unittest.TestCase):
         self.assertIsNone(_to_phrase_entry('   '))
 
 
+# ════════════════════════════════════════════════════════════════════
+# 配图清洗 + 占位图 — 2026-06-14
+#
+#   用户反馈"有些卡片图一点都不好" + "没有的能否补图"。源 og:image 常是通用
+#   栏目封面/logo。修复: image_utils 剔烂图(主图也过噪声 + 同图被≥3条共用判通用
+#   封面), 能替补就用 extra_images; 无图卡片渲染设计感占位图(域配色+图标+关键词)。
+#   (AI 出图因免 key 服务转付费暂不可靠, 先做这条 100% 可靠的。)
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestImageCleanup(unittest.TestCase):
+    def test_is_bad_image(self):
+        from image_utils import is_bad_image
+        for u in ['', 'https://s3.ifanr.com/x/dao_li_cover.jpg', 'https://a.com/logo.png',
+                  'data:image/png;base64,zzz', 'https://a.com/favicon.ico',
+                  'https://a.com/icons/share.svg']:
+            self.assertTrue(is_bad_image(u), f"应判烂图: {u!r}")
+        for u in ['https://a.com/news/photo-123.jpg', 'https://cdn.b.com/2026/hero.jpeg']:
+            self.assertFalse(is_bad_image(u), f"误伤好图: {u!r}")
+
+    def test_generic_cover_dropped_and_replaced(self):
+        from image_utils import clean_card_images
+        items = [
+            {'image': 'https://s/generic.jpg', 'extra_images': ['https://s/real-a.jpg']},
+            {'image': 'https://s/generic.jpg', 'extra_images': []},
+            {'image': 'https://s/generic.jpg', 'extra_images': []},  # 3 条共用 = 通用封面
+            {'image': 'https://s/logo.png', 'extra_images': ['https://s/real-b.jpg']},
+            {'image': 'https://s/unique-good.jpg', 'extra_images': []},
+        ]
+        emptied = clean_card_images(items)
+        self.assertEqual(items[0]['image'], 'https://s/real-a.jpg')  # 有替补→换
+        self.assertEqual(items[1]['image'], '')                     # 无替补→空
+        self.assertEqual(items[3]['image'], 'https://s/real-b.jpg')  # logo→换
+        self.assertEqual(items[4]['image'], 'https://s/unique-good.jpg')  # 独有好图→留
+        self.assertEqual(emptied, 2)
+
+    def test_placeholder_html(self):
+        from html_generator import _placeholder_img
+        it = {'analysis': {'topic_domain': '治理与安全', 'categories': ['政策·监管·法律']}}
+        ph = _placeholder_img(it, 'card-img')
+        self.assertIn('ph-gov', ph)
+        self.assertIn('📜', ph)
+        self.assertIn('card-img-ph', ph)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -238,6 +238,25 @@ def _domain_of(item):
     return _DOMAIN_BY_KEY['app']
 
 
+def _placeholder_img(item, base_cls):
+    """无图卡片的设计感占位图: 域配色渐变 + 大图标 + 一个关键词(域名/最短叶子类)。
+
+    2026-06-14 用户反馈无图卡片纯文字、配图差。剔烂图后用它兜底, 每张卡都有视觉。
+    base_cls = 'featured-img' / 'card-img'(复用尺寸); 配色见 style.css .ph-{key}。
+    """
+    emoji, name, key = _domain_of(item)
+    kw = name
+    cats = (item.get('analysis', {}) or {}).get('categories') or item.get('categories') or []
+    for c in cats:
+        c = str(c).strip()
+        if 0 < len(c) <= 6:   # 用够短的叶子类做关键词, 否则退域名
+            kw = c
+            break
+    return (f'<div class="{base_cls} card-img-ph ph-{key}" aria-hidden="true">'
+            f'<span class="cimg-ph-ico">{emoji}</span>'
+            f'<span class="cimg-ph-kw">{_safe_escape(kw)}</span></div>')
+
+
 def _domain_key(item):
     """卡片 data-layer/筛选用的域 key。"""
     return _domain_of(item)[2]
@@ -502,10 +521,11 @@ def generate_html(all_items, config, digest=None, meta=None):
             # 左侧边条颜色
             border_color = '#e05252' if importance == 5 else '#e8913a'
 
-            # 图片区域
-            img_html = ""
+            # 图片区域(无图 → 设计感占位图, 不再留白)
             if image_url:
                 img_html = f'<div class="featured-img" style="background-image:url(\'{image_url}\')"></div>'
+            else:
+                img_html = _placeholder_img(item, 'featured-img')
 
             # 标题
             title_html = f'<div class="featured-title-text">{chinese_title}</div>'
@@ -661,10 +681,11 @@ def generate_html(all_items, config, digest=None, meta=None):
             <span class="z1-meta">{reading_minutes} min</span>
         </div>'''
 
-        # 图片区域
-        img_html = ""
+        # 图片区域(无图 → 设计感占位图, 不再留白)
         if image_url:
             img_html = f'<div class="card-img" style="background-image:url(\'{image_url}\')"></div>'
+        else:
+            img_html = _placeholder_img(item, 'card-img')
 
         # 标题
         title_html = f'<div class="card-title">{chinese_title}</div>'
