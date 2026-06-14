@@ -400,5 +400,66 @@ class TestImageCleanup(unittest.TestCase):
         self.assertIn('onerror="this.remove()"', html)  # 失败自动露占位图
 
 
+# ════════════════════════════════════════════════════════════════════
+# "与新闻不符"判断不发布 — 2026-06-14
+#
+#   用户质疑判断卡顶部「⚠ N 处与新闻不符」标签。结论: 在旗舰判断上贴自家核查的
+#   矛盾警告是自我拆台。改为上游直接不发布 contradicted_count>0 的判断(宁缺毋滥),
+#   读者只看干净判断, contradicted 仅写内部日志。本测试钉住"被剔除、不上页"。
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestContradictedJudgmentDropped(unittest.TestCase):
+    def test_contradicted_judgment_not_published(self):
+        import json as _json
+        calls = {'n': 0}
+
+        def fake_call(_self, messages, **kw):
+            calls['n'] += 1
+            n = calls['n']
+            if n == 1:   # Stage A 主编: 出 2 条判断
+                return _json.dumps({"headline": "今日主旋律", "judgments": [
+                    {"emoji": "🏢", "title": "判断一标题够长能过校验",
+                     "body": "足够长的判断正文内容用来通过二十字以上的清洗阈值确保不被丢弃。",
+                     "evidence_ids": [0]},
+                    {"emoji": "📈", "title": "判断二标题也够长能过",
+                     "body": "另一条足够长的判断正文同样用于通过校验阈值不被清洗掉处理。",
+                     "evidence_ids": [1]},
+                ], "outro": ""}, ensure_ascii=False)
+            if n == 2:   # Stage B 编辑: 空 patch → 回退 draft
+                return "{}"
+            # n==3 Stage C 校对: 判断二被判定与新闻不符
+            return _json.dumps({"fact_checks": [
+                {"idx": 0, "verified_count": 1, "unverified_count": 0,
+                 "contradicted_count": 0, "confidence": "high", "warnings": [], "claims_found": []},
+                {"idx": 1, "verified_count": 0, "unverified_count": 0,
+                 "contradicted_count": 1, "confidence": "low",
+                 "warnings": ["数字与事件不符"], "claims_found": []},
+            ]}, ensure_ascii=False)
+
+        orig = LLMAnalyzer._call_api
+        LLMAnalyzer._call_api = fake_call
+        try:
+            a = LLMAnalyzer.__new__(LLMAnalyzer)
+            a.model = 'x'
+            analyses = [
+                {"analysis": {"ai_relevant": True, "summary": "事件一", "importance": 5},
+                 "source_name": "S", "title": "t1"},
+                {"analysis": {"ai_relevant": True, "summary": "事件二", "importance": 4},
+                 "source_name": "S", "title": "t2"},
+                {"analysis": {"ai_relevant": True, "summary": "事件三", "importance": 3},
+                 "source_name": "S", "title": "t3"},
+            ]
+            d = a.generate_digest(analyses)
+        finally:
+            LLMAnalyzer._call_api = orig
+
+        titles = [j['title'] for j in d['judgments']]
+        self.assertEqual(len(titles), 1, f"应只剩 1 条(剔除与新闻不符的): {titles}")
+        self.assertIn("判断一", titles[0])
+        # 被剔除的判断不应出现在任何输出(含兜底 editorial)
+        self.assertNotIn("判断二", d.get('editorial', ''))
+
+
 if __name__ == '__main__':
     unittest.main()

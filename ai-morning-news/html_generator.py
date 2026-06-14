@@ -952,18 +952,11 @@ def generate_html(all_items, config, digest=None, meta=None):
             j_body = re.sub(r'\*\*([^*\n]+?)\*\*',
                             r'<strong class="jc-bold">\1</strong>', j_body)
 
-            # 顶部徽章: 仅保留"与来源矛盾"的红旗(真红旗、读者该知道)。
-            # 不再显示"✎编辑改写"——那是内部流程标记、不是分类, 混在域标签行里会被
-            # 误读成"跑出来的分类"(用户反馈)。"已核/未核"计数同理早已移除, 改用底部来源链接。
+            # 顶部徽章位(预留)。曾挂"⚠ N 处与新闻不符"红旗 —— 2026-06-14 移除: 在旗舰
+            # 判断上贴自家核查的矛盾警告是自我拆台、对读者也不可操作。改为上游直接不
+            # 发布"与新闻不符"的判断(见 llm_analyzer.generate_digest 的 contradicted 过滤),
+            # 读者只看到干净判断; contradicted 仅留内部日志供监控误判率。
             badges_html = ''
-            fc = j.get('fact_check') or {}
-            cc = int((fc.get('contradicted_count') if fc else 0) or 0)
-            if cc > 0:
-                title_attr = _safe_escape(' · '.join(fc.get('warnings', [])) or '此判断有事实点与采集到的新闻不符')
-                badges_html += (
-                    f'<span class="jc-badge jc-badge-warn" title="{title_attr}">'
-                    f'⚠ {cc} 处与新闻不符</span>'
-                )
 
             # 一次遍历 evidence_ids 同时算两件事(下标对齐 all_items, briefing_renderer 同一份):
             #   ① 这个判断"综合了哪几个域"(去重取前3) —— 判断是跨域结论

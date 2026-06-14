@@ -1420,6 +1420,24 @@ class LLMAnalyzer:
             for j, fc in zip(final_judgments, fact_checks):
                 j['fact_check'] = fc
 
+        # 自家核查判定"与新闻不符"(contradicted)的判断直接不发布 —— 旗舰判断带病上架
+        # 最伤信任, 宁缺毋滥(用户 2026-06-14)。不给读者看警告标签, contradicted 仅写日志
+        # 供监控误判率。Stage C 没跑时 contradicted=0, 不误杀。
+        _kept = []
+        for j in final_judgments:
+            cc = int(((j.get('fact_check') or {}).get('contradicted_count') or 0))
+            if cc > 0:
+                _fc = j.get('fact_check') or {}
+                log.warning("🚩 判断因与新闻不符未发布(contradicted=%d): 「%s」 warnings=%s",
+                            cc, (j.get('title') or '')[:40],
+                            ' / '.join((_fc.get('warnings') or [])[:2]))
+            else:
+                _kept.append(j)
+        if len(_kept) != len(final_judgments):
+            log.info("📋 判断过滤: %d → %d 条(剔除与新闻不符的)",
+                     len(final_judgments), len(_kept))
+        final_judgments = _kept
+
         # 拼兜底 editorial
         fallback_parts = []
         if headline:
