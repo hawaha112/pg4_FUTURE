@@ -66,7 +66,10 @@
         "icon": "🪟",
         "color": "#00A4EF",
         "description": "Microsoft AI 官方博客",
-        "ai_only": true
+        "ai_only": true,
+        "enabled": false,
+        "_auto_disabled_at": "2026-06-15T06:44:16.378715+00:00",
+        "_auto_disabled_reason": "auto_fix_sources: 6 个候选全部不可用"
       },
       {
         "name": "NVIDIA Deep Learning",
