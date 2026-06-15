@@ -817,6 +817,28 @@ class EventStore:
             )
         self.db.commit()
 
+    def get_recently_rendered_titles(self, since_hours: int = 96,
+                                     before_iso: str = None,
+                                     limit: int = 150) -> List[str]:
+        """取近期已渲染到早晚报的 canonical 事件标题, 供跨天故事线去重——别让同一条
+        新闻线连着好几班当头条(用户 2026-06-14 反馈"出口管制那条报道了好多次")。
+
+        since_hours 内已渲染的; 传 before_iso(本班窗口起点)则只取更早班次的(不含本班)。
+        """
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=since_hours)).isoformat()
+        q = ("SELECT title FROM canonical_events "
+             "WHERE rendered_at IS NOT NULL AND rendered_at != '' AND rendered_at >= ?")
+        params: List[Any] = [cutoff]
+        if before_iso:
+            q += " AND rendered_at < ?"
+            params.append(before_iso)
+        q += " ORDER BY rendered_at DESC LIMIT ?"
+        params.append(int(limit))
+        try:
+            return [r[0] for r in self.db.execute(q, params).fetchall() if r[0]]
+        except Exception:
+            return []
+
     def mark_canonical_rendered(self, event_ids: List[str], shift: str = ''):
         """标记 canonical events 已被渲染。shift(am/pm)记录这批落到哪个班次的归档页,
         供 dashboard"本周重要事件"生成正确的 {date}-{shift}.html 深链(不靠猜小时, 避免 404)。"""

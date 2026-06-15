@@ -656,6 +656,15 @@ def main():
                 # 渲染前语义去重: 合并同一事件的多条(表层相似度抓不住, 用 LLM 判同)。
                 # 失败原样返回。去重后的 all_items 同时供 digest 和 generate_html 使用。
                 all_items = analyzer.dedupe_same_event(all_items)
+                # 跨天故事线去重: 丢掉"最近几班已报道过、且无实质新进展"的旧线重复
+                # (治"同一条大新闻连着好几班当头条")。before_iso=本班窗口起点 → 只对照更早班次。
+                try:
+                    _win_iso = (window_start.astimezone(timezone.utc).isoformat()
+                                if window_start else None)
+                    _recent = store.get_recently_rendered_titles(since_hours=96, before_iso=_win_iso)
+                    all_items = analyzer.suppress_recurring_storylines(all_items, _recent)
+                except Exception as _e:
+                    log.warning("⚠️ 跨天故事线去重失败(不阻塞): %s", _e)
                 log.info("📝 生成今日速览...")
                 digest = analyzer.generate_digest(all_items, prev_context=prev_context)
                 # 缓存成功的速览，避免重渲染丢失

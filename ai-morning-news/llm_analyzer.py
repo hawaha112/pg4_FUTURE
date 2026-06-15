@@ -1029,6 +1029,74 @@ class LLMAnalyzer:
     # 渲染前语义去重（同一事件不同来源/措辞 → 合并成一条）
     # ------------------------------------------------------------------
 
+    def suppress_recurring_storylines(self, items: List[dict],
+                                      recent_titles: List[str]) -> List[dict]:
+        """跨天故事线去重：丢掉"只是重复最近几班已报道过的故事线、且无实质新进展"的条目。
+
+        治"同一条大新闻连着好几班当头条"(用户 2026-06-14: 出口管制那条报了好多次)。
+        聚类只合并近乎同文的报道; 跨天/跨语言/换措辞的同一故事线聚不到一起 → 每篇各成
+        新事件、每班各上一次。这里用 LLM 对照"最近已报道的故事线标题"判断今天哪些只是旧线
+        重复(无新事实/动作/数字/新当事方/新结果), 丢之; 有实质新进展的保留(让"进展"照常报道,
+        框架由 prev_context 在判断/口播侧已处理)。
+
+        安全: STORYLINE_DEDUP=off 可关; 失败/越界原样返回; 一次最多丢一半(防 LLM 抽风)。
+        """
+        import os as _os
+        if _os.environ.get('STORYLINE_DEDUP', 'on').lower() == 'off':
+            return items
+        recent = [t.strip() for t in (recent_titles or []) if t and t.strip()][:120]
+        if not recent or not items:
+            return items
+        cand = []
+        for i, it in enumerate(items):
+            a = it.get('analysis', {}) or {}
+            t = (a.get('chinese_title') or it.get('title') or '').strip().replace('\n', ' ')
+            s = (a.get('summary') or '').strip().replace('\n', ' ')
+            if t:
+                cand.append((i, t, s))
+        if not cand:
+            return items
+        recent_block = '\n'.join(f'- {t[:60]}' for t in recent)
+        cand_block = '\n'.join(f'[{i}] {t[:55]}｜{s[:45]}' for i, t, s in cand)
+        sys_msg = "你是新闻编辑, 判断今天的条目里哪些只是旧故事线的重复、没有新进展。"
+        user_msg = (
+            "【最近几班早晚报已报道过的故事线】(读者已看过):\n"
+            f"{recent_block}\n\n"
+            "【今天待发布的候选条目】:\n"
+            f"{cand_block}\n\n"
+            "找出今天哪些条目【只是上面已报道故事线的重复或延续, 且没有实质新进展】——"
+            "即没有新的事实/动作/数字/新当事方/新结果, 只是换措辞或换角度重提旧事, 这些要丢弃。\n"
+            "【必须保留】有实质新进展的(新诉讼/新数据/新公司加入/新结果/反转等), 以及"
+            "与上面故事线无关的新事, 拿不准的也一律保留。\n"
+            '只输出 JSON, 不要解释: {"drop": [要丢弃的编号, …]}。'
+        )
+        try:
+            resp = self._call_api([
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": user_msg},
+            ])
+            data = self._extract_json(resp) or {}
+        except Exception as e:
+            log.warning("⚠️ 故事线去重调用失败(原样返回): %s", e)
+            return items
+        drop = set()
+        for x in (data.get('drop') or []) if isinstance(data, dict) else []:
+            if isinstance(x, bool):
+                continue
+            if isinstance(x, int) or (isinstance(x, str) and x.strip().isdigit()):
+                xi = int(x)
+                if 0 <= xi < len(items):
+                    drop.add(xi)
+        if not drop:
+            return items
+        kept = [it for i, it in enumerate(items) if i not in drop]
+        if len(kept) < max(1, (len(items) + 1) // 2):   # 防抽风: 最多丢一半
+            log.warning("🧵 故事线去重拟丢 %d/%d 过多, 本次跳过", len(drop), len(items))
+            return items
+        log.info("🧵 跨天故事线去重: 丢弃 %d 条旧线重复(%d→%d)",
+                 len(items) - len(kept), len(items), len(kept))
+        return kept
+
     def dedupe_same_event(self, items: List[dict]) -> List[dict]:
         """LLM 语义去重：把指向【同一真实事件】的 item 合并成一条（保留最优）。
 

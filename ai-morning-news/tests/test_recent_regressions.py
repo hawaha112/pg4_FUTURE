@@ -461,5 +461,71 @@ class TestContradictedJudgmentDropped(unittest.TestCase):
         self.assertNotIn("判断二", d.get('editorial', ''))
 
 
+# ════════════════════════════════════════════════════════════════════
+# 跨天故事线去重 — 2026-06-14
+#
+#   用户反馈"出口管制/Fable5下线"那条连着好几班当头条。根因: 聚类只合并近乎同文的
+#   报道, 跨天/跨语言/换措辞的同一故事线聚不到一起 → 每篇各成新事件、每班各上一次。
+#   修复: suppress_recurring_storylines 对照"最近已渲染标题", LLM 丢掉无新进展的旧线重复。
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestStorylineSuppression(unittest.TestCase):
+    RECENT = ['美国出口管制直指AI模型, Anthropic下线Fable 5和Mythos 5',
+              'Fable 5被禁, Anthropic开始退钱']
+
+    @staticmethod
+    def _items():
+        def it(t):
+            return {'analysis': {'chinese_title': t, 'summary': t + '的摘要', 'importance': 4}}
+        return [it('出口管制后续: Fable 5仍未恢复访问'),   # 0 旧线重复
+                it('美国封禁Fable 5引欧洲监管讨论'),        # 1 旧线重复
+                it('OpenAI发布GPT-5.6新模型'),             # 2 新事
+                it('英伟达发布新一代GPU')]                  # 3 新事
+
+    def _run_with(self, drop_ret):
+        items = self._items()
+        orig = LLMAnalyzer._call_api
+        LLMAnalyzer._call_api = lambda _self, msgs, **k: '{"drop": %s}' % drop_ret
+        try:
+            a = LLMAnalyzer.__new__(LLMAnalyzer); a.model = 'x'
+            return a.suppress_recurring_storylines(items, self.RECENT)
+        finally:
+            LLMAnalyzer._call_api = orig
+
+    def test_drops_recurring_keeps_new(self):
+        kept = self._run_with('[0, 1]')
+        titles = [i['analysis']['chinese_title'] for i in kept]
+        self.assertEqual(len(kept), 2)
+        self.assertTrue(all('GPT-5.6' in t or 'GPU' in t for t in titles))
+
+    def test_safety_valve_no_overdrop(self):
+        # 丢 3/4 过多 → 跳过, 原样返回
+        kept = self._run_with('[0, 1, 2]')
+        self.assertEqual(len(kept), 4)
+
+    def test_off_switch(self):
+        items = self._items()
+        os.environ['STORYLINE_DEDUP'] = 'off'
+        try:
+            a = LLMAnalyzer.__new__(LLMAnalyzer); a.model = 'x'
+            self.assertEqual(len(a.suppress_recurring_storylines(items, self.RECENT)), 4)
+        finally:
+            os.environ.pop('STORYLINE_DEDUP', None)
+
+    def test_empty_recent_no_llm_call(self):
+        items = self._items()
+        called = {'n': 0}
+        orig = LLMAnalyzer._call_api
+        LLMAnalyzer._call_api = lambda _self, msgs, **k: called.__setitem__('n', called['n'] + 1) or '{}'
+        try:
+            a = LLMAnalyzer.__new__(LLMAnalyzer); a.model = 'x'
+            kept = a.suppress_recurring_storylines(items, [])
+            self.assertEqual(len(kept), 4)
+            self.assertEqual(called['n'], 0)   # 无近期标题 → 不调 LLM
+        finally:
+            LLMAnalyzer._call_api = orig
+
+
 if __name__ == '__main__':
     unittest.main()
