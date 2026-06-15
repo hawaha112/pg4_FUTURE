@@ -1420,21 +1420,26 @@ class LLMAnalyzer:
             for j, fc in zip(final_judgments, fact_checks):
                 j['fact_check'] = fc
 
-        # 自家核查判定"与新闻不符"(contradicted)的判断直接不发布 —— 旗舰判断带病上架
-        # 最伤信任, 宁缺毋滥(用户 2026-06-14)。不给读者看警告标签, contradicted 仅写日志
-        # 供监控误判率。Stage C 没跑时 contradicted=0, 不误杀。
+        # 只发布"说得准"的判断(用户 2026-06-14: 别硬凑 3 个、判断不准砸公信力):
+        #   ① contradicted_count>0(与新闻不符) → 不发(带病上架最伤信任)
+        #   ② confidence=='low'(校对说不准: 任一矛盾或 ≥3 处查无实据) → 不发
+        # 弱日子自然只剩 1-2 条强判断, 强日子才 3 条。Stage C 没跑时 confidence 缺省 medium、
+        # contradicted=0, 不误杀。不给读者看警告标签, 剔除仅写日志供监控误判率。
         _kept = []
         for j in final_judgments:
-            cc = int(((j.get('fact_check') or {}).get('contradicted_count') or 0))
-            if cc > 0:
-                _fc = j.get('fact_check') or {}
-                log.warning("🚩 判断因与新闻不符未发布(contradicted=%d): 「%s」 warnings=%s",
-                            cc, (j.get('title') or '')[:40],
+            _fc = j.get('fact_check') or {}
+            cc = int((_fc.get('contradicted_count') or 0))
+            conf = str(_fc.get('confidence') or 'medium').lower()
+            reason = ('与新闻不符 contradicted=%d' % cc if cc > 0
+                      else '校对置信度 low(说不准)' if conf == 'low' else '')
+            if reason:
+                log.warning("🚩 判断未发布(%s): 「%s」 warnings=%s", reason,
+                            (j.get('title') or '')[:40],
                             ' / '.join((_fc.get('warnings') or [])[:2]))
             else:
                 _kept.append(j)
         if len(_kept) != len(final_judgments):
-            log.info("📋 判断过滤: %d → %d 条(剔除与新闻不符的)",
+            log.info("📋 判断过滤: %d → %d 条(只留说得准的)",
                      len(final_judgments), len(_kept))
         final_judgments = _kept
 

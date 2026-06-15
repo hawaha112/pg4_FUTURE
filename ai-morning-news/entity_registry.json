@@ -268,6 +268,176 @@
         "comfyui"
       ],
       "alert_if_missing_hours": 336
+    },
+    {
+      "id": "huawei_pangu",
+      "name": "华为 / 盘古",
+      "tier": 1,
+      "primary_sources": [],
+      "backup_sources": [
+        "量子位",
+        "机器之心",
+        "新智元",
+        "36氪",
+        "雷峰网"
+      ],
+      "keywords": [
+        "华为",
+        "huawei",
+        "盘古",
+        "pangu",
+        "昇腾",
+        "ascend",
+        "余承东"
+      ],
+      "alert_if_missing_hours": 336
+    },
+    {
+      "id": "alibaba_qwen",
+      "name": "阿里 / 通义千问 Qwen",
+      "tier": 1,
+      "primary_sources": [],
+      "backup_sources": [
+        "量子位",
+        "机器之心",
+        "新智元",
+        "36氪",
+        "雷峰网"
+      ],
+      "keywords": [
+        "通义",
+        "qwen",
+        "通义千问",
+        "千问",
+        "魔搭",
+        "modelscope",
+        "阿里云",
+        "阿里巴巴"
+      ],
+      "alert_if_missing_hours": 336
+    },
+    {
+      "id": "baidu_ernie",
+      "name": "百度 / 文心",
+      "tier": 1,
+      "primary_sources": [],
+      "backup_sources": [
+        "量子位",
+        "机器之心",
+        "新智元",
+        "36氪",
+        "雷峰网"
+      ],
+      "keywords": [
+        "百度",
+        "baidu",
+        "文心",
+        "ernie",
+        "文心一言"
+      ],
+      "alert_if_missing_hours": 336
+    },
+    {
+      "id": "bytedance_doubao",
+      "name": "字节跳动 / 豆包",
+      "tier": 1,
+      "primary_sources": [],
+      "backup_sources": [
+        "量子位",
+        "机器之心",
+        "新智元",
+        "36氪",
+        "雷峰网"
+      ],
+      "keywords": [
+        "字节跳动",
+        "bytedance",
+        "豆包",
+        "doubao",
+        "火山引擎",
+        "volcengine"
+      ],
+      "alert_if_missing_hours": 336
+    },
+    {
+      "id": "moonshot_kimi",
+      "name": "月之暗面 / Kimi",
+      "tier": 1,
+      "primary_sources": [],
+      "backup_sources": [
+        "量子位",
+        "机器之心",
+        "新智元",
+        "36氪",
+        "雷峰网"
+      ],
+      "keywords": [
+        "月之暗面",
+        "moonshot",
+        "kimi"
+      ],
+      "alert_if_missing_hours": 336
+    },
+    {
+      "id": "zhipu_glm",
+      "name": "智谱 / GLM",
+      "tier": 1,
+      "primary_sources": [],
+      "backup_sources": [
+        "量子位",
+        "机器之心",
+        "新智元",
+        "36氪",
+        "雷峰网"
+      ],
+      "keywords": [
+        "智谱",
+        "zhipu",
+        "chatglm",
+        "glm",
+        "智谱清言"
+      ],
+      "alert_if_missing_hours": 336
+    },
+    {
+      "id": "tencent_hunyuan",
+      "name": "腾讯 / 混元",
+      "tier": 1,
+      "primary_sources": [],
+      "backup_sources": [
+        "量子位",
+        "机器之心",
+        "新智元",
+        "36氪",
+        "雷峰网"
+      ],
+      "keywords": [
+        "腾讯",
+        "tencent",
+        "混元",
+        "hunyuan"
+      ],
+      "alert_if_missing_hours": 336
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "tier": 1,
+      "primary_sources": [],
+      "backup_sources": [
+        "量子位",
+        "机器之心",
+        "新智元",
+        "36氪",
+        "雷峰网"
+      ],
+      "keywords": [
+        "minimax",
+        "海螺",
+        "hailuo",
+        "abab"
+      ],
+      "alert_if_missing_hours": 336
     }
   ]
 }

@@ -1165,17 +1165,19 @@ def generate_html(all_items, config, digest=None, meta=None):
                 f'<audio class="bc-player" controls preload="metadata" '
                 f'src="{_safe_escape(_bc_audio)}" '
                 "onerror=\"var w=this.closest('.bc-audio-wrap');if(w)w.hidden=true\"></audio>"
-                '<p class="bc-hint">🎧 今日音频版 · 约 5-6 分钟听完全天 · 文字稿在页底 🎙</p>'
+                '<p class="bc-hint">🎧 今日音频版 · 约 5-6 分钟听完全天 · 文字稿就在下方 🎙</p>'
                 '</div>'
             )
+        # 口播是页面主锚: 文字稿默认展开(读这一篇≈掌握全天 80%), 想要细节再往下翻各版块。
         broadcast_html = (
             '<section class="broadcast">'
-            '<div class="bc-head"><h2 class="bc-title">🎙 今日口播文字稿</h2>'
+            '<div class="bc-head"><h2 class="bc-title">🎙 今日口播 · 读这一篇≈掌握全天 80%</h2>'
             '<button class="bc-copy" type="button" '
             "onclick=\"navigator.clipboard.writeText(document.getElementById('bcText').innerText)"
             ".then(()=>{this.textContent='已复制 ✓'})\">复制文稿</button></div>"
-            '<details class="bc-details"><summary>查看文字稿（音频播放器在页面顶部）</summary>'
+            '<details class="bc-details" open><summary>展开 / 收起文字稿</summary>'
             f'<pre class="bc-text" id="bcText">{_safe_escape(_bc)}</pre></details>'
+            '<p class="bc-foot">想要细节再往下看：⚡速览 · ⭐必读 · 📚更多 · 👤大V · 🔗实体 · 🎯判断</p>'
             '</section>'
         )
 
@@ -1213,16 +1215,16 @@ def generate_html(all_items, config, digest=None, meta=None):
     ) if _gparts else ''
 
     # ── 今日导览：按"非空版块"生成跳转 chip，给页面一个一眼可记的层次地图 ──
-    # 阅读顺序：速览 → 判断 → 必读 → 更多 → 大V → 实体 → 口播。
-    # 突发已并入早晚报正文(12h 报道一次足够实时), 不再做独立版块。
+    # 阅读顺序(2026-06-14 改)：口播(主锚) → 速览 → 必读 → 更多 → 大V → 实体 → 判断(殿后)。
+    # 口播提到最前当"读一篇=掌握80%"的主锚; 判断移到最后(口播已含观点, 不与之重复, 且只留说得准的)。
     _nav_items = [
+        ('sec-broadcast', '🎙', '口播', bool(broadcast_html)),
         ('sec-glance', '⚡', '速览', bool(today_glance)),
-        ('sec-judgment', '🎯', '判断', bool(briefing_html and str(briefing_html).strip())),
         ('sec-featured', '⭐', '必读', bool(featured_html)),
         ('sec-more', '📚', '更多', bool(cards_html)),
         ('sec-vip', '👤', '大V', bool(vip_html)),
         ('sec-entity', '🔗', '实体', bool(entity_tracker_html)),
-        ('sec-broadcast', '🎙', '口播', bool(broadcast_html)),
+        ('sec-judgment', '🎯', '判断', bool(briefing_html and str(briefing_html).strip())),
     ]
     _nav_links = []
     for _sid, _emoji, _label, _present in _nav_items:
