@@ -1168,16 +1168,16 @@ def generate_html(all_items, config, digest=None, meta=None):
                 '<p class="bc-hint">🎧 今日音频版 · 约 5-6 分钟听完全天 · 文字稿就在下方 🎙</p>'
                 '</div>'
             )
-        # 口播是页面主锚: 文字稿默认展开(读这一篇≈掌握全天 80%), 想要细节再往下翻各版块。
+        # 口播置于页面最前(主锚): 播放器即点即听; 文字稿默认折叠(标题"今日口播文稿",
+        # 点开看), 头部保持简洁(2026-06-14 用户: 去掉版块路标行、标题精简)。
         broadcast_html = (
             '<section class="broadcast">'
-            '<div class="bc-head"><h2 class="bc-title">🎙 今日口播 · 读这一篇≈掌握全天 80%</h2>'
+            '<div class="bc-head"><h2 class="bc-title">🎙 今日口播文稿</h2>'
             '<button class="bc-copy" type="button" '
             "onclick=\"navigator.clipboard.writeText(document.getElementById('bcText').innerText)"
             ".then(()=>{this.textContent='已复制 ✓'})\">复制文稿</button></div>"
-            '<details class="bc-details" open><summary>展开 / 收起文字稿</summary>'
+            '<details class="bc-details"><summary>展开 / 收起文字稿</summary>'
             f'<pre class="bc-text" id="bcText">{_safe_escape(_bc)}</pre></details>'
-            '<p class="bc-foot">想要细节再往下看：⚡速览 · ⭐必读 · 📚更多 · 👤大V · 🔗实体 · 🎯判断</p>'
             '</section>'
         )
 
