@@ -527,6 +527,72 @@ class TestStorylineSuppression(unittest.TestCase):
             LLMAnalyzer._call_api = orig
 
 
+# ════════════════════════════════════════════════════════════════════
+# 早晚报分工 + 看点预告 — 2026-06-14
+#   早报=信息准备(不发判断, 加「今日议程预告」前瞻); 晚报=复盘收束(判断=定论 + 「明日预告」)。
+#   前瞻只从素材真实信号提炼, 不编日程。更多资讯默认折叠、早全晚精。
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestLookahead(unittest.TestCase):
+    def test_parse_and_cap(self):
+        orig = LLMAnalyzer._call_api
+        LLMAnalyzer._call_api = lambda s, m, **k: (
+            '{"lookahead":[{"point":"看点A","because":"依据A"},{"point":"看点B","because":""}]}')
+        try:
+            a = LLMAnalyzer.__new__(LLMAnalyzer); a.model = 'x'
+            out = a.generate_lookahead(
+                [{'analysis': {'chinese_title': '某新闻', 'summary': '计划下周发布X'}}], mode='today')
+        finally:
+            LLMAnalyzer._call_api = orig
+        self.assertEqual([x['point'] for x in out], ['看点A', '看点B'])
+
+    def test_empty_items_no_llm(self):
+        a = LLMAnalyzer.__new__(LLMAnalyzer); a.model = 'x'
+        self.assertEqual(a.generate_lookahead([], mode='today'), [])
+
+
+class TestAmPmEditions(unittest.TestCase):
+    def _render(self, shift, mode):
+        from html_generator import generate_html
+        cfg = json.load(open(os.path.join(os.path.dirname(__file__), '..', 'config.json'),
+                             encoding='utf-8'))
+        items = [{'title': 't%d' % i, 'source_name': 'S', 'link': '#', 'image': '',
+                  'extra_images': [], 'analysis': {'ai_relevant': True, 'chinese_title': '标题%d' % i,
+                  'summary': '摘要够长用于渲染展示内容。', 'importance': 4, 'categories': ['x'],
+                  'why_it_matters': 'w', 'detailed_content': 'c' * 40, 'reading_minutes': 2,
+                  'topic_domain': '模型与算法'}} for i in range(4)]
+        digest = {'headline': 'h', 'judgments': [{'emoji': '🎯', 'title': '判断标题够长能过',
+                  'body': '判断正文足够长用于展示内容。', 'evidence_ids': [0],
+                  'fact_check': {'confidence': 'high', 'contradicted_count': 0}}],
+                  'editorial': 'e', 'outro': ''}
+        meta = {'broadcast_script': 'x', 'broadcast_audio': 'audio/x.mp3', 'llm_coverage': 0.8,
+                'entity_timelines': [], 'total': 4, 'sources_count': 9,
+                'lookahead': {'mode': mode, 'items': [{'point': 'p', 'because': 'b'}]}}
+        old = os.environ.get('BRIEFING_SHIFT')
+        os.environ['BRIEFING_SHIFT'] = shift
+        try:
+            h, _ = generate_html(items, cfg, digest, meta=meta)
+        finally:
+            if old is None:
+                os.environ.pop('BRIEFING_SHIFT', None)
+            else:
+                os.environ['BRIEFING_SHIFT'] = old
+        return h
+
+    def test_am_no_judgment_has_agenda(self):
+        h = self._render('am', 'today')
+        self.assertNotIn('<section class="briefing">', h)        # 早报不发判断
+        self.assertIn('la-title">📅 今日议程预告', h)             # 有今日议程预告
+        self.assertIn('more-collapse', h)                        # 更多折叠
+
+    def test_pm_has_judgment_and_tomorrow(self):
+        h = self._render('pm', 'tomorrow')
+        self.assertIn('<section class="briefing">', h)           # 晚报有判断
+        self.assertIn('la-title">🔭 明日预告', h)                # 有明日预告
+        self.assertNotIn('la-title">📅 今日议程预告', h)          # 晚报无今日议程
+
+
 class TestGlancePZXYYMapping(unittest.TestCase):
     """今日速览"政产学研用"分组映射 — 2026-06-14。6 域粗粒度归并到 5 类。"""
 

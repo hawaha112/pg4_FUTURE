@@ -213,6 +213,28 @@ def _pzxyy_of(item):
     _, _, dkey = _domain_of(item)
     return _DOMAINKEY_TO_PZXYY.get(dkey, ('🛠', '用 · 应用落地', 'yong'))
 
+
+def _render_lookahead(la_items, mode):
+    """渲染看点预告块: 早报「今日议程预告」(mode=today) / 晚报「明日预告」(mode=tomorrow)。
+    la_items = [{'point','because'}, …]; 空则返回 ''。"""
+    items = [x for x in (la_items or []) if x.get('point')]
+    if not items:
+        return ''
+    if mode == 'tomorrow':
+        title, sub = '🔭 明日预告', '明天接着看什么'
+    else:
+        title, sub = '📅 今日议程预告', '今天值得盯的看点 · 导航用, 不是定论'
+    rows = ''.join(
+        '<li class="la-item"><span class="la-point">' + _safe_escape(x.get('point', '')) + '</span>'
+        + ('<span class="la-because">' + _safe_escape(x.get('because', '')) + '</span>'
+           if x.get('because') else '')
+        + '</li>'
+        for x in items
+    )
+    return (f'<h2 class="la-title">{title}<span class="la-n">{len(items)}</span></h2>'
+            f'<div class="la-sub">{_safe_escape(sub)}</div>'
+            f'<ul class="la-list">{rows}</ul>')
+
 # 兜底: LLM 没给合法 topic_domain 时, 从 categories+标题 关键词归域(保证不漏)。
 # 顺序=优先级: 法律/治理信号最特异放最前, 再商业/算力/研究, 应用次之, 模型最泛放最后。
 # 不中时默认归 app(见 _domain_of) —— 永不返回"其他", 让 6 域真正穷尽(用户 2026-06-13)。
@@ -452,7 +474,10 @@ def generate_html(all_items, config, digest=None, meta=None):
     # ── "更多资讯"也设上限(用户 2026-06-12: 每天推送的条目偏多, 过滤一些) ──
     # 按 (importance, 多源数) 排序取 Top N, 长尾直接不上页 —— 它们仍进长期归档
     # (archive/data)与仪表盘, 可搜可查, 只是不再占读者注意力。
-    GRID_CAP = int((config.get('settings', {}) or {}).get('grid_cap', 10))
+    # 早全晚精(用户 2026-06-14): 早报=信息准备, 更多资讯留更多(导航宽度); 晚报=复盘收束, 收窄精选。
+    _settings = config.get('settings', {}) or {}
+    GRID_CAP = int(_settings.get('grid_cap_am', 14) if _shift == 'am'
+                   else _settings.get('grid_cap_pm', 8))
     if len(regular_items) > GRID_CAP:
         regular_items.sort(key=lambda t: (
             -(t[1].get('analysis', {}) or {}).get('importance', 0),
@@ -958,7 +983,9 @@ def generate_html(all_items, config, digest=None, meta=None):
     # 今日速览 — v2 优先渲染 3 个判断卡片, 没有则回退到旧版 editorial
     briefing_html = ""
     judgments = (digest or {}).get('judgments') or []
-    if judgments:
+    # 早报不发判断(2026-06-14): 判断=当日定论, 是晚报的活; 早报偏导航前瞻(今日议程预告)。
+    # judgments 仍保留供口播用, 只是不渲染判断版块。
+    if judgments and _shift != 'am':
         # v2: 3 个判断卡 (产品定位升级: 从"罗列"到"判断")
         headline = _safe_escape((digest.get('headline') or '').strip())
         outro = _safe_escape((digest.get('outro') or '').strip())
@@ -1033,8 +1060,8 @@ def generate_html(all_items, config, digest=None, meta=None):
         <div class="judgments-grid jcg-{n_judgments}">{j_cards_html}</div>
         {outro_html}
     </section>'''
-    elif digest and digest.get('editorial'):
-        # 兼容兜底: judgments 缺失时仍渲染旧版 editorial 文本
+    elif digest and digest.get('editorial') and _shift != 'am':
+        # 兼容兜底: judgments 缺失时仍渲染旧版 editorial 文本(早报同样不发, 见上)
         editorial_html = _render_editorial(digest.get('editorial', ''))
         if editorial_html:
             briefing_html = f'''
@@ -1230,22 +1257,32 @@ def generate_html(all_items, config, digest=None, meta=None):
             f'<span class="gl-grp-n">{len(_gitems)}</span></div>'
             f'<ul class="glance-list">{_rows}</ul></div>'
         )
+    # 速览标题按班次: 早报=隔夜要闻(信息准备), 晚报=今日速览(复盘)。
+    _glance_label = '🌙 隔夜要闻速览' if _shift == 'am' else '⚡ 今日速览'
     today_glance = (
-        f'<h2 class="glance-title">⚡ 今日速览<span class="gl-n">{_glance_n}</span></h2>'
+        f'<h2 class="glance-title">{_glance_label}<span class="gl-n">{_glance_n}</span></h2>'
         f'<div class="glance-groups">{"".join(_gparts)}</div>'
     ) if _gparts else ''
 
+    # 看点预告: 早报「今日议程预告」(置顶, 前瞻导航) / 晚报「明日预告」(殿后, 收束)。
+    _la = (meta or {}).get('lookahead') or {}
+    _la_mode = _la.get('mode') or ''
+    agenda_html = _render_lookahead(_la.get('items'), 'today') if _la_mode == 'today' else ''
+    tomorrow_html = _render_lookahead(_la.get('items'), 'tomorrow') if _la_mode == 'tomorrow' else ''
+
     # ── 今日导览：按"非空版块"生成跳转 chip，给页面一个一眼可记的层次地图 ──
-    # 阅读顺序(2026-06-14 改)：口播(主锚) → 速览 → 必读 → 更多 → 大V → 实体 → 判断(殿后)。
-    # 口播提到最前当"读一篇=掌握80%"的主锚; 判断移到最后(口播已含观点, 不与之重复, 且只留说得准的)。
+    # 阅读顺序(2026-06-14)：口播(主锚) → [早:议程] → 速览 → 必读 → 更多 → 大V → 实体 → [晚:判断+明日]。
+    # 早报偏导航前瞻(议程预告置顶、不发判断); 晚报偏复盘收束(判断=定论 + 明日预告殿后)。
     _nav_items = [
         ('sec-broadcast', '🎙', '口播', bool(broadcast_html)),
+        ('sec-agenda', '📅', '议程', bool(agenda_html)),
         ('sec-glance', '⚡', '速览', bool(today_glance)),
         ('sec-featured', '⭐', '必读', bool(featured_html)),
         ('sec-more', '📚', '更多', bool(cards_html)),
         ('sec-vip', '👤', '大V', bool(vip_html)),
         ('sec-entity', '🔗', '实体', bool(entity_tracker_html)),
         ('sec-judgment', '🎯', '判断', bool(briefing_html and str(briefing_html).strip())),
+        ('sec-tomorrow', '🔭', '明日', bool(tomorrow_html)),
     ]
     _nav_links = []
     for _sid, _emoji, _label, _present in _nav_items:
@@ -1278,6 +1315,8 @@ def generate_html(all_items, config, digest=None, meta=None):
         top3_html=top3_html,
         llm_banner_html=llm_banner_html,
         briefing_html=briefing_html,
+        agenda_html=agenda_html,
+        tomorrow_html=tomorrow_html,
         entity_tracker_html=entity_tracker_html,
         featured_html=featured_html,
         cards_html=cards_html,

@@ -55,6 +55,11 @@ $audio_top_html
 $broadcast_html
 </section>
 
+<!-- 📅 今日议程预告(仅早报): 前瞻导航"今天值得盯什么"。晚报此处为空。 -->
+<section id="sec-agenda" class="page-sec">
+$agenda_html
+</section>
+
 <!-- 标签筛选状态条：点卡片上的层面/主题标签即筛选，仅在筛选时显示，点此清除 -->
 <div id="filter-active" class="filter-active" hidden></div>
 
@@ -71,16 +76,19 @@ $today_glance
 $featured_html
 </section>
 
-<!-- ④ 更多资讯（importance<3，按主题分组的网格） -->
+<!-- ④ 更多资讯（importance<3）。默认折叠(2026-06-14): 首屏只留编辑层(口播+速览+必读),
+     更多资讯点开才看 —— "默认看到的就是被做过减法的"。早报留更多条(导航)、晚报更少(精选)。 -->
 <section id="sec-more" class="page-sec">
-<div class="grid-section-header">
-    <h2 class="grid-section-title">📚 更多资讯</h2>
-    <div class="grid-section-meta">按主题分类 · 点击卡片展开详情</div>
-</div>
+<details class="more-collapse">
+<summary class="grid-section-header">
+    <span class="grid-section-title">📚 更多资讯</span>
+    <span class="grid-section-meta">按主题分类 · 点开展开</span>
+</summary>
 <!-- id="grid" 是 script.js bindCardClick(getElementById('grid')) 必须的，少了它点击 modal 会失效 -->
 <div id="grid" class="grid" aria-label="资讯列表">
 $cards_html
 </div>
+</details>
 </section>
 
 <!-- ⑤ 大V 动态：X-* / YouTube 等社交媒体条目（importance<4 但仍值得展示） -->
@@ -99,6 +107,11 @@ $entity_tracker_html
      只发布说得准的(低置信/与新闻不符的不发, 见 llm_analyzer.generate_digest) -->
 <section id="sec-judgment" class="page-sec">
 $briefing_html
+</section>
+
+<!-- 🔭 明日预告(仅晚报): 复盘收束后给"明天接着看什么"。早报此处为空。 -->
+<section id="sec-tomorrow" class="page-sec">
+$tomorrow_html
 </section>
 
 <!-- Modal -->

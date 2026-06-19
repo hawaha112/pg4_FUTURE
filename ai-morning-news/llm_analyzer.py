@@ -1097,6 +1097,55 @@ class LLMAnalyzer:
                  len(items) - len(kept), len(items), len(kept))
         return kept
 
+    def generate_lookahead(self, items: List[dict], mode: str = 'today') -> List[dict]:
+        """看点预告: 早报"今日议程预告"(today) / 晚报"明日预告"(tomorrow)。
+
+        我们只采集已发生的过去新闻, 所以前瞻只能来自两类【有据】的料, 绝不编造日程(护公信力):
+          ① 今天素材里真实出现的前瞻表述(计划/将于/下周/N天内/下一步/预计…);
+          ② 已发生事件的自然下一步悬念(如"出口管制后 Anthropic 是否起诉")。
+        没把握就少给甚至不给。返回 [{'point','because'}](最多 5 条); 失败/无信号返回 []。
+        """
+        items = items or []
+        lines = []
+        for it in items[:40]:
+            a = it.get('analysis', {}) or {}
+            t = (a.get('chinese_title') or it.get('title') or '').strip()
+            s = (a.get('summary') or '').strip()
+            if t:
+                lines.append(f'- {t[:50]}｜{s[:60]}')
+        if not lines:
+            return []
+        horizon = '今天剩下时间到这几天' if mode != 'tomorrow' else '明天和接下来'
+        label = '今日议程预告' if mode != 'tomorrow' else '明日预告'
+        sys_msg = (
+            '你是新闻编辑, 从今天的 AI 新闻里提炼「看点预告」。'
+            '铁律: 只用素材里真实出现的前瞻信号(计划/将于/下周/N天内/下一步/预计 等), '
+            '或已发生事件的自然下一步悬念; 绝不编造具体日程或没有依据的事件。没把握就少给几条甚至不给。'
+        )
+        user_msg = (
+            f'下面是今天的 AI 新闻(标题｜摘要)。提炼 {horizon} 【值得盯的看点】(给「{label}」用), '
+            '3-5 条, 每条一句话看点 + 一句依据。只输出 JSON, 不要解释:\n'
+            '{"lookahead": [{"point": "看点一句话", "because": "依据(来自哪条的前瞻表述/哪个悬念)"}]}\n\n'
+            + '\n'.join(lines)
+        )
+        try:
+            resp = self._call_api([
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": user_msg},
+            ])
+            data = self._extract_json(resp) or {}
+        except Exception as e:
+            log.warning("⚠️ 看点预告生成失败(返回空): %s", e)
+            return []
+        out = []
+        for x in (data.get('lookahead') or []) if isinstance(data, dict) else []:
+            if isinstance(x, dict):
+                p = str(x.get('point', '')).strip()
+                b = str(x.get('because', '')).strip()
+                if p:
+                    out.append({'point': p[:80], 'because': b[:100]})
+        return out[:5]
+
     def dedupe_same_event(self, items: List[dict]) -> List[dict]:
         """LLM 语义去重：把指向【同一真实事件】的 item 合并成一条（保留最优）。
 

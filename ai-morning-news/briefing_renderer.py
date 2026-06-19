@@ -846,7 +846,24 @@ def main():
         except OSError:
             pass
 
+    # ── 看点预告: 早报「今日议程预告」(前瞻导航) / 晚报「明日预告」(收束) ──
+    # 只从素材里真实前瞻信号 + 故事线悬念提炼, 不编日程(见 generate_lookahead)。
+    lookahead = {'mode': '', 'items': []}
+    try:
+        import os as _os_la
+        _la_shift = _os_la.environ.get('BRIEFING_SHIFT', '').lower()
+        _la_mode = 'tomorrow' if _la_shift == 'pm' else 'today'
+        _la_an = create_analyzer_from_config(config)
+        if _la_an and all_items and len(all_items) >= 3:
+            _la_items = _la_an.generate_lookahead(all_items, mode=_la_mode)
+            if _la_items:
+                lookahead = {'mode': _la_mode, 'items': _la_items}
+                log.info("🔭 看点预告(%s): %d 条", _la_mode, len(_la_items))
+    except Exception as e:
+        log.warning("⚠️ 看点预告生成失败(不阻塞): %s", e)
+
     meta = {
+        'lookahead': lookahead,
         'llm_coverage': llm_coverage,
         'llm_count': llm_count,
         'multi_source_count': multi_source_count,
