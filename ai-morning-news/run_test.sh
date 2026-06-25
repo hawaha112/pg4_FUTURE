@@ -95,11 +95,10 @@ ENV_FILE="$HOME/.config/ai-briefing/.env"
 if [ -f "$ENV_FILE" ]; then
     source "$ENV_FILE"
 fi
-# 兜底：从 run_once.sh 读取
+# 不再硬编码 token（公开仓安全）：未设置则跳过 TG 推送。请 export 或写入 $ENV_FILE。
 if [ -z "$TG_BOT_TOKEN" ]; then
-    TG_BOT_TOKEN="8768397666:AAFEuiL5KnXprtkxjJtZFnn5P0e3Bk4qA-M"
-    TG_CHAT_ID="8140776479"
-    BRIEFING_URL="https://hawaha112.github.io/ai-morning-briefing/"
+    echo "⚠️ 未设置 TG_BOT_TOKEN/TG_CHAT_ID（export 或写入 $ENV_FILE）—— 本次跳过 TG 推送"
+    BRIEFING_URL="${BRIEFING_URL:-https://hawaha112.github.io/ai-morning-briefing/}"
 fi
 
 TODAY=$(date '+%Y年%m月%d日')
