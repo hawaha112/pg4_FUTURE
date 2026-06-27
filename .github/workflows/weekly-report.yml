@@ -25,7 +25,8 @@ concurrency:
 jobs:
   weekly:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 聚合一周 + LLM 周报(含 JSON 解析重试), 偶尔超 15 分; 放宽到 30(公开仓免费, 跑完即退)。
+    timeout-minutes: 30
     permissions:
       contents: read
     env:

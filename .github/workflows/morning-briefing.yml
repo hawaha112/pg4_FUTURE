@@ -46,9 +46,10 @@ concurrency:
 jobs:
   briefing:
     runs-on: ubuntu-latest
-    # 55: qwen3 TTS 是慢引擎(GHA 估 RTF 2-3, 6 分钟音频合成 12-25 分钟, 预算
-    # QWEN3_BUDGET_SEC=1500 封顶) + 常规班 ~15 分钟 + 模型下载余量。
-    timeout-minutes: 55
+    # 常规班 ~15-40 分钟; 但久未跑(如停摆数天)后采集量大、LLM 缓存冷, 再加看点/故事线
+    # 两次 LLM 调用, 实测会撞 55 分超时被杀(2026-06-27 补班踩到)。放到 100 留足余量——
+    # 公开仓 Actions 免费, 且 run 跑完即退出, 抬高上限不增加正常日子的耗时。
+    timeout-minutes: 100
     permissions:
       contents: write   # 需要 push briefing-state 分支
     env:
