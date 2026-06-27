@@ -191,27 +191,8 @@ _DOMAIN_BY_NAME = {n: (e, n, k) for e, n, k, _ in _TOPIC_TREE}
 _DOMAIN_BY_KEY = {k: (e, n, k) for e, n, k, _ in _TOPIC_TREE}
 _LEAF_TO_DOMAIN = {leaf: (e, n, k) for e, n, k, leaves in _TOPIC_TREE for leaf in leaves}
 _OTHER_DOMAIN = ('📰', '其他', 'other')
-
-# 今日速览按"政·产·学·研·用"宏观逻辑分组(用户 2026-06-14, 参考竞品)。
-# 这是 6 域的粗粒度归并: 速览用粗 5 类(一眼可记), 必读/更多仍用细 6 域(浏览更细),
-# 严格嵌套、无逻辑冲突。(emoji, 显示名, key, {归入的 6 域 key})
-_PZXYY_ORDER = [
-    ('🏛', '政 · 政策监管', 'zheng', {'gov'}),
-    ('🏭', '产 · 产业商业', 'chan',  {'biz', 'infra'}),
-    ('🎓', '学 · 学术研究', 'xue',   {'research'}),
-    ('🔬', '研 · 技术研发', 'yan',   {'model'}),
-    ('🛠', '用 · 应用落地', 'yong',  {'app'}),
-]
-# 6 域 key → (emoji, 名, 政产学研用 key); 兜底归"用"(app 默认域同此)
-_DOMAINKEY_TO_PZXYY = {
-    dk: (e, n, k) for e, n, k, dks in _PZXYY_ORDER for dk in dks
-}
-
-
-def _pzxyy_of(item):
-    """把条目映射到 政产学研用 之一(基于其 6 域)。返回 (emoji, 名, key)。"""
-    _, _, dkey = _domain_of(item)
-    return _DOMAINKEY_TO_PZXYY.get(dkey, ('🛠', '用 · 应用落地', 'yong'))
+# 注: 曾给"今日速览"单做过"政·产·学·研·用"5 类分组(_PZXYY_*/_pzxyy_of), 2026-06-27
+# 用户要求速览与下方必读/更多统一用 6 域, 已撤回 —— 速览直接复用 _domain_of + _DOMAIN_ORDER。
 
 
 def _render_lookahead(la_items, mode):
@@ -1229,21 +1210,20 @@ def generate_html(all_items, config, digest=None, meta=None):
             '</section>'
         )
 
-    # ── 今日速览：top N 标题, 30 秒扫完全天, 按「政·产·学·研·用」宏观逻辑分组。──
-    # (2026-06-14 用户: 参考竞品, 用政产学研用组织。是 6 域的粗粒度归并, 见 _PZXYY_ORDER。)
-    # 放在口播之后先拿全貌; 点条目开 modal。
-    _glance_groups = {}   # {政产学研用 key: [(idx, title), ...]}
+    # ── 今日速览：top N 标题, 30 秒扫完全天, 按 6 域分组(与下方必读/更多用同一套分类, ──
+    # 2026-06-27 用户: 速览别单搞一套, 前后一致)。放在口播之后先拿全貌; 点条目开 modal。
+    _glance_groups = {}   # {6 域名: [(idx, title), ...]}
     for _gidx, _gitem in featured_items[:8]:   # 速览 10→8(用户: 条目偏多)
         _ga = _gitem.get('analysis', {}) or {}
         _gt = (_ga.get('chinese_title') or _gitem.get('title') or '').strip()
         if not _gt:
             continue
-        _, _, _pk = _pzxyy_of(_gitem)
-        _glance_groups.setdefault(_pk, []).append((_gidx, _gt))
+        _, _gname, _ = _domain_of(_gitem)
+        _glance_groups.setdefault(_gname, []).append((_gidx, _gt))
     _glance_n = sum(len(v) for v in _glance_groups.values())
     _gparts = []
-    for _gemoji, _gname, _gkey, _ in _PZXYY_ORDER:
-        _gitems = _glance_groups.get(_gkey)
+    for _gemoji, _gname, _gkey in _DOMAIN_ORDER:
+        _gitems = _glance_groups.get(_gname)
         if not _gitems:
             continue
         _rows = ''.join(

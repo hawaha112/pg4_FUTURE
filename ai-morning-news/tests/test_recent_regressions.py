@@ -593,22 +593,7 @@ class TestAmPmEditions(unittest.TestCase):
         self.assertNotIn('la-title">📅 今日议程预告', h)          # 晚报无今日议程
 
 
-class TestGlancePZXYYMapping(unittest.TestCase):
-    """今日速览"政产学研用"分组映射 — 2026-06-14。6 域粗粒度归并到 5 类。"""
-
-    def test_domain_to_pzxyy(self):
-        from html_generator import _pzxyy_of
-        cases = {
-            '治理与安全': 'zheng',      # 政
-            '商业与产业': 'chan',       # 产
-            '算力与基础设施': 'chan',   # 产(infra 并入)
-            '研究与评测': 'xue',        # 学
-            '模型与算法': 'yan',        # 研
-            '应用与产品': 'yong',       # 用
-        }
-        for dom, expect_key in cases.items():
-            it = {'analysis': {'topic_domain': dom}}
-            self.assertEqual(_pzxyy_of(it)[2], expect_key, f"{dom} 应归 {expect_key}")
+# (已移除 TestGlancePZXYYMapping —— 2026-06-27 速览改回 6 域统一, _pzxyy_of 已删。)
 
 
 if __name__ == '__main__':
