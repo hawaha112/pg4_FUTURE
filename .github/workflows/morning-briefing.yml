@@ -30,13 +30,14 @@ on:
         description: '验证/补漏用: 把发布时间窗覆盖为"最近 N 小时"(不分 am/pm 班次), 留空=走正常班次窗口'
         type: string
         default: ''
-  # ⚠️ GH Actions schedule 已禁用 (2026-05-15). 触发改由 Anthropic Routine 走
-  # workflow_dispatch — 解决 GH cron 整点队列拥堵导致 30-90 分钟延迟的问题
-  # (实测准时性: routine ~5 分钟内 vs GH schedule 30-90 分钟).
-  # 详情见 CLAUDE.md "调度方案" 章节. 想回退就把下面两行 cron 取消注释.
-  # schedule:
-  #   - cron: '0 22 * * *'   # UTC 22:00 = 北京 06:00 早班
-  #   - cron: '0 10 * * *'   # UTC 10:00 = 北京 18:00 晚班
+  # 调度: GitHub Actions schedule cron (2026-06-27 改回主触发). 仓库已转公开 → Actions 免费,
+  # cron 零维护、不依赖 Anthropic Routine / PAT(routine PAT 06-23 前后失效, 致早晚报停摆数天)。
+  # 整点队列可能延迟 30-90 分钟(对每日简报可接受); briefing_renderer 的"窗口截止自动延展"兜底。
+  # Determine shift 步骤读 github.event.schedule 精准判班次(0 22→am / 0 10→pm)。
+  # ⚠️ 启用 cron 后须把 Anthropic Routine 的早/晚/周报三个暂停, 否则双触发。
+  schedule:
+    - cron: '0 22 * * *'   # UTC 22:00 = 北京 06:00 早班
+    - cron: '0 10 * * *'   # UTC 10:00 = 北京 18:00 晚班
 
 concurrency:
   group: ai-morning-briefing
